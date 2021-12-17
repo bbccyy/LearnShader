@@ -797,11 +797,23 @@ v2f_img vert_img( appdata_img v )
 
 inline float4 ComputeNonStereoScreenPos(float4 pos) {
     float4 o = pos * 0.5f;
-    o.xy = float2(o.x, o.y*_ProjectionParams.x) + o.w;
+    o.xy = float2(o.x, o.y*_ProjectionParams.x) + o.w;  //_ProjectionParams.x 取值为 -1 或 1，控制uv朝向
+    //上面2步是为了对屏幕空间需要用到的xy分量重映射，从 [-w,w] 变化到 [0,w]
     o.zw = pos.zw;
-    return o;
+    return o; //这个返回值还不是 screen pos
 }
 
+//这里新增的一个方法用来计算真实屏幕坐标 
+inline float4 ComputeRealScreenPos(float4 sPos) {
+    //入参 sPos:经 ComputeNonStereoScreenPos 函数计算得到的值
+    float2 vPP;   // 视口坐标（view port position）
+    float2 vPWH;  // 视口的高和宽（view Port Width & Height）
+    vPP = sPos.xy / sPos.w * vPWH;  //齐次除法相当于光栅化的映射，最后将[0,1]空间映射到屏幕的尺寸上
+    return vPP;
+}
+
+
+//pos是在裁剪空间中的<齐次坐标值>
 inline float4 ComputeScreenPos(float4 pos) {
     float4 o = ComputeNonStereoScreenPos(pos);
 #if defined(UNITY_SINGLE_PASS_STEREO)
@@ -810,6 +822,9 @@ inline float4 ComputeScreenPos(float4 pos) {
     return o;
 }
 
+//pos 是经过clipSpace变换后的齐次坐标 
+//当把当前屏幕内容截屏并保存在一个目标纹理时，有时要求知道在裁剪空间中的某一点将会对应保存在目标纹理中的哪一点。
+//ComputeGrabScreenPos函数即是实现这个功能的函数。
 inline float4 ComputeGrabScreenPos (float4 pos) {
     #if UNITY_UV_STARTS_AT_TOP
     float scale = -1.0;
@@ -817,7 +832,7 @@ inline float4 ComputeGrabScreenPos (float4 pos) {
     float scale = 1.0;
     #endif
     float4 o = pos * 0.5f;
-    o.xy = float2(o.x, o.y*scale) + o.w;
+    o.xy = float2(o.x, o.y*scale) + o.w;  //这部分逻辑参考 ComputeNonStereoScreenPos
 #ifdef UNITY_SINGLE_PASS_STEREO
     o.xy = TransformStereoScreenSpaceTex(o.xy, pos.w);
 #endif
@@ -826,6 +841,7 @@ inline float4 ComputeGrabScreenPos (float4 pos) {
 }
 
 // snaps post-transformed position to screen pixels
+// UnityPixelSnap 函数的功能是把一个视口坐标转换成屏幕像素坐标。
 inline float4 UnityPixelSnap (float4 pos)
 {
     float2 hpc = _ScreenParams.xy * 0.5f;
