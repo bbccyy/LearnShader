@@ -591,15 +591,18 @@ inline half3 DecodeDirectionalLightmap (half3 color, fixed4 dirTex, half3 normal
 }
 
 // Encoding/decoding [0..1) floats into 8 bit/channel RGBA. Note that 1.0 will not be encoded properly.
+//入参需要是小于1，大于等于0的浮点数
+//基本算法：将浮点数视为255进制数（逢255进1位)，保留该进制下小数的前4个有效数字到 rgba 通道里 
 inline float4 EncodeFloatRGBA( float v )
 {
-    float4 kEncodeMul = float4(1.0, 255.0, 65025.0, 16581375.0);
+    float4 kEncodeMul = float4(1.0, 255.0, 65025.0, 16581375.0); //255^0, 255^1, 255^2, 255^3
     float kEncodeBit = 1.0/255.0;
     float4 enc = kEncodeMul * v;
     enc = frac (enc);
-    enc -= enc.yzww * kEncodeBit;
+    enc -= enc.yzww * kEncodeBit;  //最后一个w会造成a通道的精度问题 
     return enc;
 }
+//解码时r通道存的数值不变，g通道数值向右移1位，b通道向右移2位，a通道3位（255进制对应的位），最后求和 
 inline float DecodeFloatRGBA( float4 enc )
 {
     float4 kDecodeDot = float4(1.0, 1/255.0, 1/65025.0, 1/16581375.0);
@@ -869,7 +872,7 @@ inline float3 TransformViewToProjection (float3 v) {
 float4 UnityEncodeCubeShadowDepth (float z)
 {
     #ifdef UNITY_USE_RGBA_FOR_POINT_SHADOWS
-    return EncodeFloatRGBA (min(z, 0.999));
+    return EncodeFloatRGBA (min(z, 0.999));  //把一个float类型的阴影深度值编码进一个float4类型的RGBA数值中
     #else
     return z;
     #endif
