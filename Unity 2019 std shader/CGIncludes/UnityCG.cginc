@@ -868,11 +868,11 @@ inline float3 TransformViewToProjection (float3 v) {
 }
 
 // Shadow caster pass helpers
-
+//把一个[0，1)范围内的float类型的阴影深度值编码进一个float4类型的RGBA数值中
 float4 UnityEncodeCubeShadowDepth (float z)
 {
     #ifdef UNITY_USE_RGBA_FOR_POINT_SHADOWS
-    return EncodeFloatRGBA (min(z, 0.999));  //把一个float类型的阴影深度值编码进一个float4类型的RGBA数值中
+    return EncodeFloatRGBA (min(z, 0.999));  
     #else
     return z;
     #endif
@@ -887,15 +887,20 @@ float UnityDecodeCubeShadowDepth (float4 vals)
     #endif
 }
 
-
+// vertex，模型空间中的物体顶点
+// normal，模型空间中的物体法线
 float4 UnityClipSpaceShadowCasterPos(float4 vertex, float3 normal)
 {
+    // 把顶点从模型空间转换到世界空间
     float4 wPos = mul(unity_ObjectToWorld, vertex);
 
     if (unity_LightShadowBias.z != 0.0)
     {
+        //把法线normal从模型空间转换到世界空间
         float3 wNormal = UnityObjectToWorldNormal(normal);
-        float3 wLight = normalize(UnityWorldSpaceLightDir(wPos.xyz));
+        //UnityWorldSpaceLightDir函数计算世界坐标系下光源位置点_WorldSpaceLightPos0与
+        //世界坐标系下点wPos的连线的方向向量 
+        float3 wLight = normalize(UnityWorldSpaceLightDir(wPos.xyz));  //获得世界空间下光方向 
 
         // apply normal offset bias (inset position along the normal)
         // bias needs to be scaled by sine between normal and light direction
@@ -904,14 +909,19 @@ float4 UnityClipSpaceShadowCasterPos(float4 vertex, float3 normal)
         // unity_LightShadowBias.z contains user-specified normal offset amount
         // scaled by world space texel size.
 
+        // 计算光线与法线的夹角的余弦值
         float shadowCos = dot(wNormal, wLight);
         float shadowSine = sqrt(1-shadowCos*shadowCos);
+        //unity_LightShadowBias的x分量为产生阴影的光源的光源偏移值乘以一个系数，这个光源偏移值对应于Light面板中的Bias属性
+        //当光源是聚光灯光源时，y分量是0；当光源是有向平行光源时，为1
+        //z分量为解决阴影渗漏问题时，沿着物体表面法线移动的偏移值
+        //w分量为0
         float normalBias = unity_LightShadowBias.z * shadowSine;
 
-        wPos.xyz -= wNormal * normalBias;
+        wPos.xyz -= wNormal * normalBias; // 沿着法线进行偏移
     }
 
-    return mul(UNITY_MATRIX_VP, wPos);
+    return mul(UNITY_MATRIX_VP, wPos); //把进行了偏移之后的值变换到裁剪空间
 }
 // Legacy, not used anymore; kept around to not break existing user shaders
 float4 UnityClipSpaceShadowCasterPos(float3 vertex, float3 normal)
