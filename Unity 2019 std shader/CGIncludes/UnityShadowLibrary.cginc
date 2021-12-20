@@ -319,7 +319,8 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
 // ------------------------------------------------------------------
 // Shadow fade
 // ------------------------------------------------------------------
-
+// wpos:待计算的当前片元在世界坐标系下的位置坐标值
+// z:待计算的当前片元在世界坐标系下到当前摄像机的距离
 float UnityComputeShadowFadeDistance(float3 wpos, float z)
 {
     float sphereDist = distance(wpos, unity_ShadowFadeCenterAndType.xyz);
