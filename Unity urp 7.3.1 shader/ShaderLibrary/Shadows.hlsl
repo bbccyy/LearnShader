@@ -136,6 +136,7 @@ half SampleScreenSpaceShadowmap(float4 shadowCoord)
     return attenuation;
 }
 
+//入参shadowCoord代表屏幕上某个像素点所对应物体在光源空间中的坐标，且如果是透视投影(非平行光)，还会做齐次除法
 real SampleShadowmapFiltered(TEXTURE2D_SHADOW_PARAM(ShadowMap, sampler_ShadowMap), float4 shadowCoord, ShadowSamplingData samplingData)
 {
     real attenuation;
