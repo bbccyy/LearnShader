@@ -151,6 +151,7 @@ real SampleShadowmapFiltered(TEXTURE2D_SHADOW_PARAM(ShadowMap, sampler_ShadowMap
 #else
     float fetchesWeights[9];
     float2 fetchesUV[9];
+    //传入阴影贴图尺寸和阴影空间位置,下面的方法会给我们分配每次采样的权重和UV坐标
     SampleShadow_ComputeSamples_Tent_5x5(samplingData.shadowmapSize, shadowCoord.xy, fetchesWeights, fetchesUV);
 
     attenuation = fetchesWeights[0] * SAMPLE_TEXTURE2D_SHADOW(ShadowMap, sampler_ShadowMap, float3(fetchesUV[0].xy, shadowCoord.z));
