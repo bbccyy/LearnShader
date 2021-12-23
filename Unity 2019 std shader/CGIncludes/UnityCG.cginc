@@ -950,9 +950,9 @@ float4 UnityApplyLinearShadowBias(float4 clipPos)
 #if defined(UNITY_REVERSED_Z)
     float clamped = min(clipPos.z, clipPos.w*UNITY_NEAR_CLIP_VALUE);
 #else
-    float clamped = max(clipPos.z, clipPos.w*UNITY_NEAR_CLIP_VALUE);
+    float clamped = max(clipPos.z, clipPos.w*UNITY_NEAR_CLIP_VALUE); 
 #endif
-    clipPos.z = lerp(clipPos.z, clamped, unity_LightShadowBias.y);
+    clipPos.z = lerp(clipPos.z, clamped, unity_LightShadowBias.y); //根据第一次增加后的z值和z的极值，进行线性插值
     return clipPos;
 }
 
