@@ -889,6 +889,7 @@ float UnityDecodeCubeShadowDepth (float4 vals)
 
 // vertex，模型空间中的物体顶点
 // normal，模型空间中的物体法线
+// unity_LightShadowBias[x:bias，y:类型，z:normal bias]， 类型：0=聚光灯，1=平行光
 float4 UnityClipSpaceShadowCasterPos(float4 vertex, float3 normal)
 {
     // 把顶点从模型空间转换到世界空间
@@ -918,7 +919,7 @@ float4 UnityClipSpaceShadowCasterPos(float4 vertex, float3 normal)
         //w分量为0
         float normalBias = unity_LightShadowBias.z * shadowSine;
 
-        wPos.xyz -= wNormal * normalBias; // 沿着法线进行偏移
+        wPos.xyz -= wNormal * normalBias; // 在世界空间中，沿着物体法线正方向进行偏移
     }
 
     return mul(UNITY_MATRIX_VP, wPos); //把进行了偏移之后的值变换到裁剪空间
@@ -929,9 +930,9 @@ float4 UnityClipSpaceShadowCasterPos(float3 vertex, float3 normal)
     return UnityClipSpaceShadowCasterPos(float4(vertex, 1), normal);
 }
 
-
-float4 UnityApplyLinearShadowBias(float4 clipPos)
-
+//入参是物体的裁剪空间坐标（没有归一化）
+// unity_LightShadowBias[x:bias，y:类型，z:normal bias]， 类型：0=聚光灯，1=平行光
+float4 UnityApplyLinearShadowBias(float4 clipPos) 
 {
     // For point lights that support depth cube map, the bias is applied in the fragment shader sampling the shadow map.
     // This is because the legacy behaviour for point light shadow map cannot be implemented by offseting the vertex position
@@ -940,9 +941,9 @@ float4 UnityApplyLinearShadowBias(float4 clipPos)
     #if defined(UNITY_REVERSED_Z)
         // We use max/min instead of clamp to ensure proper handling of the rare case
         // where both numerator and denominator are zero and the fraction becomes NaN.
-        clipPos.z += max(-1, min(unity_LightShadowBias.x / clipPos.w, 0));
+        clipPos.z += max(-1, min(unity_LightShadowBias.x / clipPos.w, 0));  //对于z轴负方向被定义为ClipSpace正方向的情况
     #else
-        clipPos.z += saturate(unity_LightShadowBias.x/clipPos.w);
+        clipPos.z += saturate(unity_LightShadowBias.x/clipPos.w); //对应一般情况（z轴正方向指向视空间远方）
     #endif
 #endif
 

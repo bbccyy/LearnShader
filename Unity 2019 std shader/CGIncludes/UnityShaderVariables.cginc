@@ -153,10 +153,15 @@ CBUFFER_END
 CBUFFER_START(UnityShadows)
     float4 unity_ShadowSplitSpheres[4];
     float4 unity_ShadowSplitSqRadii;
-    float4 unity_LightShadowBias;
+    float4 unity_LightShadowBias;       //[x:bias，y:类型，z:normal bias]， 类型：0=聚光灯，1=平行光
     float4 _LightSplitsNear;
     float4 _LightSplitsFar;
-    float4x4 unity_WorldToShadow[4];
+    float4x4 unity_WorldToShadow[4]; //数组中的每一个元素对应层叠式贴图(cascade shadowmap)中一个子视截体之阴影贴图，存储了从世界坐标变换到阴影贴图空间中的变换坐标
+    //_LightShadowData:
+    //x分量表示阴影的强度，即阴影有多黑，1表示全黑，0表示完全透明不黑；
+    //y分量目前暂未被使用；
+    //当z分量为1除以需要渲染的阴影时，表示阴影离当前摄像机的最远距离值（shadow far distance) 
+    //w分量表示阴影离摄像机的最近距离值（shadow near distance）
     half4 _LightShadowData;
     float4 unity_ShadowFadeCenterAndType;
 CBUFFER_END
