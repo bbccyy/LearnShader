@@ -111,6 +111,7 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 
 #endif
 
+// 该方法用于采样点光源形成的阴影，入参vec应当是从光源指向物体表面的向量 
 inline half UnitySampleShadowmap (float3 vec)
 {
     #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
