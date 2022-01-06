@@ -100,9 +100,9 @@
                 float3 lrDirWS = reflect(-lDirWS, nDirWS);
 
                 // 准备点积结果
-                float ndotl = dot(nDirWS, lDirWS);
-                float vdotr = dot(vDirWS, lrDirWS);
-                float vdotn = dot(vDirWS, nDirWS);
+                float ndotl = dot(nDirWS, lDirWS);		//Lambert要用 （光的漫反射）
+                float vdotr = dot(vDirWS, lrDirWS);		//Phong要用（光的镜面反射）
+                float vdotn = dot(vDirWS, nDirWS);		//Fresnel要用（边缘光/轮廓光）
 
                 // 采样纹理
                 float4 var_MainTex = tex2D(_MainTex, i.uv0);
