@@ -94,20 +94,22 @@
                 float3 nDirTS = UnpackNormal(tex2D(_NormTex, i.uv0)).rgb;
                 float3x3 TBN = float3x3(i.tDirWS, i.bDirWS, i.nDirWS);
                 float3 nDirWS = normalize(mul(nDirTS, TBN));
-                float3 vDirWS = normalize(_WorldSpaceCameraPos.xyz - i.posWS.xyz);
-                float3 vrDirWS = reflect(-vDirWS, nDirWS);
-                float3 lDirWS = _WorldSpaceLightPos0.xyz;
-                float3 lrDirWS = reflect(-lDirWS, nDirWS);
+                float3 vDirWS = normalize(_WorldSpaceCameraPos.xyz - i.posWS.xyz);  //视线方向（从物体指向眼睛）
+                float3 vrDirWS = reflect(-vDirWS, nDirWS);  //视线的反射方向：用于采样环境光照贴图（Cubemap）
+                float3 lDirWS = _WorldSpaceLightPos0.xyz;   //光（光源）方向，平行光源的话，只要一个点即可；如果是点光源，还需要减去物体坐标点
+                float3 lrDirWS = reflect(-lDirWS, nDirWS);  //光线反射方向 
 
                 // 准备点积结果
-                float ndotl = dot(nDirWS, lDirWS);		//Lambert要用 （光的漫反射）
+                float ndotl = dot(nDirWS, lDirWS);		//Lambert要用（光的漫反射）
                 float vdotr = dot(vDirWS, lrDirWS);		//Phong要用（光的镜面反射）
                 float vdotn = dot(vDirWS, nDirWS);		//Fresnel要用（边缘光/轮廓光）
 
                 // 采样纹理
                 float4 var_MainTex = tex2D(_MainTex, i.uv0);
-                float4 var_SpecTex = tex2D(_SpecTex, i.uv0);
+                float4 var_SpecTex = tex2D(_SpecTex, i.uv0);		//RGB:高光颜色 A:高光次幂
                 float3 var_EmitTex = tex2D(_EmitTex, i.uv0).rgb;
+				//var_SpecTex.a 既是高光次幂，又可以理解为光滑度，lerp作用是调整CubeMap的Mip等级，越光滑，Mip越趋向0
+				//texCUBElod方法的第二个入参是float4，前3维代表视线反射方向，最后一维是Mip等级，等级越低越清晰 
                 float3 var_Cubemap = texCUBElod(_Cubemap, float4(vrDirWS, lerp(_CubemapMip, 0.0, var_SpecTex.a))).rgb;
 
                 // 光照模型(直接光照部分)
