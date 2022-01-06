@@ -1,11 +1,16 @@
 // Unity built-in shader source. Copyright (c) 2016 Unity Technologies. MIT license (see license.txt)
 
+/*
+UNITY_SAMPLE_DEPTH -> 定义在HLSLSupport.cginc文件中 
+
+*/
+
 #ifndef UNITY_BUILTIN_SHADOW_LIBRARY_INCLUDED
 #define UNITY_BUILTIN_SHADOW_LIBRARY_INCLUDED
 
 // Shadowmap helpers.
 #if defined( SHADOWS_SCREEN ) && defined( LIGHTMAP_ON )
-    #define HANDLE_SHADOWS_BLENDING_IN_GI 1
+    #define HANDLE_SHADOWS_BLENDING_IN_GI 1  //SS阴影与GI同时开启时激活 -> 使用全局光照的同时，也使用SSS
 #endif
 
 #define unityShadowCoord float
@@ -33,12 +38,12 @@ float3  UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasbiasMultipl
 
     // shadow sampling offsets and texel size
     #if defined (SHADOWS_SOFT)
-        float4 _ShadowOffsets[4];
+        float4 _ShadowOffsets[4];    //点光源 + 软阴影：需要用到其他采样点去进行阴影的柔化操作。变量_ShadowOffsets[4]取出了阴影某个采样点的4个偏移采样点。
         float4 _ShadowMapTexture_TexelSize;
         #define SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
     #endif
 
-inline fixed UnitySampleShadowmap (float4 shadowCoord)
+inline fixed UnitySampleShadowmap (float4 shadowCoord) //本方法专门采样 SPOT 光源产生的阴影纹理
 {
     #if defined (SHADOWS_SOFT)
 

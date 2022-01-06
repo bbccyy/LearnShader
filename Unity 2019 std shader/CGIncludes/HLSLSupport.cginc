@@ -337,6 +337,7 @@
     #define UNITY_SAMPLE_TEXCUBE_SHADOW(tex,coord) tex.SampleCmpLOD0(sampler##tex,(coord).xyz,(coord).w)
 #else
     // Fallback / No built-in shadowmap comparison sampling: regular texture sample and do manual depth comparison
+    //除了上述明确声明之外的目标平台，如果不支持原生的阴影操作函数，则使用和操作普通2D纹理类似的函数，宏SAMPLE_DEPTH_TEXTURE包装了这些普通2D纹理函数
     #define UNITY_DECLARE_SHADOWMAP(tex) sampler2D_float tex
     #define UNITY_DECLARE_TEXCUBE_SHADOWMAP(tex) samplerCUBE_float tex
     #define UNITY_SAMPLE_SHADOW(tex,coord) ((SAMPLE_DEPTH_TEXTURE(tex,(coord).xy) < (coord).z) ? 0.0 : 1.0)
