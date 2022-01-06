@@ -288,6 +288,7 @@
 // SAMPLE_DEPTH_TEXTURE_LOD(sampler,uv): sample with LOD level
 
     // Sample depth, just the red component.
+    // 只采样深度值，注意，只返回了depth texture的texel的red分量
 #   define SAMPLE_DEPTH_TEXTURE(sampler, uv) (tex2D(sampler, uv).r)
 #   define SAMPLE_DEPTH_TEXTURE_PROJ(sampler, uv) (tex2Dproj(sampler, uv).r)
 #   define SAMPLE_DEPTH_TEXTURE_LOD(sampler, uv) (tex2Dlod(sampler, uv).r)

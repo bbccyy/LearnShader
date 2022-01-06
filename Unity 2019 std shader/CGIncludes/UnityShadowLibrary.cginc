@@ -43,7 +43,10 @@ float3  UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasbiasMultipl
         #define SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
     #endif
 
-inline fixed UnitySampleShadowmap (float4 shadowCoord) //本方法专门采样 SPOT 光源产生的阴影纹理
+// ***本方法专门采样 SPOT 光源产生的阴影纹理***
+// shadowCoord 是场景中某个空间位置点，该位置点已经变换到产生阴影的那个光源的光源空间。
+// 方法用于判断 shadowCoord 是否在阴影下，以及判断该阴影的浓度
+inline fixed UnitySampleShadowmap (float4 shadowCoord) 
 {
     #if defined (SHADOWS_SOFT)
 
