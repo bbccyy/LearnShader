@@ -25,7 +25,7 @@ half    UnitySampleShadowmap_PCF3x3(float4 coord, float3 receiverPlaneDepthBias)
 float3  UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasbiasMultiply); // Receiver plane depth bias
 
 // ------------------------------------------------------------------
-// Spot light shadows
+// Spot light shadows   聚光灯
 // ------------------------------------------------------------------
 
 #if defined (SHADOWS_DEPTH) && defined (SPOT)
@@ -50,11 +50,11 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 {
     #if defined (SHADOWS_SOFT)
 
-        half shadow = 1;
+        half shadow = 1;  //默认为1，既不产生阴影 
 
         // No hardware comparison sampler (ie some mobile + xbox360) : simple 4 tap PCF
-        #if !defined (SHADOWS_NATIVE)
-            float3 coord = shadowCoord.xyz / shadowCoord.w;
+        #if !defined (SHADOWS_NATIVE)  // 如果着色器不支持原生的阴影操作函数
+            float3 coord = shadowCoord.xyz / shadowCoord.w;  // 除以w，进行透视除法，把坐标转化到一个NDC坐标上执行操作
             float4 shadowVals;
             //获取到本采样点四周的四个偏移采样点的深度值，然后存储到shadowVals变量中
             //SAMPLE_DEPTH_TEXTURE  ->  tex2D(sampler, uv).r
@@ -62,12 +62,13 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
             shadowVals.y = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[1].xy);
             shadowVals.z = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[2].xy);
             shadowVals.w = SAMPLE_DEPTH_TEXTURE(_ShadowMapTexture, coord + _ShadowOffsets[3].xy);
-            // 如果本采样点四周的4个采样点的z值都小于阴影贴图采样点的z值，就表示该点不处于阴
-            // 影区域。_LightShadowData的r分量，即x分量表示阴影的强度值
+            // 如果本采样点四周的4个采样点的z值都小于阴影贴图采样点的z值，就表示该点不处于阴影区域。 
+            // _LightShadowData的r分量，即x分量表示阴影的强度值 
             half4 shadows = (shadowVals < coord.zzzz) ? _LightShadowData.rrrr : 1.0f;
             // 阴影值为本采样点四周的4个采样点的阴影值的平均值
-            shadow = dot(shadows, 0.25f);
+            shadow = dot(shadows, 0.25f);  //相当于除以4再加总，既求取平均值 
         #else
+            // 如果着色器 "支持" 原生的阴影操作函数
             // Mobile with comparison sampler : 4-tap linear comparison filter
             #if defined(SHADER_API_MOBILE)
                 float3 coord = shadowCoord.xyz / shadowCoord.w;
@@ -84,9 +85,10 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
                 float3 receiverPlaneDepthBias = UnityGetReceiverPlaneDepthBias(coord, 1.0f);
                 shadow = UnitySampleShadowmap_PCF3x3(float4(coord, 1), receiverPlaneDepthBias);
             #endif
-        shadow = lerp(_LightShadowData.r, 1.0f, shadow);
+        shadow = lerp(_LightShadowData.r, 1.0f, shadow);  //shadow约趋于0，返回值趋于_LightShadowData.r
         #endif
     #else
+        // NOT SOFT SHADOW 
         // 1-tap shadows
         #if defined (SHADOWS_NATIVE)
             half shadow = UNITY_SAMPLE_SHADOW_PROJ(_ShadowMapTexture, shadowCoord);
@@ -103,7 +105,7 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 #endif // #if defined (SHADOWS_DEPTH) && defined (SPOT)
 
 // ------------------------------------------------------------------
-// Point light shadows
+// Point light shadows   点光源 
 // ------------------------------------------------------------------
 
 #if defined (SHADOWS_CUBE)
