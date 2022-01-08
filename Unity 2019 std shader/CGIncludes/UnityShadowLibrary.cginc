@@ -701,7 +701,7 @@ half UnitySampleShadowmap_PCF7x7Tent(float4 coord, float3 receiverPlaneDepthBias
 * Implementation example: http://mynameismjp.wordpress.com/2013/09/10/shadow-maps/
 */
 half UnitySampleShadowmap_PCF3x3Gaussian(float4 coord, float3 receiverPlaneDepthBias)
-{
+{   //窗口大小为3X3的PCF滤波 
     half shadow = 1;
 
 #ifdef SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
