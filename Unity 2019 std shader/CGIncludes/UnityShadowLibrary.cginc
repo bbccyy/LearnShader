@@ -745,11 +745,12 @@ half UnitySampleShadowmap_PCF3x3Gaussian(float4 coord, float3 receiverPlaneDepth
 */
 half UnitySampleShadowmap_PCF5x5Gaussian(float4 coord, float3 receiverPlaneDepthBias)
 {
-    half shadow = 1;
+    half shadow = 1; 
 
 #ifdef SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
 
     #ifndef SHADOWS_NATIVE
+        // 5X5还是用的Native3X3方式制作 
         // when we don't have hardware PCF sampling, fallback to a simple 3x3 sampling with averaged results.
         return UnitySampleShadowmap_PCF3x3NoHardwareSupport(coord, receiverPlaneDepthBias);
     #endif
