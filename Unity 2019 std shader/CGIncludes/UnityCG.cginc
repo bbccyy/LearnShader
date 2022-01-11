@@ -610,6 +610,7 @@ inline float DecodeFloatRGBA( float4 enc )
 }
 
 // Encoding/decoding [0..1) floats into 8 bit/channel RG. Note that 1.0 will not be encoded properly.
+//将一个0~1之间的浮点数编码进2个8-bit位宽的通道里，其能表示的精度约等于 1/65535 = 1 / 255^2
 inline float2 EncodeFloatRG( float v )
 {
     float2 kEncodeMul = float2(1.0, 255.0);
