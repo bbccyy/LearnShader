@@ -628,6 +628,7 @@ inline float DecodeFloatRG( float2 enc )
 
 
 // Encoding/decoding view space normals into 2D 0..1 vector
+//编解码视空间法线（带双目视觉）
 inline float2 EncodeViewNormalStereo( float3 n )
 {
     float kScale = 1.7777;
