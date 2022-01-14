@@ -108,10 +108,10 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 // Point light shadows   点光源 
 // ------------------------------------------------------------------
 
-#if defined (SHADOWS_CUBE)
-// 如果使用立方体纹理映射贴图作为一个阴影深度纹理
+#if defined (SHADOWS_CUBE) // 点光源 -> 使用立方体纹理映射贴图作为一个阴影深度纹理
+
 #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
-    UNITY_DECLARE_TEXCUBE_SHADOWMAP(_ShadowMapTexture);
+    UNITY_DECLARE_TEXCUBE_SHADOWMAP(_ShadowMapTexture); //定义纹理对象 
 #else
     UNITY_DECLARE_TEXCUBE(_ShadowMapTexture);
     inline float SampleCubeDistance (float3 vec) //vec是从原点发出，指向立方体上某点位置的连线向量，也是立方体纹理的贴图坐标
@@ -121,14 +121,15 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 
 #endif
 
-// 该方法用于采样点光源形成的阴影，入参vec应当是从光源指向物体表面的向量 
+// 该方法用于采样 "点" 光源形成的阴影，入参vec是当前待判断是否在阴影中的片元在光源空间中的坐标
 inline half UnitySampleShadowmap (float3 vec)
 {
     #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
         float3 absVec = abs(vec);
         float dominantAxis = max(max(absVec.x, absVec.y), absVec.z); // TODO use max3() instead
+        // for point light projection: _LightProjectionParams.x = zfar / (znear - zfar), y = (znear * zfar) / (znear - zfar), z=shadow bias, w=shadow scale bias
         dominantAxis = max(0.00001, dominantAxis - _LightProjectionParams.z); // shadow bias from point light is apllied here.
-        dominantAxis *= _LightProjectionParams.w; // bias
+        dominantAxis *= _LightProjectionParams.w; // bias （scale bias）
         float mydist = -_LightProjectionParams.x + _LightProjectionParams.y/dominantAxis; // project to shadow map clip space [0; 1]
 
         #if defined(UNITY_REVERSED_Z)
@@ -140,6 +141,7 @@ inline half UnitySampleShadowmap (float3 vec)
     #endif
 
     #if defined (SHADOWS_SOFT)
+        //计算出该坐标到光源之间的距离，并且归一化，然后在该坐标位置点的右上前方、左下前方、左上后方、右下后方偏移，各取得对应纹素的深度值。
         float z = 1.0/128.0;
         float4 shadowVals;
         // No hardware comparison sampler (ie some mobile + xbox360) : simple 4 tap PCF
@@ -181,8 +183,8 @@ inline half UnitySampleShadowmap (float3 vec)
 
 half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 {
-    const float transformToLocal = unity_ProbeVolumeParams.y;
-    const float texelSizeX = unity_ProbeVolumeParams.z;
+    const float transformToLocal = unity_ProbeVolumeParams.y;   // 用于判断是否要转换到模型空间计算 （1:Yes) 
+    const float texelSizeX = unity_ProbeVolumeParams.z;         // U方向中纹素的个数
 
     //The SH coefficients textures and probe occlusion are packed into 1 atlas.
     //-------------------------
