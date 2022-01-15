@@ -187,19 +187,26 @@ inline half UnitySampleShadowmap (float3 vec)
 
 half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 {
+    // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针
     const float transformToLocal = unity_ProbeVolumeParams.y;
+    // 取得纹理U坐标方向上的纹素的大小，假如U方向的纹素个数为64，则纹素大小为0.015 625
     const float texelSizeX = unity_ProbeVolumeParams.z;
 
+    //LPPV 并没有使用3阶9组系数，而是使用0和1共2阶，4组系数，每一组存放在8-bit字段里
     //The SH coefficients textures and probe occlusion are packed into 1 atlas.
     //-------------------------
     //| ShR | ShG | ShB | Occ |
     //-------------------------
 
+    // 如果在局部空间中处理，就要把待处理点乘以一个从世界坐标到局部空间上的矩阵转换回去
     float3 position = (transformToLocal == 1.0f) ? mul(unity_ProbeVolumeWorldToObject, float4(worldPos, 1.0)).xyz : worldPos;
 
+    // 根据当前传递进来的位置点的坐标，求得当前位置点相对于光探针代理体的最左下角位置点的偏移，
+    // 然后各自除以光探针代理体的长宽高，得到归一化的纹理映射坐标
     //Get a tex coord between 0 and 1
     float3 texCoord = (position - unity_ProbeVolumeMin.xyz) * unity_ProbeVolumeSizeInv.xyz;
 
+    // 这个方法是采样编码在LPPV中的环境光遮蔽信息，这部分数据被压缩在了数据立方体的u方向最后四分之一处 
     // Sample fourth texture in the atlas
     // We need to compute proper U coordinate to sample.
     // Clamp the coordinate otherwize we'll have leaking between ShB coefficients and Probe Occlusion(Occ) info

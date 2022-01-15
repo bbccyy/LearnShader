@@ -389,7 +389,9 @@ half3 ShadeSH3Order(half4 normal)
 // normal should be normalized, w=1.0
 half3 SHEvalLinearL0L1_SampleProbeVolume (half4 normal, float3 worldPos)
 {
+    // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针
     const float transformToLocal = unity_ProbeVolumeParams.y;
+    // 取得纹理U坐标方向上的纹素的 大小 ，假如U方向的纹素个数为64，则纹素大小为1/64
     const float texelSizeX = unity_ProbeVolumeParams.z;
 
     //The SH coefficients textures and probe occlusion are packed into 1 atlas.
@@ -397,21 +399,31 @@ half3 SHEvalLinearL0L1_SampleProbeVolume (half4 normal, float3 worldPos)
     //| ShR | ShG | ShB | Occ |
     //-------------------------
 
+    // 如果在局部空间中处理，就要把待处理点乘以一个从世界坐标到局部空间上的矩阵转换回去
     float3 position = (transformToLocal == 1.0f) ? mul(unity_ProbeVolumeWorldToObject, float4(worldPos, 1.0)).xyz : worldPos;
+    
+    // 根据当前传递进来的位置点的坐标，求得当前位置点相对于光探针代理体的最左下角位置点的偏移，
+    // 然后各自除以光探针代理体的长宽高，得到归一化的纹理映射坐标
     float3 texCoord = (position - unity_ProbeVolumeMin.xyz) * unity_ProbeVolumeSizeInv.xyz;
+    
+    //很显然，在三维纹理的x方向（或者说u方向）被安排了4倍的数据量（4倍于另外2个轴向的纹素个数）
     texCoord.x = texCoord.x * 0.25f;
 
+    // texCoordX 表示第一组数据的起始位置：半个纹素开始， 0.25f - 半个纹素结尾 
     // We need to compute proper X coordinate to sample.
     // Clamp the coordinate otherwize we'll have leaking between RGB coefficients
     float texCoordX = clamp(texCoord.x, 0.5f * texelSizeX, 0.25f - 0.5f * texelSizeX);
 
+    //开始采样，首先是当前坐标对应的SHAr信息，存放范围在u方向的前1/4处 
     // sampler state comes from SHr (all SH textures share the same sampler)
     texCoord.x = texCoordX;
     half4 SHAr = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
 
+    //其次是当前点对应的SHAg通道的信息被放在了 1/4 ~ 2/4处
     texCoord.x = texCoordX + 0.25f;
     half4 SHAg = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
 
+    //最后是当前点对应的SHAb通道，存放在了后面2/4 ~ 3/4处 
     texCoord.x = texCoordX + 0.5f;
     half4 SHAb = UNITY_SAMPLE_TEX3D_SAMPLER(unity_ProbeVolumeSH, unity_ProbeVolumeSH, texCoord);
 
