@@ -114,7 +114,7 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
     UNITY_DECLARE_TEXCUBE_SHADOWMAP(_ShadowMapTexture);
 #else
     UNITY_DECLARE_TEXCUBE(_ShadowMapTexture);
-    inline float SampleCubeDistance (float3 vec) //vec是从原点发出，指向立方体上某点位置的连线向量，也是立方体纹理的贴图坐标
+    inline float SampleCubeDistance (float3 vec) //vec是从原点(光源空间)发出，指向立方体上某点位置的连线向量，也是立方体纹理的贴图坐标
     {
         return UnityDecodeCubeShadowDepth(UNITY_SAMPLE_TEXCUBE_LOD(_ShadowMapTexture, vec, 0));
     }
@@ -122,9 +122,12 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 #endif
 
 // 该方法用于采样点光源形成的阴影，入参vec应当是从光源指向物体表面的向量 
+// 或者说：vec是在光源空间中物体点的坐标，原点就是光源所在位置 
 inline half UnitySampleShadowmap (float3 vec)
 {
     #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
+        //shadow cube被存放在了深度缓存中的情况
+        //这应该是一种将6面体纹理编码到一张纹理中的技术（待考）
         float3 absVec = abs(vec);
         float dominantAxis = max(max(absVec.x, absVec.y), absVec.z); // TODO use max3() instead
         dominantAxis = max(0.00001, dominantAxis - _LightProjectionParams.z); // shadow bias from point light is apllied here.
@@ -135,6 +138,7 @@ inline half UnitySampleShadowmap (float3 vec)
         mydist = 1.0 - mydist; // depth buffers are reversed! Additionally we can move this to CPP code!
         #endif
     #else
+        //以前的一般情况，shadow cube是一张单独的cube纹理 
         float mydist = length(vec) * _LightPositionRange.w;
         mydist *= _LightProjectionParams.w; // bias
     #endif
@@ -144,6 +148,7 @@ inline half UnitySampleShadowmap (float3 vec)
         float4 shadowVals;
         // No hardware comparison sampler (ie some mobile + xbox360) : simple 4 tap PCF
         #if defined (SHADOWS_CUBE_IN_DEPTH_TEX)
+            //采样深度缓存，返回比较(Cmp)后的数值
             shadowVals.x = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3( z, z, z), mydist));
             shadowVals.y = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3(-z,-z, z), mydist));
             shadowVals.z = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3(-z, z,-z), mydist));
@@ -151,12 +156,13 @@ inline half UnitySampleShadowmap (float3 vec)
             half shadow = dot(shadowVals, 0.25);
             return lerp(_LightShadowData.r, 1.0, shadow);
         #else
+            //采样cube纹理，对vec做一个上下左右的偏移，实现邻域采样 
             shadowVals.x = SampleCubeDistance (vec+float3( z, z, z));
             shadowVals.y = SampleCubeDistance (vec+float3(-z,-z, z));
             shadowVals.z = SampleCubeDistance (vec+float3(-z, z,-z));
             shadowVals.w = SampleCubeDistance (vec+float3( z,-z,-z));
             half4 shadows = (shadowVals < mydist.xxxx) ? _LightShadowData.rrrr : 1.0f;
-            return dot(shadows, 0.25);
+            return dot(shadows, 0.25);  //加权求和，4个分量占比相等 
         #endif
     #else
         #if defined (SHADOWS_CUBE_IN_DEPTH_TEX)
