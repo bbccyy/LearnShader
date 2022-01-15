@@ -185,6 +185,7 @@ inline half UnitySampleShadowmap (float3 vec)
 
 #if UNITY_LIGHT_PROBE_PROXY_VOLUME
 
+//采样LPPV中存放的Occ信息用 
 half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 {
     // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针
@@ -219,36 +220,46 @@ half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 
 // ------------------------------------------------------------------
 // Used by the forward rendering path
+//当使用阴影蒙板(ShadowMask，是GI中的那个)时，UnitySampleBakedOcclusions函数用来返回烘焙的阴影的衰减值 
 fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos)
 {
     #if defined (SHADOWS_SHADOWMASK)
         #if defined(LIGHTMAP_ON)
+            // 如果启用了光照贴图(LightMap)，则从光照贴图中提取遮蔽蒙板信息
             fixed4 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
         #else
+            //没有烘焙 LightMap 时
             fixed4 rawOcclusionMask = fixed4(1.0, 1.0, 1.0, 1.0);
             #if UNITY_LIGHT_PROBE_PROXY_VOLUME
                 if (unity_ProbeVolumeParams.x == 1.0)
+                    //Light Probe代理开启且激活时，用下面的方法到立体纹理中找Occ数据
                     rawOcclusionMask = LPPV_SampleProbeOcclusion(worldPos);
                 else
                     rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
             #else
+                //去unity_ShadowMask找 (毕竟当前分支定义了 SHADOWS_SHADOWMASK 嘛)
                 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
             #endif
         #endif
         return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
 
     #else
-
-        //In forward dynamic objects can only get baked occlusion from LPPV, light probe occlusion is done on the CPU by attenuating the light color.
+        //当没有定义 SHADOWS_SHADOWMASK 时 
+        //只有在LPPV时，才有必要去纹理中采样occ，如果只是一般的Light Probe，occ已经在CPU端通过动态修改光照颜色强度来达成了 
+        //In forward dynamic objects can only get baked occlusion from LPPV, 
+        //light probe occlusion is done on the CPU by attenuating the light color.
         fixed atten = 1.0f;
         #if defined(UNITY_INSTANCING_ENABLED) && defined(UNITY_USE_SHCOEFFS_ARRAYS)
             // ...unless we are doing instancing, and the attenuation is packed into SHC array's .w component.
+            // 除非是使用 Unity Instancing，可想大批量的 Light Probe数据 CPU不一定处理的过来，那么这时候就由GPU代劳了
+            // 反正只要确保CPU传入的这个unit_SHC的数据是对应当前物体的就行 
             atten = unity_SHC.w;
         #endif
 
         #if UNITY_LIGHT_PROBE_PROXY_VOLUME && !defined(LIGHTMAP_ON) && !UNITY_STANDARD_SIMPLE
             fixed4 rawOcclusionMask = atten.xxxx;
             if (unity_ProbeVolumeParams.x == 1.0)
+                //没有定义 SHADOWS_SHADOWMASK 不影响 Light Probe代理开启且激活
                 rawOcclusionMask = LPPV_SampleProbeOcclusion(worldPos);
             return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
         #endif
