@@ -241,6 +241,8 @@ fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos)
                 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
             #endif
         #endif
+        //变量unity_OcclusionMaskSelector在UnityShaderVariables.cginc文件中定义，这个变量是fixed4类型，用来控制当前渲染的光源中哪些通道可用。
+        //ShadowMask的每一个纹素中，存储着它对应的场景某位置点上至多4个光源在此的遮挡消息，即记录着这一点中有多少个光源能照得到，对多少个光源照不到的信息。 unity_OcclusionMaskSelector就用来控制这些遮挡。
         return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
 
     #else
@@ -270,6 +272,8 @@ fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos)
 
 // ------------------------------------------------------------------
 // Used by the deferred rendering path (in the gbuffer pass)
+//UnityGetRawBakedOcclusions 函数的功能和 UnitySampleBakedOcclusion 函数相似，
+//不同之处在于它没有使用 unity_OcclusionMaskSelector 变量选择其中的通道
 fixed4 UnityGetRawBakedOcclusions(float2 lightmapUV, float3 worldPos)
 {
     #if defined (SHADOWS_SHADOWMASK)
@@ -323,9 +327,11 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     // Distance shadowmask mode = SHADOWS_SHADOWMASK
     // Pure realtime direct lit = N/A
 
+    // 如果基于深度贴图的阴影、基于屏幕空间的阴影、基于立方体纹理的阴影这三者都没有打开
     #if !defined(SHADOWS_DEPTH) && !defined(SHADOWS_SCREEN) && !defined(SHADOWS_CUBE)
         #if defined(LIGHTMAP_ON) && defined (LIGHTMAP_SHADOW_MIXING) && !defined (SHADOWS_SHADOWMASK)
             //In subtractive mode when there is no shadow we kill the light contribution as direct as been baked in the lightmap.
+            //subtrative模式烘焙直接光和间接光，这里是处理static物体，完全使用lightmap上的烘焙信息，不存在任何阴影计算 
             return 0.0;
         #else
             return bakedShadowAttenuation;
@@ -335,6 +341,8 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     #if (SHADER_TARGET <= 20) || UNITY_STANDARD_SIMPLE
         //no fading nor blending on SM 2.0 because of instruction count limit.
         #if defined(SHADOWS_SHADOWMASK) || defined(LIGHTMAP_SHADOW_MIXING)
+            //这是处理static物体在 ShadowMask 模式下的阴影，这种模式要求使用 2 个阴影衰减值中最小的那个 
+            //主要是托了 ShadowMask 的福，我们能知道那块从 LightMap 中取出的数值是在阴影中的 
             return min(realtimeShadowAttenuation, bakedShadowAttenuation);
         #else
             return realtimeShadowAttenuation;
@@ -342,7 +350,9 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     #endif
 
     #if defined(LIGHTMAP_SHADOW_MIXING)
+        //这也是处理 static 和 dynamic 物体的逻辑 模式如下 
         //Subtractive or shadowmask mode
+        //Unity 会在一定距离外使用烘焙的阴影，然后到近处换成动态实时阴影， fade 值的大小随距离而定 
         realtimeShadowAttenuation = saturate(realtimeShadowAttenuation + fade);
         return min(realtimeShadowAttenuation, bakedShadowAttenuation);
     #endif
@@ -379,6 +389,7 @@ half UnityComputeShadowFade(float fadeDist)
 *   http://mynameismjp.wordpress.com/2013/09/10/shadow-maps/
 *   http://amd-dev.wpengine.netdna-cdn.com/wordpress/media/2012/10/Isidoro-ShadowMapping.pdf
 */
+// 根据给定的在屏幕空间中的阴影坐标值，计算阴影接受平面的深度偏移值 （receiver plane bias）
 float3 UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasMultiply)
 {
     // Should receiver plane bias be used? This estimates receiver slope using derivatives,
@@ -411,8 +422,13 @@ float3 UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasMultiply)
 * Combines the different components of a shadow coordinate and returns the final coordinate.
 * See UnityGetReceiverPlaneDepthBias
 */
+// 组合一个阴影坐标的不同分量并返回合成后的新uvw坐标 
 float3 UnityCombineShadowcoordComponents(float2 baseUV, float2 deltaUV, float depth, float3 receiverPlaneDepthBias)
 {
+    // float2 baseUV -> 本采样点对应的阴影贴图uv坐标, 
+    // float2 deltaUV -> 本采样点对应的uv坐标的偏移量, 
+    // float depth -> 本采样点存储的深度值 
+    // float3 receiverPlaneDepthBias -> 接受阴影投射的平面的深度偏差值
     float3 uv = float3(baseUV + deltaUV, depth + receiverPlaneDepthBias.z);
     uv.z += dot(deltaUV, receiverPlaneDepthBias.xy);
     return uv;
