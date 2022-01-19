@@ -114,17 +114,24 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
     UNITY_DECLARE_TEXCUBE_SHADOWMAP(_ShadowMapTexture); //定义纹理对象 
 #else
     UNITY_DECLARE_TEXCUBE(_ShadowMapTexture);
-    inline float SampleCubeDistance (float3 vec) //vec是从原点发出，指向立方体上某点位置的连线向量，也是立方体纹理的贴图坐标
+    inline float SampleCubeDistance (float3 vec) //vec是从原点(光源空间)发出，指向立方体上某点位置的连线向量，也是立方体纹理的贴图坐标
     {
         return UnityDecodeCubeShadowDepth(UNITY_SAMPLE_TEXCUBE_LOD(_ShadowMapTexture, vec, 0));
     }
 
 #endif
 
+<<<<<<< HEAD
 // 该方法用于采样 "点" 光源形成的阴影，入参vec是当前待判断是否在阴影中的片元在光源空间中的坐标
+=======
+// 该方法用于采样点光源形成的阴影，入参vec应当是从光源指向物体表面的向量 
+// 或者说：vec是在光源空间中物体点的坐标，原点就是光源所在位置 
+>>>>>>> 9649063592ac2e4c08c44c41b33c5534785a96d3
 inline half UnitySampleShadowmap (float3 vec)
 {
     #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
+        //shadow cube被存放在了深度缓存中的情况
+        //这应该是一种将6面体纹理编码到一张纹理中的技术（待考）
         float3 absVec = abs(vec);
         float dominantAxis = max(max(absVec.x, absVec.y), absVec.z); // TODO use max3() instead
         // for point light projection: _LightProjectionParams.x = zfar / (znear - zfar), y = (znear * zfar) / (znear - zfar), z=shadow bias, w=shadow scale bias
@@ -136,6 +143,7 @@ inline half UnitySampleShadowmap (float3 vec)
         mydist = 1.0 - mydist; // depth buffers are reversed! Additionally we can move this to CPP code!
         #endif
     #else
+        //以前的一般情况，shadow cube是一张单独的cube纹理 
         float mydist = length(vec) * _LightPositionRange.w;
         mydist *= _LightProjectionParams.w; // bias
     #endif
@@ -146,6 +154,7 @@ inline half UnitySampleShadowmap (float3 vec)
         float4 shadowVals;
         // No hardware comparison sampler (ie some mobile + xbox360) : simple 4 tap PCF
         #if defined (SHADOWS_CUBE_IN_DEPTH_TEX)
+            //采样深度缓存，返回比较(Cmp)后的数值
             shadowVals.x = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3( z, z, z), mydist));
             shadowVals.y = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3(-z,-z, z), mydist));
             shadowVals.z = UNITY_SAMPLE_TEXCUBE_SHADOW(_ShadowMapTexture, float4(vec+float3(-z, z,-z), mydist));
@@ -153,12 +162,13 @@ inline half UnitySampleShadowmap (float3 vec)
             half shadow = dot(shadowVals, 0.25);
             return lerp(_LightShadowData.r, 1.0, shadow);
         #else
+            //采样cube纹理，对vec做一个上下左右的偏移，实现邻域采样 
             shadowVals.x = SampleCubeDistance (vec+float3( z, z, z));
             shadowVals.y = SampleCubeDistance (vec+float3(-z,-z, z));
             shadowVals.z = SampleCubeDistance (vec+float3(-z, z,-z));
             shadowVals.w = SampleCubeDistance (vec+float3( z,-z,-z));
             half4 shadows = (shadowVals < mydist.xxxx) ? _LightShadowData.rrrr : 1.0f;
-            return dot(shadows, 0.25);
+            return dot(shadows, 0.25);  //加权求和，4个分量占比相等 
         #endif
     #else
         #if defined (SHADOWS_CUBE_IN_DEPTH_TEX)
@@ -181,21 +191,34 @@ inline half UnitySampleShadowmap (float3 vec)
 
 #if UNITY_LIGHT_PROBE_PROXY_VOLUME
 
+//采样LPPV中存放的Occ信息用 
 half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 {
+<<<<<<< HEAD
     const float transformToLocal = unity_ProbeVolumeParams.y;   // 用于判断是否要转换到模型空间计算 （1:Yes) 
     const float texelSizeX = unity_ProbeVolumeParams.z;         // U方向中纹素的个数
+=======
+    // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针
+    const float transformToLocal = unity_ProbeVolumeParams.y;
+    // 取得纹理U坐标方向上的纹素的大小，假如U方向的纹素个数为64，则纹素大小为0.015 625
+    const float texelSizeX = unity_ProbeVolumeParams.z;
+>>>>>>> 9649063592ac2e4c08c44c41b33c5534785a96d3
 
+    //LPPV 并没有使用3阶9组系数，而是使用0和1共2阶，4组系数，每一组存放在8-bit字段里
     //The SH coefficients textures and probe occlusion are packed into 1 atlas.
     //-------------------------
     //| ShR | ShG | ShB | Occ |
     //-------------------------
 
+    // 如果在局部空间中处理，就要把待处理点乘以一个从世界坐标到局部空间上的矩阵转换回去
     float3 position = (transformToLocal == 1.0f) ? mul(unity_ProbeVolumeWorldToObject, float4(worldPos, 1.0)).xyz : worldPos;
 
+    // 根据当前传递进来的位置点的坐标，求得当前位置点相对于光探针代理体的最左下角位置点的偏移，
+    // 然后各自除以光探针代理体的长宽高，得到归一化的纹理映射坐标
     //Get a tex coord between 0 and 1
     float3 texCoord = (position - unity_ProbeVolumeMin.xyz) * unity_ProbeVolumeSizeInv.xyz;
 
+    // 这个方法是采样编码在LPPV中的环境光遮蔽信息，这部分数据被压缩在了数据立方体的u方向最后四分之一处 
     // Sample fourth texture in the atlas
     // We need to compute proper U coordinate to sample.
     // Clamp the coordinate otherwize we'll have leaking between ShB coefficients and Probe Occlusion(Occ) info
@@ -208,36 +231,48 @@ half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 
 // ------------------------------------------------------------------
 // Used by the forward rendering path
+//当使用阴影蒙板(ShadowMask，是GI中的那个)时，UnitySampleBakedOcclusions函数用来返回烘焙的阴影的衰减值 
 fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos)
 {
     #if defined (SHADOWS_SHADOWMASK)
         #if defined(LIGHTMAP_ON)
+            // 如果启用了光照贴图(LightMap)，则从光照贴图中提取遮蔽蒙板信息
             fixed4 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
         #else
+            //没有烘焙 LightMap 时
             fixed4 rawOcclusionMask = fixed4(1.0, 1.0, 1.0, 1.0);
             #if UNITY_LIGHT_PROBE_PROXY_VOLUME
                 if (unity_ProbeVolumeParams.x == 1.0)
+                    //Light Probe代理开启且激活时，用下面的方法到立体纹理中找Occ数据
                     rawOcclusionMask = LPPV_SampleProbeOcclusion(worldPos);
                 else
                     rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
             #else
+                //去unity_ShadowMask找 (毕竟当前分支定义了 SHADOWS_SHADOWMASK 嘛)
                 rawOcclusionMask = UNITY_SAMPLE_TEX2D(unity_ShadowMask, lightmapUV.xy);
             #endif
         #endif
+        //变量unity_OcclusionMaskSelector在UnityShaderVariables.cginc文件中定义，这个变量是fixed4类型，用来控制当前渲染的光源中哪些通道可用。
+        //ShadowMask的每一个纹素中，存储着它对应的场景某位置点上至多4个光源在此的遮挡消息，即记录着这一点中有多少个光源能照得到，对多少个光源照不到的信息。 unity_OcclusionMaskSelector就用来控制这些遮挡。
         return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
 
     #else
-
-        //In forward dynamic objects can only get baked occlusion from LPPV, light probe occlusion is done on the CPU by attenuating the light color.
+        //当没有定义 SHADOWS_SHADOWMASK 时 
+        //只有在LPPV时，才有必要去纹理中采样occ，如果只是一般的Light Probe，occ已经在CPU端通过动态修改光照颜色强度来达成了 
+        //In forward dynamic objects can only get baked occlusion from LPPV, 
+        //light probe occlusion is done on the CPU by attenuating the light color.
         fixed atten = 1.0f;
         #if defined(UNITY_INSTANCING_ENABLED) && defined(UNITY_USE_SHCOEFFS_ARRAYS)
             // ...unless we are doing instancing, and the attenuation is packed into SHC array's .w component.
+            // 除非是使用 Unity Instancing，可想大批量的 Light Probe数据 CPU不一定处理的过来，那么这时候就由GPU代劳了
+            // 反正只要确保CPU传入的这个unit_SHC的数据是对应当前物体的就行 
             atten = unity_SHC.w;
         #endif
 
         #if UNITY_LIGHT_PROBE_PROXY_VOLUME && !defined(LIGHTMAP_ON) && !UNITY_STANDARD_SIMPLE
             fixed4 rawOcclusionMask = atten.xxxx;
             if (unity_ProbeVolumeParams.x == 1.0)
+                //没有定义 SHADOWS_SHADOWMASK 不影响 Light Probe代理开启且激活
                 rawOcclusionMask = LPPV_SampleProbeOcclusion(worldPos);
             return saturate(dot(rawOcclusionMask, unity_OcclusionMaskSelector));
         #endif
@@ -248,6 +283,8 @@ fixed UnitySampleBakedOcclusion (float2 lightmapUV, float3 worldPos)
 
 // ------------------------------------------------------------------
 // Used by the deferred rendering path (in the gbuffer pass)
+//UnityGetRawBakedOcclusions 函数的功能和 UnitySampleBakedOcclusion 函数相似，
+//不同之处在于它没有使用 unity_OcclusionMaskSelector 变量选择其中的通道
 fixed4 UnityGetRawBakedOcclusions(float2 lightmapUV, float3 worldPos)
 {
     #if defined (SHADOWS_SHADOWMASK)
@@ -301,9 +338,11 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     // Distance shadowmask mode = SHADOWS_SHADOWMASK
     // Pure realtime direct lit = N/A
 
+    // 如果基于深度贴图的阴影、基于屏幕空间的阴影、基于立方体纹理的阴影这三者都没有打开
     #if !defined(SHADOWS_DEPTH) && !defined(SHADOWS_SCREEN) && !defined(SHADOWS_CUBE)
         #if defined(LIGHTMAP_ON) && defined (LIGHTMAP_SHADOW_MIXING) && !defined (SHADOWS_SHADOWMASK)
             //In subtractive mode when there is no shadow we kill the light contribution as direct as been baked in the lightmap.
+            //subtrative模式烘焙直接光和间接光，这里是处理static物体，完全使用lightmap上的烘焙信息，不存在任何阴影计算 
             return 0.0;
         #else
             return bakedShadowAttenuation;
@@ -313,6 +352,8 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     #if (SHADER_TARGET <= 20) || UNITY_STANDARD_SIMPLE
         //no fading nor blending on SM 2.0 because of instruction count limit.
         #if defined(SHADOWS_SHADOWMASK) || defined(LIGHTMAP_SHADOW_MIXING)
+            //这是处理static物体在 ShadowMask 模式下的阴影，这种模式要求使用 2 个阴影衰减值中最小的那个 
+            //主要是托了 ShadowMask 的福，我们能知道那块从 LightMap 中取出的数值是在阴影中的 
             return min(realtimeShadowAttenuation, bakedShadowAttenuation);
         #else
             return realtimeShadowAttenuation;
@@ -320,7 +361,9 @@ half UnityMixRealtimeAndBakedShadows(half realtimeShadowAttenuation, half bakedS
     #endif
 
     #if defined(LIGHTMAP_SHADOW_MIXING)
+        //这也是处理 static 和 dynamic 物体的逻辑 模式如下 
         //Subtractive or shadowmask mode
+        //Unity 会在一定距离外使用烘焙的阴影，然后到近处换成动态实时阴影， fade 值的大小随距离而定 
         realtimeShadowAttenuation = saturate(realtimeShadowAttenuation + fade);
         return min(realtimeShadowAttenuation, bakedShadowAttenuation);
     #endif
@@ -357,6 +400,7 @@ half UnityComputeShadowFade(float fadeDist)
 *   http://mynameismjp.wordpress.com/2013/09/10/shadow-maps/
 *   http://amd-dev.wpengine.netdna-cdn.com/wordpress/media/2012/10/Isidoro-ShadowMapping.pdf
 */
+// 根据给定的在屏幕空间中的阴影坐标值，计算阴影接受平面的深度偏移值 （receiver plane bias）
 float3 UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasMultiply)
 {
     // Should receiver plane bias be used? This estimates receiver slope using derivatives,
@@ -389,8 +433,13 @@ float3 UnityGetReceiverPlaneDepthBias(float3 shadowCoord, float biasMultiply)
 * Combines the different components of a shadow coordinate and returns the final coordinate.
 * See UnityGetReceiverPlaneDepthBias
 */
+// 组合一个阴影坐标的不同分量并返回合成后的新uvw坐标 
 float3 UnityCombineShadowcoordComponents(float2 baseUV, float2 deltaUV, float depth, float3 receiverPlaneDepthBias)
 {
+    // float2 baseUV -> 本采样点对应的阴影贴图uv坐标, 
+    // float2 deltaUV -> 本采样点对应的uv坐标的偏移量, 
+    // float depth -> 本采样点存储的深度值 
+    // float3 receiverPlaneDepthBias -> 接受阴影投射的平面的深度偏差值
     float3 uv = float3(baseUV + deltaUV, depth + receiverPlaneDepthBias.z);
     uv.z += dot(deltaUV, receiverPlaneDepthBias.xy);
     return uv;
@@ -703,7 +752,7 @@ half UnitySampleShadowmap_PCF7x7Tent(float4 coord, float3 receiverPlaneDepthBias
 * Implementation example: http://mynameismjp.wordpress.com/2013/09/10/shadow-maps/
 */
 half UnitySampleShadowmap_PCF3x3Gaussian(float4 coord, float3 receiverPlaneDepthBias)
-{
+{   //窗口大小为3X3的PCF滤波   
     half shadow = 1;
 
 #ifdef SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
@@ -747,11 +796,12 @@ half UnitySampleShadowmap_PCF3x3Gaussian(float4 coord, float3 receiverPlaneDepth
 */
 half UnitySampleShadowmap_PCF5x5Gaussian(float4 coord, float3 receiverPlaneDepthBias)
 {
-    half shadow = 1;
+    half shadow = 1; 
 
 #ifdef SHADOWMAPSAMPLER_AND_TEXELSIZE_DEFINED
 
     #ifndef SHADOWS_NATIVE
+        // 5X5还是用的Native3X3方式制作 
         // when we don't have hardware PCF sampling, fallback to a simple 3x3 sampling with averaged results.
         return UnitySampleShadowmap_PCF3x3NoHardwareSupport(coord, receiverPlaneDepthBias);
     #endif
