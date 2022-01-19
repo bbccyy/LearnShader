@@ -27,7 +27,7 @@ float Beckmann(float m, float t)
     return exp((T-1)/(M*T)) / (M*T*T);
 }
 
-float Fresnel(float f0, float u)
+float Fresnel(float f0, float u)  //f0为入射光线垂直于表面时的菲涅耳反射率
 {
     // from Schlick
     return f0 + (1-f0) * pow(1-u, 5);
