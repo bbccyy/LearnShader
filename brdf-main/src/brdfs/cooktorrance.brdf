@@ -27,7 +27,9 @@ float Beckmann(float m, float t)
     return exp((T-1)/(M*T)) / (M*T*T);
 }
 
-float Fresnel(float f0, float u)  //f0为入射光线垂直于表面时的菲涅耳反射率
+//f0为入射光线垂直于表面时的菲涅耳反射率
+//u 则是 半角向量 h 与视方向 w的点乘结果 
+float Fresnel(float f0, float u) 
 {
     // from Schlick
     return f0 + (1-f0) * pow(1-u, 5);
@@ -39,7 +41,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     vec3 H = normalize( L + V );
 
     float NdotH = dot(N, H);
-    float VdotH = dot(V, H);
+    float VdotH = dot(V, H);  //view dot half-angle -> Fresnel要用 
     float NdotL = dot(N, L);
     float NdotV = dot(N, V);
     float oneOverNdotV = 1.0 / NdotV;
