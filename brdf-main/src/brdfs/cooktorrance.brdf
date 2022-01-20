@@ -20,6 +20,7 @@ bool include_G 1
 
 float sqr(float x) { return x*x; }
 
+// m 微平面法线m的统计分布(statistical distribution) 
 float Beckmann(float m, float t)
 {
     float M = m*m;
@@ -27,14 +28,15 @@ float Beckmann(float m, float t)
     return exp((T-1)/(M*T)) / (M*T*T);
 }
 
-//f0为入射光线垂直于表面时的菲涅耳反射率
-//u 则是 半角向量 h 与视方向 w的点乘结果 
+// f0 为入射光线垂直于表面时的菲涅耳反射率
+// u  则是 半角向量 h 与视方向 w的点乘结果 
 float Fresnel(float f0, float u) 
 {
     // from Schlick
     return f0 + (1-f0) * pow(1-u, 5);
 }
 
+// L:光源方向， V：视方向， N：表面宏观法线方向， 
 vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
 {
     // compute the half vec3
@@ -46,7 +48,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     float NdotV = dot(N, V);
     float oneOverNdotV = 1.0 / NdotV;
 
-    float D = Beckmann(m, NdotH);
+    float D = Beckmann(m, NdotH);  //基于Beckmann的法线分布函数，关于半角向量的函数
     float F = Fresnel(f0, VdotH);
 
     NdotH = NdotH + NdotH;
