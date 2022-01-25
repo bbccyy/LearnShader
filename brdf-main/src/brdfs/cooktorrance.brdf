@@ -20,7 +20,8 @@ bool include_G 1
 
 float sqr(float x) { return x*x; }
 
-// m 微平面法线m的统计分布(statistical distribution) 
+// m -> a 是Beckmann分布函数中用于控制表面粗糙度的一个变量(由美术确定) 
+// t -> N dot H
 float Beckmann(float m, float t)
 {
     float M = m*m;
