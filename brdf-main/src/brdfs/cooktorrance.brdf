@@ -22,6 +22,7 @@ float sqr(float x) { return x*x; }
 
 // m -> a 是Beckmann分布函数中用于控制表面粗糙度的一个变量(由美术确定) 
 // t -> N dot H
+// output -> t 方向 m 粗糙度前提下微表面的法线强度 
 float Beckmann(float m, float t)
 {
     float M = m*m;
