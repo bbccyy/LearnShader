@@ -20,6 +20,9 @@ float m 0.001 .7 .1
 
 const float PI = 3.14159265358979323846;
 
+//Beckmann[1963]
+//m -> used to control surface roughness(usually determined by artist)
+//t -> N dot H 
 float Beckmann(float m, float t)
 {
     float M = m*m;

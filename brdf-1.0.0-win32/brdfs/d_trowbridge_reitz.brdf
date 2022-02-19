@@ -25,10 +25,12 @@ const float PI = 3.14159265358979323846;
 
 float sqr(float x) { return x*x; }
 
+//c代表缩放系数，cosAlpha表示微平面法线与宏观法线的点积 -> 既cos(θh) 
 float TrowbridgeReitz(float c, float cosAlpha)
 {
     float cSquared = c*c;
     return sqr(cSquared / (cosAlpha*cosAlpha*(cSquared-1)+1));
+    //c*cosA^2 + (1 - cosA^2) -> c*cosA^2 + sinA^2
 }
 
 vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )

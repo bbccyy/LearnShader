@@ -9,11 +9,12 @@ float f0 0 1 1
 
 ::begin shader
 
+//f 定义为当入射光垂直于物体表面时的菲涅尔反射率
+//u 此处为半角方向 H 与 光源方向 L 的点积
 float Fresnel(float f0, float u)
 {
     return f0 + (1-f0) * pow(1-u, 5);
 }
-
 
 
 vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
