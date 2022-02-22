@@ -109,7 +109,8 @@ float GTR2_aniso(float NdotH, float HdotX, float HdotY, float ax, float ay)
 
 //2012版disney采用的Smith GGX导出的G项，本质是Smith联合遮蔽阴影函数中的“分离的遮蔽阴影型”
 //入参NdotV视情况也可替换会NdotL，用于计算阴影相关G1；
-//入参alphaG默认是0.25f，被用来表现清漆波瓣 
+//入参alphaG被迪士尼定义为0.25f
+//该公式各项同性，迪士尼使用此公式计算第二高光波瓣 
 float smithG_GGX(float NdotV, float alphaG)
 {
     float a = alphaG*alphaG;
@@ -117,6 +118,7 @@ float smithG_GGX(float NdotV, float alphaG)
     return 1 / (NdotV + sqrt(a + b - a*b));
 }
 
+//各向异性版G 
 float smithG_GGX_aniso(float NdotV, float VdotX, float VdotY, float ax, float ay)
 {
     return 1 / (NdotV + sqrt( sqr(VdotX*ax) + sqr(VdotY*ay) + sqr(NdotV) ));
@@ -159,15 +161,16 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     float ss = 1.25 * (Fss * (1 / (NdotL + NdotV) - .5) + .5);
 
     // specular
+    //aspect 将艺术家手中的anisotropic参数重映射到[0.1,1]空间，确保aspect不为0,
     float aspect = sqrt(1-anisotropic*.9);
-    float ax = max(.001, sqr(roughness)/aspect);
-    float ay = max(.001, sqr(roughness)*aspect);
-    float Ds = GTR2_aniso(NdotH, dot(H, X), dot(H, Y), ax, ay);
-    float FH = SchlickFresnel(LdotH);
-    vec3 Fs = mix(Cspec0, vec3(1), FH);
-    float Gs;
-    Gs  = smithG_GGX_aniso(NdotL, dot(L, X), dot(L, Y), ax, ay);
-    Gs *= smithG_GGX_aniso(NdotV, dot(V, X), dot(V, Y), ax, ay);
+    float ax = max(.001, sqr(roughness)/aspect); //ax随着参数anisotropic的增加而增加
+    float ay = max(.001, sqr(roughness)*aspect); //ay随着参数anisotropic的增加而减少，ax和ay在anisotropic值为0时相等
+    float Ds = GTR2_aniso(NdotH, dot(H, X), dot(H, Y), ax, ay); //各项异性GTR2导出对应H的法线强度 
+    float FH = SchlickFresnel(LdotH);   //返回菲尼尔核心，既pow(1-cosθ,5)
+    vec3 Fs = mix(Cspec0, vec3(1), FH); //菲尼尔项，使用了Cspec0作为F0，既高光底色，模拟金属的菲涅尔染色 
+    float Gs; //几何项，一般与l，v和n相关，各项异性时还需要考虑方向空间中的切线t和副切线b
+    Gs  = smithG_GGX_aniso(NdotL, dot(L, X), dot(L, Y), ax, ay); //遮蔽关联的几何项G1
+    Gs *= smithG_GGX_aniso(NdotV, dot(V, X), dot(V, Y), ax, ay); //阴影关联的几何项G1，随后合并两项存入Gs
 
     // sheen
     vec3 Fsheen = FH * sheen * Csheen;
