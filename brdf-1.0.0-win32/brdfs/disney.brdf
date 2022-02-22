@@ -77,21 +77,31 @@ float SchlickFresnel(float u)
     return m2*m2*m; // pow(m,5) 求5次方
 }
 
+//GTR 1 (次镜面波瓣，gamma=1)
+//次用于上层透明涂层材质（ClearCoat清漆材质，俗称上层高光），是各向同性且非金属的。
 float GTR1(float NdotH, float a)
 {
+    //考虑到粗糙度a在等于1的情况下，公式返回值无意义，因此固定返回1/pi，
+    //说明在完全粗糙的情况下，各个方向的法线分布均匀，且积分后得1
     if (a >= 1) return 1/PI;
+
     float a2 = a*a;
-    float t = 1 + (a2-1)*NdotH*NdotH;
-    return (a2-1) / (PI*log(a2)*t);
+    float t = 1 + (a2-1)*NdotH*NdotH; //公式主部
+    return (a2-1) / (PI*log(a2)*t);   //GTR1的c，迪士尼取值为：(a2-1)/(PI*log(a2))
 }
 
+//GTR 2(主镜面波瓣，gamma=2) 先用于基础层材质（Base Material）用于各项同性的金属或非金属（俗称下层高光）
 float GTR2(float NdotH, float a)
 {
     float a2 = a*a;
     float t = 1 + (a2-1)*NdotH*NdotH;
-    return a2 / (PI * t*t);
+    return a2 / (PI * t*t);  //GTR2的c，迪士尼取值为:a2/PI
 }
 
+//主镜面波瓣的各向异性版本
+//其中HdotX为半角向量与物体表面法线空间中的切线方向向量的点积
+//HdotY为半角点乘切线空间中的副切线向量 
+//ax 和 ay 分别是这2个方向上的可感粗糙度，范围是0~1 
 float GTR2_aniso(float NdotH, float HdotX, float HdotY, float ax, float ay)
 {
     return 1 / (PI * ax*ay * sqr( sqr(HdotX/ax) + sqr(HdotY/ay) + NdotH*NdotH ));
@@ -126,7 +136,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
 
     vec3 H = normalize(L+V);
     float NdotH = dot(N,H);
-    float LdotH = dot(L,H);
+    float LdotH = dot(L,H); 
 
     vec3 Cdlin = mon2lin(baseColor);
     float Cdlum = .3*Cdlin[0] + .6*Cdlin[1]  + .1*Cdlin[2]; // luminance approx.
