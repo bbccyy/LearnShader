@@ -164,7 +164,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     // Based on Hanrahan-Krueger brdf approximation of isotropic bssrdf（基于各向同性bssrdf的Hanrahan-Krueger brdf逼近）
     // 1.25 scale is used to (roughly) preserve albedo（1.25的缩放是用于（大致）保留反照率）
     // Fss90 used to "flatten" retroreflection based on roughness （Fss90用于“平整”基于粗糙度的逆反射）
-    float Fss90 = LdotH*LdotH*roughness;
+    float Fss90 = LdotH*LdotH*roughness; //垂直于次表面的菲涅尔系数
     float Fss = mix(1.0, Fss90, FL) * mix(1.0, Fss90, FV);
     float ss = 1.25 * (Fss * (1 / (NdotL + NdotV) - .5) + .5); //此步骤同样还没有乘以baseColor/pi，会在当前代码段之外完成。
 
@@ -174,7 +174,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     float ax = max(.001, sqr(roughness)/aspect);                    //ax随着参数anisotropic的增加而增加
     float ay = max(.001, sqr(roughness)*aspect);                    //ay随着参数anisotropic的增加而减少，ax和ay在anisotropic值为0时相等
     float Ds = GTR2_aniso(NdotH, dot(H, X), dot(H, Y), ax, ay);  //各项异性GTR2导出对应H的法线强度
-    float FH = SchlickFresnel(LdotH);  //返回菲尼尔核心，既pow(1-cosθ,5)
+    float FH = SchlickFresnel(LdotH);  //返回菲尼尔核心，既pow(1-cosθd,5)
     vec3 Fs = mix(Cspec0, vec3(1), FH); //菲尼尔项，使用了Cspec0作为F0，既高光底色，模拟金属的菲涅尔染色 
     float Gs;   //几何项，一般与l，v和n相关，各项异性时还需要考虑方向空间中的切线t和副切线b
     Gs  = smithG_GGX_aniso(NdotL, dot(L, X), dot(L, Y), ax, ay);  //遮蔽关联的几何项G1
