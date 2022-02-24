@@ -190,7 +190,7 @@ vec3 BRDF( vec3 L, vec3 V, vec3 N, vec3 X, vec3 Y )
     //下面行使用GTR1（berry）分布函数获取法线强度，第二个参数是a（粗糙度）
     //迪士尼使用用户控制变量clearcoatGloss，在0.1到0.001线性插值获取a 
     float Dr = GTR1(NdotH, mix(.1,.001,clearcoatGloss)); 
-    float Fr = mix(.04, 1.0, FH);                                  //菲涅尔项上调最低值至0.04 
+    float Fr = mix(.04, 1.0, FH);  //菲涅尔项上调最低值至0.04 
     float Gr = smithG_GGX(NdotL, .25) * smithG_GGX(NdotV, .25);    //几何项使用各项同性的smithG_GGX计算，a固定给0.25 
 
     //（漫反射 + 光泽）* 非金属度 + 镜面反射 + 清漆高光
