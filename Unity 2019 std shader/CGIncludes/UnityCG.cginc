@@ -92,6 +92,7 @@ inline bool IsGammaSpace()
     #endif
 }
 
+//一般用于gamma0.45 转 gamma1.0（既linear空间）
 inline float GammaToLinearSpaceExact (float value)
 {
     if (value <= 0.04045F)
@@ -111,6 +112,7 @@ inline half3 GammaToLinearSpace (half3 sRGB)
     //return half3(GammaToLinearSpaceExact(sRGB.r), GammaToLinearSpaceExact(sRGB.g), GammaToLinearSpaceExact(sRGB.b));
 }
 
+//用于linear空间（既gamma1.0）转gamma0.45空间（既sRGB所在空间） 
 inline float LinearToGammaSpaceExact (float value)
 {
     if (value <= 0.0F)
