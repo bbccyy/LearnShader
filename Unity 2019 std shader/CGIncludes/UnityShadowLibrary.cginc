@@ -10,7 +10,7 @@ UNITY_SAMPLE_DEPTH -> 定义在HLSLSupport.cginc文件中
 
 // Shadowmap helpers.
 #if defined( SHADOWS_SCREEN ) && defined( LIGHTMAP_ON )
-    #define HANDLE_SHADOWS_BLENDING_IN_GI 1  //SS阴影与GI同时开启时激活 -> 使用全局光照的同时，也使用SSS
+    #define HANDLE_SHADOWS_BLENDING_IN_GI 1  //SS阴影与GI同时开启时激活
 #endif
 
 #define unityShadowCoord float
@@ -121,12 +121,8 @@ inline fixed UnitySampleShadowmap (float4 shadowCoord)
 
 #endif
 
-<<<<<<< HEAD
 // 该方法用于采样 "点" 光源形成的阴影，入参vec是当前待判断是否在阴影中的片元在光源空间中的坐标
-=======
-// 该方法用于采样点光源形成的阴影，入参vec应当是从光源指向物体表面的向量 
 // 或者说：vec是在光源空间中物体点的坐标，原点就是光源所在位置 
->>>>>>> 9649063592ac2e4c08c44c41b33c5534785a96d3
 inline half UnitySampleShadowmap (float3 vec)
 {
     #if defined(SHADOWS_CUBE_IN_DEPTH_TEX)
@@ -194,15 +190,10 @@ inline half UnitySampleShadowmap (float3 vec)
 //采样LPPV中存放的Occ信息用 
 half4 LPPV_SampleProbeOcclusion(float3 worldPos)
 {
-<<<<<<< HEAD
-    const float transformToLocal = unity_ProbeVolumeParams.y;   // 用于判断是否要转换到模型空间计算 （1:Yes) 
-    const float texelSizeX = unity_ProbeVolumeParams.z;         // U方向中纹素的个数
-=======
-    // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针
+    // 根据当前空间的取值，判断是在局部空间还是在全局空间中处理光探针（1:Yes) 
     const float transformToLocal = unity_ProbeVolumeParams.y;
     // 取得纹理U坐标方向上的纹素的大小，假如U方向的纹素个数为64，则纹素大小为0.015 625
     const float texelSizeX = unity_ProbeVolumeParams.z;
->>>>>>> 9649063592ac2e4c08c44c41b33c5534785a96d3
 
     //LPPV 并没有使用3阶9组系数，而是使用0和1共2阶，4组系数，每一组存放在8-bit字段里
     //The SH coefficients textures and probe occlusion are packed into 1 atlas.
