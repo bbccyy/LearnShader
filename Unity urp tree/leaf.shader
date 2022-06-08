@@ -6,7 +6,7 @@ Shader "Test/Tree Leaf"
         [HideInInspector] _AlphaCutoff("Alpha Cutoff ", Range(0, 1)) = 0.5   //Alpha test 裁剪阈值 
 
         [Header(Albedo Texture)]_Color("Color", Color) = (1,1,1,1) 
-        _MainTex("Albedo", 2D) = "white" {} //基础色
+        _MainTex("Albedo", 2D) = "white" {} //基础色 三通道F0 
 
         [Enum(Off,0,Front,1,Back,2)]_CullMode("Cull Mode", Int) = 0  //默认关闭双面裁剪 
 
@@ -40,7 +40,7 @@ Shader "Test/Tree Leaf"
 
         _TransScale("Scale", Range(0 , 10)) = 1   //Trans Salce 
 
-        _TransScattering("Scattering Falloff", Range(1 , 50)) = 1  //不知道用来作何用处，感觉和透射强度有关  
+        _TransScattering("Scattering Falloff", Range(0.2 , 5)) = 1  //不知道用来作何用处，感觉和透射强度有关  
 
         [HDR]_TranslucencyTint("Translucency Tint", Color) = (1,1,1,0)  //透射染色 Tint
 
@@ -80,8 +80,8 @@ Shader "Test/Tree Leaf"
 			ZWrite On
 			ZTest LEqual
 
-			Offset 0 , 0 
-			ColorMask RGBA 
+			Offset 0 , 0	//?
+			ColorMask RGBA  //?
 
 
 			HLSLPROGRAM
@@ -163,10 +163,13 @@ Shader "Test/Tree Leaf"
 				float4 vertex : POSITION;
 				float3 normal : NORMAL;
 				float4 tangent : TANGENT;
-				float4 texcoord1 : TEXCOORD1;   //TODO
-				float4 color : COLOR;			//vertex color
+				float4 texcoord1 : TEXCOORD1;   //Litmap
+				//color.r = l.distanceFromOrigin/10) * VColBarkModifier
+				//color.g = randomWindPhase
+				//color.b = blueChannel * VColLeafModifier
+				float4 color : COLOR; 
 				float4 texcoord : TEXCOORD0;    //UV
-				float4 texcoord3 : TEXCOORD3;   //TODO (vertex texture coord?)
+				float4 texcoord3 : TEXCOORD3;   //user defined data to control transcattering 
 				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 
@@ -185,6 +188,7 @@ Shader "Test/Tree Leaf"
 				float4 texcoord6 : TEXCOORD6;	//xy:IN.texcoord.xy(uv),	zw:IN.texcoord3.xy(vertex texture coord)
 				float4 texcoord7 : TEXCOORD7;   //screen position
 				UNITY_VERTEX_INPUT_INSTANCE_ID
+				UNITY_VERTEX_OUTPUT_STEREO
 			};
 
 			float2 DirectionalEquation(float _WindDirection)
@@ -322,6 +326,7 @@ Shader "Test/Tree Leaf"
 			half4 frag(VertexOutput IN, half vface : VFACE) : SV_Target
 			{
 				UNITY_SETUP_INSTANCE_ID(IN);
+				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(IN);
 
 				float3 normalWS = normalize(IN.tSpace0.xyz);
 				float3 tangentWS = IN.tSpace1.xyz;
@@ -339,11 +344,11 @@ Shader "Test/Tree Leaf"
 				
 				//color setting
 				half3 hsv = RGBToHSV(albedo.rgb);
-				half h = _Hue + hsv.x + (IN.color.g - 0.5) * _ColorVariation;
-				half s = hsv.y * _Saturation;
-				half v = hsv.z * _Value;
+				half h = _Hue + hsv.x + (IN.color.g - 0.5) * _ColorVariation;  //shift hue based on random_wind_phase 
+				half s = hsv.y * _Saturation;	//linear chg sat
+				half v = hsv.z * _Value;		//linear chg intensity 
 				half3 targetRGB = HSVToRGB(half3(h, s, v));
-				half3 shiftedRGB = lerp(targetRGB, albedo.rgb, _ColorShifting);  //todo: can skip 
+				half3 shiftedRGB = lerp(targetRGB, albedo.rgb, _ColorShifting);  //color shifted albedo 
 
 				//normal
 				float3 flippedNormalTS = UnpackNormalScale(tex2D(_BumpMap, IN.texcoord6.xy), _BumpScale) * vface;
@@ -362,11 +367,12 @@ Shader "Test/Tree Leaf"
 				//H
 				half3 H = normalize(_TransNormalDistortion* nDir + lDir);  //注意此处为 N 和 L的半角 
 				//V dot H
-				half VdotH = pow(saturate(dot(vDir, -H)), (50.0 - _Translucency)) * _TransScale;
+				half VdotH = pow(saturate(dot(vDir, -H)), (50.0 - _Translucency)) * _TransScale;  //注意此处为 -H，表示叶子的反方向 
 				//trans color Src
 				half3 colorSrc = lerp(_MainLightColor.rgb, _TranslucencyTint.rgb, (float)_ColorSource);
 				//col Intensity 
-				half3 I = _TransScattering * (VdotH + colorSrc) * (1.0 - IN.texcoord6.z);
+				//half3 I = _TransScattering * (VdotH + colorSrc) * (1.0 - IN.texcoord6.z);
+				half3 I = _TransScattering * (VdotH + colorSrc) * IN.color.a;  //TODO 
 				//albedo after appling translucent lighting 
 				half3 finalAlbedo = lerp(shiftedRGB, (shiftedRGB * I), (float)_TranslucencyEnum);  //_TranslucencyEnum = 1 时使用透射增强的albedo 
 				//smoothness
@@ -440,7 +446,9 @@ Shader "Test/Tree Leaf"
 #ifdef LOD_FADE_CROSSFADE
 				LODDitheringTransition(IN.positionCS.xyz, unity_LODFade.x);
 #endif
-
+				//return IN.texcoord6.zzzz;
+				//return half4(albedo.rgb, 1);
+				//return half4(finalAlbedo.rgb, 1);
 				return color;
 			}
 
@@ -599,8 +607,8 @@ Shader "Test/Tree Leaf"
 				//position of vetex after wind modification
 				float3 vertexPosWS = float3(0, 0, 0);
 				vertexPosWS.x = lerp(positionWS.x, positionWS.y * sinA + positionWS.x * cosA, xzLerp.y);
-				vertexPosWS.y = positionWS.y * cosA - positionWS.z * sinA;
 				vertexPosWS.z = lerp(positionWS.z, positionWS.y * sinA + positionWS.z * cosA, xzLerp.x);
+				vertexPosWS.y = positionWS.y * cosA - positionWS.z * sinA;
 
 				//sin function
 				half sinfunc = sin(randomTime * 200 * (0.2 + IN.color.g) + (IN.color.g * 10) + turbulence + positionWS.z / 2);
@@ -636,6 +644,7 @@ Shader "Test/Tree Leaf"
 			half4 ShadowPassFragment(VertexOutput IN) : SV_TARGET
 			{
 				UNITY_SETUP_INSTANCE_ID(IN);
+				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(IN);
 
 				float2 uv_mainTex = TRANSFORM_TEX(IN.texcoord2.xy, _MainTex);
 				half4 albedoFromTex = tex2D(_MainTex, uv_mainTex);		//sample main texture
