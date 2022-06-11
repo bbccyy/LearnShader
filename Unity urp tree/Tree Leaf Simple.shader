@@ -3,27 +3,27 @@ Shader "Test/Tree Leaf Simple"
 	Properties
 	{
 		[HideInInspector] _EmissionColor("Emission Color", Color) = (1,1,1,1)
-		[HideInInspector] _AlphaCutoff("Alpha Cutoff ", Range(0, 1)) = 0.5   //Alpha test ²Ã¼ôãĞÖµ 
+		[HideInInspector] _AlphaCutoff("Alpha Cutoff ", Range(0, 1)) = 0.5   //Alpha test è£å‰ªé˜ˆå€¼ 
 
 		[Header(Albedo Texture)]_Color("Color", Color) = (1,1,1,1)
-		_MainTex("Albedo", 2D) = "white" {} //»ù´¡É« ÈıÍ¨µÀF0 
+		_MainTex("Albedo", 2D) = "white" {} //åŸºç¡€è‰² ä¸‰é€šé“F0 
 
-		[Enum(Off,0,Front,1,Back,2)]_CullMode("Cull Mode", Int) = 0  //Ä¬ÈÏ¹Ø±ÕË«Ãæ²Ã¼ô 
-		_Cutoff("Cutoff", Range(0 , 1)) = 0.5   //Í¬Alpha test ²Ã¼ôãĞÖµ 
+		[Enum(Off,0,Front,1,Back,2)]_CullMode("Cull Mode", Int) = 0  //é»˜è®¤å…³é—­åŒé¢è£å‰ª 
+		_Cutoff("Cutoff", Range(0 , 1)) = 0.5   //åŒAlpha test è£å‰ªé˜ˆå€¼ 
 
-		[Header(Normal Texture)]_BumpMap("Normal Map", 2D) = "bump" {}  //·¨ÏßÌùÍ¼ 
-		_BumpScale("Normal Strength", Float) = 1   //·¨ÏßÇ¿¶È 
+		[Header(Normal Texture)]_BumpMap("Normal Map", 2D) = "bump" {}  //æ³•çº¿è´´å›¾ 
+		_BumpScale("Normal Strength", Float) = 1   //æ³•çº¿å¼ºåº¦ 
 
-		[Header(Other Settings)]_OcclusionStrength("AO strength", Range(0 , 1)) = 0.6  //AO Ç¿¶È 
-		_Metallic("Metallic", Range(0 , 1)) = 0   //½ğÊô¶È PBR
-		_Glossiness("Smoothness", Range(0 , 1)) = 0  //¹â»¬¶È PBR
+		[Header(Other Settings)]_OcclusionStrength("AO strength", Range(0 , 1)) = 0.6  //AO å¼ºåº¦ 
+		_Metallic("Metallic", Range(0 , 1)) = 0   //é‡‘å±åº¦ PBR
+		_Glossiness("Smoothness", Range(0 , 1)) = 0  //å…‰æ»‘åº¦ PBR
 
-		[Enum(Off,0,On,1)][Header(Translucency)]_TranslucencyEnum("Translucency", Int) = 1  //Ä¬ÈÏ¿ªÆôÍ¸¹â
-		_Translucency("Strength", Range(0 , 50)) = 4						//Í¸¹âÇ¿¶È
-		_TransNormalDistortion("Normal Distortion", Range(0 , 10)) = 1		//·¨ÏßÈÅ¶¯Ç¿¶È
+		[Enum(Off,0,On,1)][Header(Translucency)]_TranslucencyEnum("Translucency", Int) = 1  //é»˜è®¤å¼€å¯é€å…‰
+		_Translucency("Strength", Range(0 , 50)) = 4						//é€å…‰å¼ºåº¦
+		_TransNormalDistortion("Normal Distortion", Range(0 , 10)) = 1		//æ³•çº¿æ‰°åŠ¨å¼ºåº¦
 		_TransScale("Scale", Range(0 , 10)) = 1								//Trans Salce 
-		_TransScattering("Scattering Falloff", Range(0.2 , 5)) = 1			//Í¸¹âÉ«É¢Ç¿¶È   
-		[HDR]_TranslucencyTint("Translucency Tint", Color) = (1,1,1,0)		//Í¸ÉäÈ¾É« Tint
+		_TransScattering("Scattering Falloff", Range(0.2 , 5)) = 1			//é€å…‰è‰²æ•£å¼ºåº¦   
+		[HDR]_TranslucencyTint("Translucency Tint", Color) = (1,1,1,0)		//é€å°„æŸ“è‰² Tint
 
 		//[Header(Wind)]
 		_WindAmbientStrength("Ambient Strength", Range(0.0, 1.0)) = 0.2
@@ -101,10 +101,10 @@ Shader "Test/Tree Leaf Simple"
 
 			#pragma multi_compile __ LOD_FADE_CROSSFADE
 
-			sampler2D _MainTex;   //¶¨Òå »ù´¡É«µÄ²ÉÑùÆ÷
-			sampler2D _BumpMap;   //¶¨Òå ·¨ÏßÌùÍ¼µÄ²ÉÑùÆ÷ 
+			sampler2D _MainTex;   //å®šä¹‰ åŸºç¡€è‰²çš„é‡‡æ ·å™¨
+			sampler2D _BumpMap;   //å®šä¹‰ æ³•çº¿è´´å›¾çš„é‡‡æ ·å™¨ 
 
-			CBUFFER_START(UnityPerMaterial)  //Ãæ°å²ÎÊı·ÅÔÚÕâÀï 
+			CBUFFER_START(UnityPerMaterial)  //é¢æ¿å‚æ•°æ”¾åœ¨è¿™é‡Œ 
 			float4 _Color;
 			float4 _MainTex_ST;
 			float _TransScattering;
@@ -202,7 +202,7 @@ Shader "Test/Tree Leaf Simple"
 				positionCS = vertexholder.positionCS;
 
 				//pass TBN and positionWS to ps
-				VertexNormalInputs normalInput = GetVertexNormalInputs(IN.normalOS, IN.tangentOS);
+				VertexNormalInputs normalInput = GetVertexNormalInputs(vertexholder.normalOS, IN.tangentOS);
 				OUT.tSpace0 = float4(normalInput.normalWS, positionWS.x);
 				OUT.tSpace1 = float4(normalInput.tangentWS, positionWS.y);
 				OUT.tSpace2 = float4(normalInput.bitangentWS, positionWS.z);
@@ -247,7 +247,7 @@ Shader "Test/Tree Leaf Simple"
 
 				//normal
 				float3 flippedNormalTS = UnpackNormalScale(tex2D(_BumpMap, IN.texcoord6.xy), _BumpScale) * vface;
-				//¹¹½¨tbn 
+				//æ„å»ºtbn 
 				float3 tanToWorld0 = float3(tangentWS.x, biTangentWS.x, normalWS.x);
 				float3 tanToWorld1 = float3(tangentWS.y, biTangentWS.y, normalWS.y);
 				float3 tanToWorld2 = float3(tangentWS.z, biTangentWS.z, normalWS.z);
@@ -260,16 +260,16 @@ Shader "Test/Tree Leaf Simple"
 				half3 lDir = _MainLightPosition.xyz;   //indicate light dir 
 				half3 nDir = normalTexWS;
 				//H
-				half3 H = normalize(_TransNormalDistortion * nDir + lDir);  //×¢Òâ´Ë´¦Îª N ºÍ LµÄ°ë½Ç 
+				half3 H = normalize(_TransNormalDistortion * nDir + lDir);  //æ³¨æ„æ­¤å¤„ä¸º N å’Œ Lçš„åŠè§’ 
 				//V dot H
-				half VdotH = pow(saturate(dot(vDir, -H)), (50.0 - _Translucency)) * _TransScale;  //×¢Òâ´Ë´¦Îª -H£¬±íÊ¾Ò¶×ÓµÄ·´·½Ïò 
+				half VdotH = pow(saturate(dot(vDir, -H)), (50.0 - _Translucency)) * _TransScale;  //æ³¨æ„æ­¤å¤„ä¸º -Hï¼Œè¡¨ç¤ºå¶å­çš„åæ–¹å‘ 
 				//trans color Src
 				half3 colorSrc = _TranslucencyTint.rgb;
 				//col Intensity 
 				//half3 I = _TransScattering * (VdotH + colorSrc) * (1.0 - IN.texcoord6.z);
 				half3 I = _TransScattering * (VdotH + colorSrc) * IN.color.a;  //TODO 
 				//albedo after appling translucent lighting 
-				half3 finalAlbedo = lerp(albedo.rgb, (albedo.rgb * I), (float)_TranslucencyEnum);  //_TranslucencyEnum = 1 Ê±Ê¹ÓÃÍ¸ÉäÔöÇ¿µÄalbedo 
+				half3 finalAlbedo = lerp(albedo.rgb, (albedo.rgb * I), (float)_TranslucencyEnum);  //_TranslucencyEnum = 1 æ—¶ä½¿ç”¨é€å°„å¢å¼ºçš„albedo 
 				//smoothness
 				half smoothness = lerp(0.0, albedoFromTex.r, _Glossiness);
 				//AO 
@@ -380,9 +380,9 @@ Shader "Test/Tree Leaf Simple"
 
 			#pragma multi_compile __ LOD_FADE_CROSSFADE
 
-			sampler2D _MainTex;   //¶¨Òå »ù´¡É«µÄ²ÉÑùÆ÷
+			sampler2D _MainTex;   //å®šä¹‰ åŸºç¡€è‰²çš„é‡‡æ ·å™¨
 
-			CBUFFER_START(UnityPerMaterial)  //Ãæ°å²ÎÊı·ÅÔÚÕâÀï 
+			CBUFFER_START(UnityPerMaterial)  //é¢æ¿å‚æ•°æ”¾åœ¨è¿™é‡Œ 
 				float4 _Color;
 				float4 _MainTex_ST;
 				float _TransScattering;
@@ -463,7 +463,7 @@ Shader "Test/Tree Leaf Simple"
 				float3 positionWS = vertexholder.positionWS;
 				positionCS = vertexholder.positionCS;
 
-				float3 normalWS = TransformObjectToWorldDir(IN.normalOS);
+				float3 normalWS = TransformObjectToWorldDir(vertexholder.normalOS);
 				float4 clipPos = TransformWorldToHClip(ApplyShadowBias(positionWS, normalWS, _LightDirection));
 
 		#if UNITY_REVERSED_Z
