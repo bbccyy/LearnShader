@@ -19,18 +19,18 @@ float4 _GlobalShiver;
 
 struct WindSettings
 {
-	float mask;
-	float ambientStrength;
-	float speed;
-	float4 direction;
-	float swinging;
+	float mask;				//独立于风的其他影响顶点动画的因素，主要指受压弯折Bending
+	float ambientStrength;	//基础风强，影响柔和风的强度，所谓柔和风是指基础风
+	float speed;			//控制基础风强度的变化频率(既风速)，同时也控制阵风计算过程中采样噪声贴图的频率(既阵风流速)
+	float4 direction;		//主要负责控制风动偏移在x-z平面上的朝向，同时也影响采样阵风噪声纹理中的uv流动朝向 
+	float swinging;			//调节基础风形成的顶点回摆幅度，从[0,1]区间到[-1,1]区间，swing值越接近1，来回摆动的程度越大
 
-	float randObject;
-	float randVertex;
-	float randObjectStrength;
+	float randObject;		//影响Obj级别的随机数大小，从而影响基础风的初始相位
+	float randVertex;		//影响Vertex级别的计算量大小，从而也影响基础风的初始相位 
+	float randObjectStrength;//控制关联Obj的随机数rand的影响程度，从而间接控制基础风强
 
-	float gustStrength;
-	float gustFrequency;
+	float gustStrength;		//调节阵风强度 
+	float gustFrequency;	//调节阵风频率 
 };
 
 //Struct that holds both VertexPositionInputs and VertexNormalInputs
@@ -39,14 +39,7 @@ struct VertexHolder {
 	float3 positionWS;	// World space position
 	float3 positionVS;	// View space position
 	float4 positionCS;	// Homogeneous clip space position
-	float4 positionNDC;	// Homogeneous normalized device coordinates
-	float3 viewDir;		// Homogeneous normalized device coordinates
-
-	//Normals
-#if defined(_NORMALMAP) 
-	real4 tangentWS;
-#endif
-	float3 normalWS;
+	float3 normalOS;
 };
 
 float2 DirectionalEquation(float _WindDirection)
@@ -165,31 +158,49 @@ float4 GetWindOffset(in float3 positionOS, in float3 wPos, float rand, WindSetti
 {
 	float4 offset;
 
-	//Random offset per vertex
-	float f = length(positionOS.xz) * s.randVertex;
+	//第一部分ambientStrength是用户调节的振幅强度
+	//第二部分中的rand是关联当前Obj(不是顶点)的一个随机数，不同Obj不同，相同Obj此数值相同
+	//两部分合成的strength控制Obj级别的振幅强度
 	float strength = s.ambientStrength * 0.5 * lerp(1, rand, s.randObjectStrength);
-	//Combine
+
+	//模型空间该点到中心的距离(水平面上) * 顶点扰动强度
+	//f属于顶点级别的震动强度，且具有越远离模型中心，强度f越大的特点 
+	float f = length(positionOS.xz) * s.randVertex;
+	//生成随时间流动的正弦函数曲线，用以模拟柔和的风摆 
+	//由(rand * s.randObject) + f控制初始相位，是一个既关联Obj，又关联顶点的随机数，调解randObject可控制关联Obj的比例 
+	//由s.speed控制波动频率
 	float sine = sin(s.speed * (_TimeParameters.x + (rand * s.randObject) + f));
-	//Remap from -1/1 to 0/1
+	//调解震动范围，可以从[0,1]区间变化到[-1,1]区间震动
+	//用户输入的swinging负责插值上述两个范围，swinging为0时震动范围最小 
 	sine = lerp(sine * 0.5 + 0.5, sine, s.swinging);
 
-	//Apply gusting
-	float gust = SampleGustMapLOD(wPos, s);
+	//计算阵风(突然增强的风)
+	//为强度其随机性，gust强度需通过采样噪声贴图获取
+	//首先是依据顶点属性，时间，用户控制的朝向dir，以及用户控制的gustFrequency(采样频率)来生成随机的采样UV 
+	float2 gustUV = frac((wPos.xz * s.gustFrequency * 0.01) + (_TimeParameters.x * s.speed * s.gustFrequency * 0.01) * s.direction.xz);
+	//采样噪声图，注意此图最好使用局部连续，整体离散的perlin noise，不要使用红粉噪声 
+	float gust = SAMPLE_TEXTURE2D_LOD(_WindMap, sampler_WindMap, gustUV, 0).r;
+	//对采样结果修正，gustStrength是用户控制的阵风强度，mask是弯折程度(bend intencity)，0代表完全弯折，1代表不受影响 
+	gust *= s.gustStrength * s.mask;
 
-	//Scale sine
+	//对温和的风波进行修正，原理同上 
 	sine = sine * s.mask * strength;
 
-	//Mask by direction vector + gusting push
+	//最终输出的风动偏移中的xz分量由下面公式计算获取
+	//sine提供基础震动(可以理解为波的低频部分，或者底噪)
+	//gust * s.direction.xz 计算沿着风向，由阵风引起的叠加振幅 
 	offset.xz = sine + gust * s.direction.xz;
+	//垂直方向先由mask站位，如果当前顶点受到完全的挤压(bending)，则y值为0，后续对y的缩放操作将不会输出变化 
 	offset.y = s.mask;
 
-	//Summed offset strength
+	//windWeight用于缩放y轴的偏移(offset)
+	//它的底子是正比于xz平面上的偏移程度的 
 	float windWeight = length(offset.xz) + 0.0001;
-	//Slightly negate the triangle-shape curve
+	//同时为了避免这种线性偏移带来的生硬感，这里对windWeight做了次指数为1.5的乘方 
 	windWeight = pow(windWeight, 1.5);
-	offset.y *= windWeight;
+	offset.y *= windWeight;  //对y轴偏移进行缩放 
 
-	//Wind strength in alpha
+	//将合成风强(柔和风 + 阵风)保存到a通道一并输出 
 	offset.a = sine + gust;
 
 	return offset;
@@ -200,32 +211,36 @@ float4 GetWindOffset(in float3 positionOS, in float3 wPos, float rand, WindSetti
 VertexHolder GetVertexOutput(in VertexInput input, float rand, WindSettings s)
 {
 	VertexHolder data = (VertexHolder)0;
-
+	//获取世界坐标 
 	float3 wPos = TransformObjectToWorld(input.positionOS.xyz);
-
+	//计算风动偏移向量
 	float4 windVec = GetWindOffset(input.positionOS.xyz, wPos, rand, s);  //Less wind on shorter grass
-
-	float3 offsets = windVec.xyz;
 
 	//Perspective correction
 	float3 viewDir = normalize(_WorldSpaceCameraPos.xyz - wPos);
-	float NdotV = dot(float3(0, 1, 0), viewDir);
+	float NdotV = dot(float3(0, 1, 0), viewDir);  //平视为0， 仰视为负，俯瞰为正 
 
 	//Avoid pushing grass straight underneath the camera in a falloff of 4 units (1.0/4.0)
+	//距离超过单位1时dist为0.25，距离越小越接近0
 	float dist = saturate(distance(wPos.xz, _WorldSpaceCameraPos.xz) * 0.25);
 
-	//Push grass away from camera position
+	//使用此向量，将植被顶点推离(远离)摄像机一个单位距离
 	float2 pushVec = viewDir.xz;
 
-	//This looks better, however during the shadow casting pass, the projection matrix is that of the light
-	//pushVec = mul((float3x3)unity_CameraToWorld, float3(0,1,0)).xz;
-
+	//perspMask受到水平距离和摄像机俯仰视角的影响
+	//水平距离越小(小于单位1时)，推力pushVec越小
+	//俯瞰时(一般是看地上草的情况)，推力变大
+	//其余视角(平视，仰视),推力为0或直接反向
 	float perspMask = dist * NdotV;
-	offsets.xz += pushVec.xy * perspMask;
+	pushVec.xy = pushVec.xy * perspMask;
 
-	//Apply bend offset
-	wPos.xz += offsets.xz;
-	wPos.y -= offsets.y;
+	//将水平推力作用到风动矢量的水平分量上 
+	windVec.xz += pushVec.xy;
+
+	//风动矢量作用到植被顶点的世界坐标上
+	//也可以直接 wPos +=windVec; 区别不大
+	wPos.xz += windVec.xz;
+	wPos.y -= windVec.y;
 
 	//Vertex positions in various coordinate spaces
 	data.positionWS = wPos;
@@ -235,18 +250,17 @@ VertexHolder GetVertexOutput(in VertexInput input, float rand, WindSettings s)
 	//Skip normal derivative during shadow and depth passes
 #if !defined(SHADERPASS_SHADOWCASTER) && !defined(SHADERPASS_DEPTHONLY) 
 	#if _ADVANCED_LIGHTING && defined(RECALC_NORMALS)
-		float3 oPos = TransformWorldToObject(wPos); //object-space position after displacement in world-space
-		float3 bentNormals = lerp(input.normalOS, normalize(oPos - input.positionOS.xyz), abs(offsets.x + offsets.z) * 0.5); //weight is length of wind/bend vector
+		//重新计算法线，依据原始法线位置，朝向运动方向做偏移(lerp) 
+		float3 oPos = TransformWorldToObject(wPos);
+		float3 bentNormals = lerp(
+			input.normalOS, 
+			normalize(oPos - input.positionOS.xyz), 
+			abs(windVec.x + windVec.z) * 0.5
+		); //weight is length of wind/bend vector
 	#else
 		float3 bentNormals = input.normalOS;
 	#endif
-
-		data.normalWS = TransformObjectToWorldNormal(bentNormals);
-	#ifdef _NORMALMAP
-		data.tangentWS.xyz = TransformObjectToWorldDir(input.tangentOS.xyz);
-		real sign = input.tangentOS.w * GetOddNegativeScale();
-		data.tangentWS.w = sign;
-	#endif
+		data.normalOS = bentNormals;
 #endif
 
 	return data;
