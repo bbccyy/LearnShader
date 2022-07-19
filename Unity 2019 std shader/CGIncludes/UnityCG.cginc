@@ -23,12 +23,12 @@
 #include "UnityShaderUtilities.cginc"
 #include "UnityInstancing.cginc"
 
-#ifdef UNITY_COLORSPACE_GAMMA
+#ifdef UNITY_COLORSPACE_GAMMA  //配置gamma space 内置颜色 -> 方便运算，即取即用  
 #define unity_ColorSpaceGrey fixed4(0.5, 0.5, 0.5, 0.5)
 #define unity_ColorSpaceDouble fixed4(2.0, 2.0, 2.0, 2.0)
 #define unity_ColorSpaceDielectricSpec half4(0.220916301, 0.220916301, 0.220916301, 1.0 - 0.220916301)
 #define unity_ColorSpaceLuminance half4(0.22, 0.707, 0.071, 0.0) // Legacy: alpha is set to 0.0 to specify gamma mode
-#else // Linear values
+#else // Linear values  -> 配置linea space 下的内置颜色数值 
 #define unity_ColorSpaceGrey fixed4(0.214041144, 0.214041144, 0.214041144, 0.5)
 #define unity_ColorSpaceDouble fixed4(4.59479380, 4.59479380, 4.59479380, 2.0)
 #define unity_ColorSpaceDielectricSpec half4(0.04, 0.04, 0.04, 1.0 - 0.04) // standard dielectric reflectivity coef at incident angle (= 4%)
