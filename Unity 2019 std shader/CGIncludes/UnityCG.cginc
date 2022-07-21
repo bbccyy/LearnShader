@@ -515,6 +515,9 @@ half4 UnityEncodeRGBM (half3 color, float maxRGBM)
 
 // Decodes HDR textures
 // handles dLDR, RGBM formats 
+// 用于解码Unity自身创建的各类贴图（IBL, SKY-BOX等) 
+// 以上贴图一般存放在sRGB中，且单通道只有8-bit，因此在HDR品质设置不高的情况下
+// 需要使用一些技巧扩展其上颜色的上限 
 inline half3 DecodeHDR (half4 data, half4 decodeInstructions)
 {
     // Take into account texture alpha if decodeInstructions.w is true(the alpha value affects the RGB channels)
