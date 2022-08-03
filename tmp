@@ -1,0 +1,250 @@
+
+GAMMA
+1)Player.Settings -> gamma col space: 
+	影响 Unity build-in shader 中的 Unity_ColorSpace_Gamma 宏 -> 影响probe，lightmap等自产纹理的读
+	影响 RenderTexture 的读写 -> 直读 + 直写
+	无要求，任何设备都支持 -> 因为是最古老的模式 
+
+2）Player.Settings -> linear col space: 
+	影响 Unity_ColorSpace_Gamma 宏
+	影响 RenderTexture 的读写 -> 依据 RT.sRGB (true or flase) -> true:读时转线性，写时升gamma； flase:直读 + 直写 
+	要求 OpenGL ES 3.0 -> 必须有硬件支持 
+
+3) Linear col space（既线性工作流下）： shader输出“颜色”到帧缓存RT上（默认RT.sRGB = true）
+	写入执行 gamma correction
+	读取执行 remove gamma correction
+	Blend 操作发生在线性空间，结果存入sRGB空间 
+
+4）Linear col space： 帧缓存上RT.sRGB = false -> 需要在生成RT时配置入参“RenderTextureReadWrite = Linear”
+	RT 的读写 -> 变为 直读 + 直写 （即便在Linear col space下）
+
+5）纹理面板（texture inspector） -> sRGB toggle -> 关联该纹理的 “RenderTextureReadWrite” 类型
+
+6）Editor工程下，手动创建的 RT -> 默认 sRGB = false 
+	无法通过面板修改
+
+7）开启HDR，帧缓存RT
+	RT 的读写 -> 直读 + 直写
+
+8）纹理复制类操作不触发任何颜色空间转换
+	CopyTexture
+	ReadPixels
+	encodeToPNG
+	...
+
+9）linear工作流注意点
+	确保目标运行平台支持 （一般都支持）
+	用户导入的“颜色”纹理需要确保勾选了sRGB项
+	用户创建的RT的sRGB属性是否设置正确
+	手动做纹理的Blending或Bliting时，确保前后颜色空间一致
+	与HDR混用，需注意HDR屏蔽帧缓存RT的sRGB转换功能 
+
+
+HDR
+1）HDR Rendering -> 数据产生在HDR范围(空间)
+	Built-in + URP + HDRP -> support 	
+
+2）HDR Output	-> 数据投放到HDR设备
+	Built-in + URP -> not support   	@2022.1 ver
+	HDRP -> support
+
+3）HDR 帧缓存RT的数据格式
+	FP16，也叫ARGBHalf，4通道，每个通道16-bit，带Alpha通道 
+	R11G11B10，同32-bit位宽，R:11-bit，G：11-bit，B：10-bit，不带Alpha通道 
+
+4）Pro 优点 （不考虑HDR显示设备的支持）
+	增加高亮度下颜色的对比度 （高亮度区间有更多可区分的颜色）
+	减少低亮度光照区域的条带感  (低亮度区间有更多可区分的颜色)  
+	更好地支持Bloom和Emission效果
+
+5）Con 缺点
+	VRAM 使用量增加
+	色调映射（tone mapping）产生额外的计算开销
+	硬件抗锯齿不兼容 HDR 渲染 
+
+6）Forward Rendering -> 需要用户添加：后处理 + toneMapping 
+	不添加工程也不会报错，但是 -> 超过1的颜色被截断 -> 过曝感 
+
+7）Deffered Rendering -> 天然支持，无需特别开启后处理
+
+8）URP 开启 HDR 注意事项
+	开关在当前“URPiplineAsset”对象面板上 -> 只有一个 HDR 勾选项
+	通过脚本修改 PlayerSettings.preserveFramebufferAlpha” -> 切换 HDR 帧缓存RT的数据格式 
+
+9）R11G11B10 半透明混合
+	只要在Blend中，不使用 DstAlpha -> OK
+	非要访问 DstAlpha -> 返回 1.0
+
+10）Unity shader 中的 HDR 相关方法
+	主要参考 -> DecodeHDR
+	功能 -> 解码Unity自身创建的各类高动态纹理（IBL, SKY-BOX，Lightmap等) 
+	开销不大 -> RGBM & dLDR
+
+11）HDR开销
+	内存开销 -> 相对而言不大
+			-> 特别是当选择R11G11B10格式时，无影响
+	后处理 
+		-> ColorGradingLUT pass
+			基于当前帧的参数，分别计算了后曝光、白平衡、对比度、颜色过滤、色调分离、通道混合、阴影中间调高光、色相偏移、饱和度，伽马校正等等各种映射关系和预计算表格，并存储到如下所示的多张LUT中 
+		-> UberPostProcess pass
+			大杂烩Pass，通过读取预生成的LUT，逐像素调节并输出最终的颜色
+		-> 实际性能分析时
+			可以详细关注这两个pass在整个渲染流程中的占比，从网上收集的一些信息来看，这两个pass在主流机配置下应当不高于1ms 
+
+Over 
+
+
+
+
+API
+
+Params
+
+Description
+
+CreateInstance
+
+GameObject prefab
+
+从prefab实例化出一个obj，设置obj.prototype 
+
+
+
+
+
+
+Animation-Instancing 
+
+
+
+Why?
+	- 正常流程利用CPU更新模型顶点在模型空间的位置
+		- 每帧 * N个角色 * 全部顶点(1K~100K) * M个矩阵运算
+		- 角色数上升，消耗大！
+	- GPU 天然适合简单重复大规模矩阵运算
+
+Core Idea
+	- 骨骼动画：蒙皮顶点 & 骨骼 & 绑定姿势（bindPose)
+	- GPU在模型顶点运算时（VS)
+		- 找到一个变换矩阵m，对顶点变换：
+			-> 从T形空间下默认位置(既顶点输入时的位置)变换到当前帧动画指定的位置 
+		- m <-> bone
+		- vertex <-> bone
+		- vertex -> bone -> m 
+		- 对动画按照FPS采样，烘焙出：逐采样帧，逐骨骼的变换矩阵 m
+		- 按序排列 m，打包进纹理，让GPU在VS阶段可读到 
+	- 烘焙 m 
+		- key_matrix[i] = root.worldToLocalMatrix * bonePose[i].localToWorldMatrix * bindPose[i];   // (1)
+		- bindPose[i] = bonePose[i].worldToLocalMatrix * root.localToWorldMatrix;                   // (2)
+		- 变量解释
+			-> 两式中所有的下标“i”均用于索引骨骼，
+			-> 式(1)的bonePose[i]特指骨骼[i]在当前动画帧时的transform，
+			-> 式(2)的bonePose[i]特指骨骼[i]在第0帧动画时的transform，
+			-> root是所有骨骼的根节点，也可以认为是模型对象的transform，它不随动画变化，
+			-> bindPose可以直接从Unity的Mesh对象中获取到，也可由式(2)手动计算出来。
+	- 那么代价呢？
+		- 无法运行时修改动画：NO IK， NO Physical Reaction... 
+		- VS中纹理采样次数较多 
+		- 占用显存 
+
+Encode
+	- Codec会收集：
+		- Avatar prefab上找到的 “第一个” Animator 
+			- 拆解出全部 AnimatiionClip -> 采样 -> 烘焙 
+			- 丢弃 Transitiion 
+		- Avatar prefab上能全部的 SkinnedMeshRender
+			- 从Render中找到骨骼的transform 参与烘焙
+			- 骨骼的其他信息（weight，index）编码时用不到，但是运行时会读取并记录到关联顶点的顶点数据中 
+	- Codec输出
+		- byte[]
+		- AnimationInfo -> 记录有从动画Index到纹理Offset的映射关系 
+		- ExtraBone -> 服务于attachment逻辑 
+		- Texture -> 变换矩阵 
+		- Texture构建规则：
+			- 尽可能少用纹理 > 尽可能用小纹理
+			- 一段动画不可以放在2张不同纹理中 
+
+Decode
+	- 参考图示
+	- CPU端任然需要创建所有带渲染角色，并访问了它们的模型资源 -> 只是不会启动animator 
+
+InstancingMgr
+	- Layered Data Structure
+		- InstancingPackage.subMesh
+			-> 区分不同submesh和material
+		- List<InstancingPackage>.at( packageIndex )
+			-> 能够区分复数个InstancePackage
+		- List<InstancingPackage>[ boneTextureIndex ]
+			-> 区分出拥有目标动画纹理资源的资源集合
+		- VertexCache[ meshRenderIndex ]
+			-> 确定待渲染的 Mesh 资源到底是那一个
+		- LodInfo[ lod ] 
+			-> 确立目标Lod级别的Render资源
+		- Avatar_#N
+			-> 这是数据管理层面的最上层，区分不同带渲染角色 
+	- 数据更新
+		- 同类型prefab资源访问相同 VertexCache 对象引用 
+
+API
+	- PlayAnimation -> 直接播放动画 
+	- CrossFade -> 切换动画，线性过渡
+	- Pause
+	- Resume
+	- Stop
+	- GetCurrentAnimationInfo
+	- GetPreAnimationInfo
+	- Attach
+	- Deattach 
+
+Shader
+half4 skinning(inout appdata_full v)
+{
+    //骨骼权重
+    fixed4 w = v.color;
+    //骨骼索引，这些骨骼会影响当前顶点 
+    half4 bone = half4(v.texcoord2.x, v.texcoord2.y, v.texcoord2.z, v.texcoord2.w);
+
+    //获取Instance数据
+    float curFrame = UNITY_ACCESS_INSTANCED_PROP(frameIndex_arr, frameIndex); //当前动画帧，浮点数，可带小数点后尾数，用以表示前后动画帧之间的转换进度
+    float preAniFrame = UNITY_ACCESS_INSTANCED_PROP(preFrameIndex_arr,  preFrameIndex);         //切换到当前动画前，上一段动画停留在的帧 
+    float progress = UNITY_ACCESS_INSTANCED_PROP(transitionProgress_arr,  transitionProgress);  //前后两端动画的转换进度 
+
+    //当前帧，整数，向下取整
+    int preFrame = curFrame;
+    //下一帧，整数
+    int nextFrame = curFrame + 1.0f;
+
+    //采样4次纹理，获取当前帧下，4个不同骨骼节点对自身的变换矩阵
+    //注意一次纹理采样返回的half4只能覆盖4X4矩阵中的一行，因此需要至少3次采样 
+    half4x4 localToWorldMatrixPre = loadMatFromTexture(preFrame, bone.x) * w.x;
+    ... x 4
+
+    //采样4次纹理，获取下一帧，4个不同骨骼节点对自身的变换矩阵
+    half4x4 localToWorldMatrixNext = loadMatFromTexture(nextFrame, bone.x) * w.x;
+    ... x 4
+
+    //计算当前帧位置（模型空间内）
+    half4 localPosPre = mul(v.vertex, localToWorldMatrixPre);
+    //计算下一帧位置（模型空间内）
+    half4 localPosNext = mul(v.vertex, localToWorldMatrixNext);
+    //按播放进度插值，获取准确的当前时间点的位置 
+    half4 localPos = lerp(localPosPre, localPosNext, curFrame - preFrame);
+
+    //求解Normal和Tangent在当前时刻的位置
+    ...
+
+    //采样获取上一段动画的顶点变换矩阵，为了性能考量，这里默认只受到一个骨骼影响，权重为100% 
+    half4x4 localToWorldMatrixPreAni = loadMatFromTexture(preAniFrame, bone.x);
+    half4 localPosPreAni = mul(v.vertex, localToWorldMatrixPreAni);
+
+    //如果设置了前动画帧，那么就按照给定额progress比例，返回前后动画的插值，
+    //如果没有设置前动画帧，直接返回前后两帧插值的结果
+    localPos = lerp(localPos, localPosPreAni, (1.0f - progress) * (preAniFrame >  0.0f));
+
+    //最后总结一下，一共花费了27次纹理采样 
+    return localPos;
+}
+
+
+
+
