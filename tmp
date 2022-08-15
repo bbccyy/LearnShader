@@ -58,14 +58,14 @@ HDR
 	更好地支持Bloom和Emission效果
 
 5）Con 缺点
-	VRAM 使用量增加
-	色调映射（tone mapping）产生额外的计算开销
+	VRAM 额外使用量 
+	为了色调映射（tone mapping）-> 产生额外的计算开销 
 	硬件抗锯齿不兼容 HDR 渲染 
 
 6）Forward Rendering -> 需要用户添加：后处理 + toneMapping 
 	不添加工程也不会报错，但是 -> 超过1的颜色被截断 -> 过曝感 
 
-7）Deffered Rendering -> 天然支持，无需特别开启后处理
+7）Deffered Rendering -> 天然支持，无需特别开启后处理 
 
 8）URP 开启 HDR 注意事项
 	开关在当前“URPiplineAsset”对象面板上 -> 只有一个 HDR 勾选项
@@ -75,10 +75,10 @@ HDR
 	只要在Blend中，不使用 DstAlpha -> OK
 	非要访问 DstAlpha -> 返回 1.0
 
-10）Unity shader 中的 HDR 相关方法
-	主要参考 -> DecodeHDR
+10）Unity shader 中的 HDR 相关方法 
+	主要参考 -> DecodeHDR 
 	功能 -> 解码Unity自身创建的各类高动态纹理（IBL, SKY-BOX，Lightmap等) 
-	开销不大 -> RGBM & dLDR
+	ldr对象存hdr资源 -> RGBM & dLDR 
 
 11）HDR开销
 	内存开销 -> 相对而言不大

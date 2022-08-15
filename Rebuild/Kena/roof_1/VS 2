@@ -1,0 +1,90 @@
+VS 2
+Shader hash 
+5f01ae70-1538aa3c-ab0a8279-3ebbb1da
+
+vs_4_0
+      dcl_constantbuffer cb0[73], immediateIndexed
+      dcl_constantbuffer cb1[10], immediateIndexed   存放变换Matrix
+      dcl_constantbuffer cb2[1], immediateIndexed
+
+      dcl_input v0.xyz    模型顶点 
+      dcl_input v1.xyz    法线
+      dcl_input v2.xyzw   切线
+      dcl_input v3.xy     纹理1 -> uv
+      dcl_input v4.xy     纹理2 -> lightmap uv
+
+      dcl_output_siv o0.xyzw, position
+      dcl_output o1.xy    -> uv   baseTexUV
+      dcl_output o1.zw    -> uv1  lightmapUV 
+      dcl_output o2.xyz   -> posWS
+      dcl_output o2.w     -> fogCoord
+      dcl_output o3.xyz   -> normalWS
+      dcl_output o4.xyz   -> tangentWS
+      dcl_output o5.xyz   -> bitangentWS
+      dcl_output o6.xyzw  -> viewDirWS 
+      dcl_temps 3
+   0: mul r0.xyz, v0.yyyy, cb1[1].xyzx
+   1: mad r0.xyz, cb1[0].xyzx, v0.xxxx, r0.xyzx
+   2: mad r0.xyz, cb1[2].xyzx, v0.zzzz, r0.xyzx
+   3: add r0.xyz, r0.xyzx, cb1[3].xyzx
+   4: mul r1.xyzw, r0.yyyy, cb0[70].xyzw
+   5: mad r1.xyzw, cb0[69].xyzw, r0.xxxx, r1.xyzw
+   6: mad r1.xyzw, cb0[71].xyzw, r0.zzzz, r1.xyzw
+   7: mov o2.xyz, r0.xyzx
+   8: add r0.xyzw, r1.xyzw, cb0[72].xyzw
+   9: mov o0.xyzw, r0.xyzw
+  10: div r0.x, r0.z, cb0[14].y
+  11: add r0.x, -r0.x, l(1.0000)
+  12: mul r0.x, r0.x, cb0[14].z
+  13: max r0.x, r0.x, l(0)
+  14: mul o2.w, r0.x, cb0[51].x
+  15: mad o1.xy, v3.xyxx, cb2[0].xyxx, cb2[0].zwzz
+  16: mov o1.zw, v4.xxxy
+  17: dp3 r0.x, v1.xyzx, cb1[4].xyzx
+  18: dp3 r0.y, v1.xyzx, cb1[5].xyzx
+  19: dp3 r0.z, v1.xyzx, cb1[6].xyzx
+  20: dp3 r0.w, r0.xyzx, r0.xyzx
+  21: max r0.w, r0.w, l(0.0000)
+  22: rsq r0.w, r0.w
+  23: mul r0.xyz, r0.wwww, r0.xyzx
+  24: mov o3.xyz, r0.xyzx
+  25: mul r1.xyz, v2.yyyy, cb1[1].xyzx
+  26: mad r1.xyz, cb1[0].xyzx, v2.xxxx, r1.xyzx
+  27: mad r1.xyz, cb1[2].xyzx, v2.zzzz, r1.xyzx
+  28: dp3 r0.w, r1.xyzx, r1.xyzx
+  29: max r0.w, r0.w, l(0.0000)
+  30: rsq r0.w, r0.w
+  31: mul r1.xyz, r0.wwww, r1.xyzx
+  32: mov o4.xyz, r1.xyzx
+  33: mul r2.xyz, r0.zxyz, r1.yzxy
+  34: mad r0.xyz, r0.yzxy, r1.zxyz, -r2.xyzx
+  35: ge r0.w, cb1[9].w, l(0)
+  36: movc r0.w, r0.w, l(1.0000), l(-1.0000)
+  37: mul r0.w, r0.w, v2.w
+  38: mul o5.xyz, r0.wwww, r0.xyzx
+  39: mov o6.xyzw, l(0, 0, 0, 0)
+  40: ret
+
+
+Varyings vert(Attributes IN)
+{
+    Varyings OUT = (Varyings)0;
+
+    UNITY_SETUP_INSTANCE_ID(IN);
+    UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
+
+    OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+    OUT.positionCS = TransformWorldToHClip(OUT.positionWS);
+
+    OUT.uv = TRANSFORM_TEX(IN.uv, _BaseMap);
+
+    VertexNormalInputs tbn = GetVertexNormalInputs(IN.normalOS, IN.tangentOS);
+    OUT.normalWS = tbn.normalWS;
+    OUT.tangentWS = tbn.tangentWS;
+    OUT.bitangentWS = tbn.bitangentWS;
+
+    OUT.uv1 = IN.lightmapUV;
+
+    OUT.fogCoord = ComputeFogFactor(OUT.positionCS.z);
+    return OUT;
+}
