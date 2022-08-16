@@ -49,61 +49,92 @@ dcl_input_ps constant v3.x                  -> PRIMITIVE_ID
 dcl_input_ps_siv linear noperspective centroid v4.xyzw, position      -> PosCS 
 dcl_input_ps_sgv constant v5.x, is_front_face                         -> VFACE 
 
-dcl_output o0.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33
-dcl_output o1.xyzw        可能是 base color 
-dcl_output o2.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ? 
-dcl_output o3.xyzw        未知 -> 偏蓝 
-dcl_output o4.xyzw        未知 -> 类似剪影 
+
+dcl_output o0.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8241 
+dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220 
+dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241 
+dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222 
+dcl_output o4.xyzw        未知 -> 类似剪影  T:8263 
 dcl_output oDepthLE
 dcl_temps 8
+
+//获取 BitangentWS -> r0.xyz = Cross(NormalWS，TangentWS) * sign 
 mul r0.xyz, v0.yzxy, v1.zxyz
 mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
 mul r0.xyz, r0.xyzx, v1.wwww
+
+//准备参数：
+//r1.x = Clip_z * Clip_w
+//r1.y = Clip_w
 mov r1.x, v4.z
 mov r1.y, l(1.000000)
 mul r1.xz, r1.xxyx, v4.wwww
+
+//此处通过采样和解码，似乎是为了获得 Bitangent的朝向w 
 imad r2.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
 ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r2.x, l(12), t0.xxxx
 mul r0.w, r0.w, cb0[140].w
-movc r1.w, v5.x, l(1.000000), l(-1.000000)
-mul r0.w, r0.w, r1.w
-mul r2.xz, v2.xxyx, cb1[4].xxxx
+movc r1.w, v5.x, l(1.000000), l(-1.000000)   根据VFACE判断当前像素所在几何体是正面朝向视点还是背面 
+mul r0.w, r0.w, r1.w    这里赋值r0.w 而r0.xyz是Bitangent 
+
+//采样法线纹理，解码位于切线空间的法线原始数据 
+mul r2.xz, v2.xxyx, cb1[4].xxxx     缩放了UV，随后拿去采样 Normal 纹理（只有RG通道）
 sample_b_indexable(texture2d)(float,float,float,float) r3.xy, r2.xzxx, t1.xyzw, s0, cb0[142].y
-mad r3.xy, r3.xyxx, l(2.000000, 2.000000, 0.000000, 0.000000), l(-1.000000, -1.000000, 0.000000, 0.000000)
+mad r3.xy, r3.xyxx, l(2.000000, 2.000000, 0.000000, 0.000000), l(-1.000000, -1.000000, 0.000000, 0.000000)  从[0,1]转[-1,1]区间 
 dp2 r1.w, r3.xyxx, r3.xyxx
 add r1.w, -r1.w, l(1.000000)
-max r1.w, r1.w, l(0.000000)
-sqrt r3.z, r1.w
-add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)
-mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx
-mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx
+max r1.w, r1.w, l(0.000000)   -> w在 [0,1] 区间
+sqrt r3.z, r1.w               -> 到这里从RG通道中解出了第三个通道B
+add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)   r4是法线r3的朝向取反 
+mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         法线扰动？ 
+mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx                 确认是法线扰动！ 
 dp3 r1.w, r3.xyzx, r3.xyzx
 rsq r1.w, r1.w
-mul r3.xyz, r1.wwww, r3.xyzx
+mul r3.xyz, r1.wwww, r3.xyzx    归一化 
+
+//应用TBN矩阵将贴图法线转换到世界空间下，随后归一化，调整朝向 
 mul r0.xyz, r0.xyzx, r3.yyyy
 mad r0.xyz, r3.xxxx, v0.xyzx, r0.xyzx
 mad r0.xyz, r3.zzzz, v1.xyzx, r0.xyzx
 dp3 r1.w, r0.xyzx, r0.xyzx
 rsq r1.w, r1.w
-mul r0.xyz, r0.xyzx, r1.wwww
-mul r0.xyz, r0.wwww, r0.xyzx
-mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz
-sample_b_indexable(texture2d)(float,float,float,float) r4.xyz, r2.xzxx, t2.xyzw, s1, cb0[142].y
-mul r4.xyz, r4.xyzx, cb1[3].xyzx
-mul r5.xyz, r4.xyzx, cb1[5].yyyy
-dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx
-mul r1.w, r0.w, l(0.577350)
-mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww
+mul r0.xyz, r0.xyzx, r1.wwww    归一化
+mul r0.xyz, r0.wwww, r0.xyzx    调整朝向
+
+mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = 0
+
+//采样 Grass 纹理，获取基础色 
+sample_b_indexable(texture2d)(float,float,float,float) r4.xyz, r2.xzxx, t2.xyzw, s1, cb0[142].y 
+mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对原始颜色调整  cb1[3].xyz = [0.0056,0.90133,4.05]  -> 此后称 R4 颜色 
+mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [18.66]               -> 此后称 R5 颜色 
+
+//设 k = float3(0.577350, 0.577350, 0.577350)
+// r1.w = k * dot(R5, k)
+dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx   
+mul r1.w, r0.w, l(0.577350)  
+
+mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww    -> 这才是参与色调变换的新颜色 R4，具体说 R4 = R5 - k * dot(R5, k)
+
 mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)
-mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz
-sincos r6.x, r7.x, cb1[5].x
-mul r5.xyz, r5.xyzx, r6.xxxx
-mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx
-mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx
-dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
-add r5.xyz, -r4.xyzx, r0.wwww
-mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx
-sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y
+mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz      -> R5 = cross(R4, k) 
+
+sincos r6.x, r7.x, cb1[5].x              -> cb1[5].x = [17.99] 记为角度A  
+mul r5.xyz, r5.xyzx, r6.xxxx 
+mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx    -> R4 = R4 * cosA + cross(R4, k) * sinA 
+mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * dot(老R5, k) + R4 * cosA + cross(R4, k) * sinA  
+//以上操作是：获取Grass的基础色R4，然后依据存储在cb1[5].x内的角度，进行色调变换，返回颜色存入R4 
+//参考链接：https://forum.unity.com/threads/hue-saturation-brightness-contrast-shader.260649/ 
+
+//已知 outputCol dot (0.3,0.59,0.11) = ColorIntensity
+//以下在求 R4 颜色的 强度 Intensity
+dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000) 
+
+//得到最终基础色 R4 
+add r5.xyz, -r4.xyzx, r0.wwww   -> 设置R5颜色 = 从R4颜色中去掉强度，变成只有色调和饱和度的部分？ 
+mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 19 -> R4=saturate(R5 * 19 + R4) -> 恢复自定义强度 
+
+//采样 Noise RGB 纹理 
+sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
 mul_sat r0.w, r2.x, cb1[6].x
 add r5.xy, v4.xyxx, -cb0[129].xyxx
 add r5.zw, r5.xxxy, cb0[151].xxxx
@@ -180,7 +211,7 @@ mov o0.w, l(0)
 mov o2.x, r2.x
 mov o2.w, l(0.694118)
 mov o2.y, r1.w
-mov o3.xyz, r4.xyzx
+mov o3.xyz, r4.xyzx         -> 存放经过Hue shift，并重新调整了Intensity的 BaseColor 
 mov o4.xyzw, l(0,0,0,0)
 mov oDepthLE, r1.y
 ret 
