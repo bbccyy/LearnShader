@@ -135,6 +135,7 @@ add r5.xyz, -r4.xyzx, r0.wwww   -> 设置R5颜色 = 从R4颜色中去掉强度�
 mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate(R5 * 0 + R4) -> 恢复自定义强度 
 
 //采样 Noise RGB 纹理 -> r0.w 存放噪声的一个维度 
+//注意此后 R2.xz 不再代表 UV 了！ 
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
 mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0 存放NoiseTex.x 
 
@@ -144,7 +145,7 @@ add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为r5.xyzw
 ftou r5.zw, r5.zzzw    -> float to unsigned integer 
 ishl r1.w, r5.w, l(1)  -> posPS.y << 1
 iadd r1.w, r1.w, r5.z  -> posPS.y * 2 + posPS.x 
-udiv null, r1.w, r1.w, l(5)   -> (posPS.y * 2 + posPS.x) mod 5 -> 求余数 -> 记为 R1.w (可取值: 0,1,2,3,4)
+udiv null, r1.w, r1.w, l(5)   -> (posPS.y * 2 + posPS.x) mod 5 -> 求余数 -> 记为 R1.w (可取值: 0,1,2,3,4) 
 utof r1.w, r1.w 
 
 //采样 Common Noise，uv来自于posPS的变换 -> 采样返回 R 通道的一个数值 
@@ -162,11 +163,11 @@ mad r1.y, r1.y, v4.w, l(-24.000000)   -> r1.y = 1 * Clip.w - 24
 div_sat r1.y, r1.y, cb1[6].z          -> cb1[6].z = -1.51 -> r1.y = saturate((Clip.w-24)/-1.51) 
 mad r1.y, r1.y, r1.w, r1.z            -> r1.y = saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w 
 div r1.y, r1.x, r1.y                  -> r1.y = Clip_z / (saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w) 
-min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z 
+min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z -> 既取到的 R1.y 总是在原始 NDC.z 之前（靠近摄像机) 
 
 //清理
 mov_sat r1.w, cb1[5].w    -> 清零
-mov_sat r2.xz, r2.xxzx    -> saturate(UV) 
+mov_sat r2.xz, r2.xxzx    -> saturate(NoisseTexRGB.xz) 
 
 //**填充 o2.z**
 //r0.w 存放 NoiseTex.x 采样结果，这里通过未知缩放和平移(cb0部分数据感觉不对)，变换后输出到偏蓝图片Blue通道中去  
@@ -181,8 +182,8 @@ ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o
 //拆分出了 2 个不同混淆后的基础色 R5 和 R6 
 mul r0.w, r1.w, l(0.080000)    -> CommonNoise.R关联值 * 0.08
 mad r5.xyz, -r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx   -> baseCol关联值 - (CommonNoise.R关联值 * 0.08)
-mad r5.xyz, r2.xxxx, r5.xyzx, r0.wwww                 -> R5=(baseCol值 - (CNoise.R值 * 0.08)) * UV.x + (CNoise.R值 * 0.08)
-mad r6.xyz, -r4.xyzx, r2.xxxx, r4.xyzx                -> R6= baseCol值 - (baseCol值 * UV.x)
+mad r5.xyz, r2.xxxx, r5.xyzx, r0.wwww                 -> R5=(baseCol值 - (CNoise.R值 * 0.08)) * NoiseRGB.x + (CNoise.R值 * 0.08)
+mad r6.xyz, -r4.xyzx, r2.xxxx, r4.xyzx                -> R6= baseCol值 - (baseCol值 * NoiseRGB.x)
 mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx     -> 未知缩放 + 平移 可以默认为 scale=1，offset=0
 mad r5.xyz, r5.xyzx, cb0[136].wwww, cb0[136].xyzx
 ne r0.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w            ->  r0.w = ( cb0[177].w != 0 )  -> 已知cb0[177].w=0
@@ -191,17 +192,17 @@ movc r6.xyz, r0.wwww, r7.xyzx, r6.xyzx      -> R6 应该还是 R6
 movc r5.xyz, r0.wwww, l(0,0,0,0), r5.xyzx   -> R5 应该还是 R5 
 dp3 r0.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)  -> 求取R5代表的RGB颜色的 Intensity，如果R5在上面指令中被置为0，则此处强度=0
 mad r7.xyz, r0.wwww, l(2.040400, -4.795100, 2.755200, 0.000000), l(-0.332400, 0.641700, 0.690300, 0.000000) -> 看起来R7已经不能算个颜色了 
-mad r0.w, r2.z, r7.x, r7.y    -> r0.w = UV.y * R7.x + R7.y
-mad r0.w, r0.w, r2.z, r7.z    -> r0.w = (UV.y * R7.x + R7.y) * UV.y + R7.z
-mul r0.w, r2.z, r0.w          -> r0.w = ((UV.y * R7.x + R7.y) * UV.y + R7.z) * UV.y
-max o3.w, r0.w, r2.z          -> **填充 o3.w** -> max(UV.y, r0.w)  -> 实际采样结果均为 1 
-mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz       -> R2.yzw = R5 * 0.45 + R6 -> 是 R5 和 R6 色混合, UV.y丢失 
+mad r0.w, r2.z, r7.x, r7.y    -> r0.w = NoiseRGB.z * R7.x + R7.y
+mad r0.w, r0.w, r2.z, r7.z    -> r0.w = (NoiseRGB.z * R7.x + R7.y) * NoiseRGB.z + R7.z
+mul r0.w, r2.z, r0.w          -> r0.w = ((NoiseRGB.z * R7.x + R7.y) * NoiseRGB.z + R7.z) * NoiseRGB.z
+max o3.w, r0.w, r2.z          -> **填充 o3.w** -> max(NoiseRGB.z, r0.w)  -> 实际采样结果均为 1 
+mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz       -> R2.yzw = R5 * 0.45 + R6 -> 是 R5 和 R6 色混合  
 max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)                -> r3 应该还是 (0,0,0,0)
 lt r0.w, l(0.000000), cb0[139].x     -> r0.w = 0 < cb0[139].x  结果未知 -> 猜测是false -> 返回 0x00000000 
 
 if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是当r0.w有任意bit不是0时就为true 
   mul r5.xyzw, v4.yyyy, cb0[45].xyzw              -> 从这里判断，cb0 应该以float4格式打开 
-  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw     -> 从后面的逻辑看： v4 = NDC 不是 posCS 
+  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw     -> 从后面的逻辑看，似乎 v4 = NDC 不是 posPS，待考证(TODO) 
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
   add r5.xyzw, r5.xyzw, cb0[47].xyzw
   div r5.xyz, r5.xyzx, r5.wwww          -> 以上是对 pos.xyz 做矩阵仿射变换后 -> 除以w分量 -> 似乎是获取 posWS 的基本方法 
@@ -238,7 +239,7 @@ mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) 
 mul o0.xyz, r2.yzwy, cb0[134].yyyy
 mov o0.w, l(0)
-mov o2.x, r2.x              -> UV.x -> 实际上均为 0  
+mov o2.x, r2.x              -> NoiseRGB.x -> 实际上均为 0  
 mov o2.w, l(0.694118)
 mov o2.y, r1.w              -> CommonNoise.R关联值 
 mov o3.xyz, r4.xyzx         -> 存放经过Hue shift，并重新调整了Intensity的 BaseColor 
@@ -248,11 +249,11 @@ ret
 // Approximately 0 instruction slots used
 
 //后记 
-//o0 = [混淆后的BaseColor.rgb, 0]                                 T:8264 -> 未知：类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件
-//o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                           T:8220 -> [NormalWS.xyz, 0.333] 
-//o2 = [UV.x, CommonNoise.R关联值, NoiseTex.R关联值, 0.694118]    T:8241 -> [0,0,1,0.694118]
-//o3 = [去除强度的BaseColor.rgb, max(UV.y, UV.y与BaseCol的混淆)]   T:8222 -> [rgb, 1]
-//o4 = [0,0,0,0]                                                 T:8223 -> 未知：感觉是区分了角色，树木和建筑等的一种Mask 
+//o0 = [混淆后的BaseColor.rgb, 0]                          T:8264 -> 未知：类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件
+//o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                                 T:8220 -> [NormalWS.xyz, 0.333] 
+//o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]    T:8241 -> [0,0,1,0.694118]
+//o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆)]               T:8222 -> [rgb, 1]
+//o4 = [0,0,0,0]                                                       T:8223 -> 未知：感觉是区分了角色，树木和建筑等的一种Mask 
 
 //mov oDepthLE, r1.y          
 //-> 参考：https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-registers-output-depth 
