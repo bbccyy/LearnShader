@@ -65,7 +65,8 @@ mul r0.xyz, r0.xyzx, v1.wwww
 
 //准备参数：
 //r1.x = Clip_z * Clip_w
-//r1.y = Clip_w
+//r1.y = 1 
+//r1.z = Clip_w
 mov r1.x, v4.z
 mov r1.y, l(1.000000)
 mul r1.xz, r1.xxyx, v4.wwww
@@ -78,7 +79,7 @@ movc r1.w, v5.x, l(1.000000), l(-1.000000)   根据VFACE判断当前像素所在
 mul r0.w, r0.w, r1.w    这里赋值r0.w 而r0.xyz是Bitangent 
 
 //采样法线纹理，解码位于切线空间的法线原始数据 
-mul r2.xz, v2.xxyx, cb1[4].xxxx     缩放了UV，随后拿去采样 Normal 纹理（只有RG通道）
+mul r2.xz, v2.xxyx, cb1[4].xxxx     缩放了UV，随后拿去采样 Normal 纹理（只有RG通道） -> cb1[4].x = [1]
 sample_b_indexable(texture2d)(float,float,float,float) r3.xy, r2.xzxx, t1.xyzw, s0, cb0[142].y
 mad r3.xy, r3.xyxx, l(2.000000, 2.000000, 0.000000, 0.000000), l(-1.000000, -1.000000, 0.000000, 0.000000)  从[0,1]转[-1,1]区间 
 dp2 r1.w, r3.xyxx, r3.xyxx
@@ -86,7 +87,7 @@ add r1.w, -r1.w, l(1.000000)
 max r1.w, r1.w, l(0.000000)   -> w在 [0,1] 区间
 sqrt r3.z, r1.w               -> 到这里从RG通道中解出了第三个通道B
 add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)   r4是法线r3的朝向取反 
-mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         法线扰动？ 
+mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         法线扰动？   cb1[4].y = [0]
 mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx                 确认是法线扰动！ 
 dp3 r1.w, r3.xyzx, r3.xyzx
 rsq r1.w, r1.w
@@ -105,8 +106,8 @@ mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = 0
 
 //采样 Grass 纹理，获取基础色 
 sample_b_indexable(texture2d)(float,float,float,float) r4.xyz, r2.xzxx, t2.xyzw, s1, cb0[142].y 
-mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对原始颜色调整  cb1[3].xyz = [0.0056,0.90133,4.05]  -> 此后称 R4 颜色 
-mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [18.66]               -> 此后称 R5 颜色 
+mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对原始颜色调整  cb1[3].xyz = [0.28,0.23,0.08]  -> 此后称 R4 颜色 
+mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [1]               -> 此后称 R5 颜色 
 
 //设 k = float3(0.577350, 0.577350, 0.577350)
 // r1.w = k * dot(R5, k)
@@ -118,7 +119,7 @@ mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww    -> 这才是参与色调变换的�
 mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)
 mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz      -> R5 = cross(R4, k) 
 
-sincos r6.x, r7.x, cb1[5].x              -> cb1[5].x = [17.99] 记为角度A  
+sincos r6.x, r7.x, cb1[5].x              -> cb1[5].x = [2] 记为角度A  
 mul r5.xyz, r5.xyzx, r6.xxxx 
 mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx    -> R4 = R4 * cosA + cross(R4, k) * sinA 
 mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * dot(老R5, k) + R4 * cosA + cross(R4, k) * sinA  
@@ -131,29 +132,38 @@ dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
 
 //得到最终基础色 R4 
 add r5.xyz, -r4.xyzx, r0.wwww   -> 设置R5颜色 = 从R4颜色中去掉强度，变成只有色调和饱和度的部分？ 
-mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 19 -> R4=saturate(R5 * 19 + R4) -> 恢复自定义强度 
+mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate(R5 * 0 + R4) -> 恢复自定义强度 
 
-//采样 Noise RGB 纹理 
+//采样 Noise RGB 纹理 -> r0.w 存放噪声的一个维度 
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
-mul_sat r0.w, r2.x, cb1[6].x
-add r5.xy, v4.xyxx, -cb0[129].xyxx
-add r5.zw, r5.xxxy, cb0[151].xxxx
-ftou r5.zw, r5.zzzw
-ishl r1.w, r5.w, l(1)
-iadd r1.w, r1.w, r5.z
-udiv null, r1.w, r1.w, l(5)
-utof r1.w, r1.w
-mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)
+mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0 存放NoiseTex.x 
+
+//利用posCS构造顶点噪声 -> 存入 r1.w 
+add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
+add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为r5.xyzw是v4.xyxy，既posCS.xy
+ftou r5.zw, r5.zzzw    -> float to unsigned integer 
+ishl r1.w, r5.w, l(1)  -> posCS.y << 1
+iadd r1.w, r1.w, r5.z  -> posCS.y * 2 + posCS.x 
+udiv null, r1.w, r1.w, l(5)   -> (posCS.y * 2 + posCS.x) mod 5 -> 求余数 -> 记为 R1.w
+utof r1.w, r1.w 
+
+//采样 Common Noise，uv来自于posCS的变换 -> 采样返回 R 通道的一个数值 
+//随机值 -> R1.w -> 本质是基于 posCS 当前点的一顿混淆和采样操作所得 -> 理论上会随着 view 的改变而改变，并不是固定在模型空间上的随机 
+mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625 = 1/64 -> int型 posCS.xy / 64 
 sample_b_indexable(texture2d)(float,float,float,float) r2.w, r5.xyxx, t4.yzwx, s3, cb0[142].y
-add r1.w, r1.w, r2.w
-mul r1.w, r1.w, cb1[6].y
-mul r1.w, r1.w, l(0.166667)
-mad r1.y, r1.y, v4.w, l(-24.000000)
-div_sat r1.y, r1.y, cb1[6].z
-mad r1.y, r1.y, r1.w, r1.z
-div r1.y, r1.x, r1.y
-min r1.y, r1.y, v4.z
-mov_sat r1.w, cb1[5].w
+add r1.w, r1.w, r2.w 
+mul r1.w, r1.w, cb1[6].y       -> cb1[6].y = 17 
+mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6 
+
+//最终丢弃 R1.w，转化为 R1.y -> 某种 Noise 
+mad r1.y, r1.y, v4.w, l(-24.000000)   -> r1.y = 1 * Clip.w - 24 
+div_sat r1.y, r1.y, cb1[6].z          -> cb1[6].z = -1.51 -> r1.y=(Clip.w - 24) / -1.51 
+mad r1.y, r1.y, r1.w, r1.z            -> (Clip.w - 24) / -1.51 * R1.w + Clip.w 
+div r1.y, r1.x, r1.y                  -> r1.y = (Clip_z * Clip_w) / ((Clip.w - 24) / -1.51 * R1.w + Clip.w) 
+min r1.y, r1.y, v4.z                  -> r1.y 不能大于 Clip_z 
+
+
+mov_sat r1.w, cb1[5].w 
 mov_sat r2.xz, r2.xxzx
 mad o2.z, r0.w, cb0[138].y, cb0[138].x
 ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r2.y, l(4), t0.xxxx
@@ -177,7 +187,7 @@ mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz
 max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
 lt r0.w, l(0.000000), cb0[139].x
 if_nz r0.w
-  mul r5.xyzw, v4.yyyy, cb0[45].xyzw
+  mul r5.xyzw, v4.yyyy, cb0[45].xyzw    从这里判断，cb0 应该以float4格式打开 
   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
   add r5.xyzw, r5.xyzw, cb0[47].xyzw
