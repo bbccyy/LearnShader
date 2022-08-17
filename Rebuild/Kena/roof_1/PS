@@ -46,11 +46,11 @@ dcl_input_ps linear centroid v1.xyzw        -> TangentWS
 dcl_input_ps linear v2.xy                   -> UV
 dcl_input_ps constant v3.x                  -> PRIMITIVE_ID
 
-dcl_input_ps_siv linear noperspective centroid v4.xyzw, position      -> PosCS 
+dcl_input_ps_siv linear noperspective centroid v4.xyzw, position      -> PosHCS -> 注:xyzw含义已经变化[pixelIdx.xy, NDC.z, -Clip.w] 
 dcl_input_ps_sgv constant v5.x, is_front_face                         -> VFACE 
 
 
-dcl_output o0.xyzw        未知 -> 类似剪影，基本上值渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
+dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
 dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220             DONE 
 dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241                              DONE
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222       DONE 这张w通道不为0，区别于o0.w == 0
@@ -64,12 +64,12 @@ mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
 mul r0.xyz, r0.xyzx, v1.wwww
 
 //准备参数：
-//r1.x = Clip_z * Clip_w
+//r1.x = posPS.z * posPS.w  ->  NDC.z * Clip.w = Clip.z 所有r1.x保存了Clip.z的数值 
 //r1.y = 1 
-//r1.z = Clip_w
+//r1.z = posPS.w   -> r1.z 保存的是 ViewSpace下该fragment对应几何体微分中心点到摄像机的z轴距离（投影到中轴线上的长度） 
 mov r1.x, v4.z
 mov r1.y, l(1.000000)
-mul r1.xz, r1.xxyx, v4.wwww
+mul r1.xz, r1.xxyx, v4.wwww 
 
 //此处通过采样和解码，似乎是为了获得 Bitangent的朝向w 
 imad r2.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
@@ -126,8 +126,8 @@ mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * 
 //以上操作是：获取Grass的基础色R4，然后依据存储在cb1[5].x内的角度，进行色调变换，返回颜色存入R4 
 //参考链接：https://forum.unity.com/threads/hue-saturation-brightness-contrast-shader.260649/ 
 
-//已知 outputCol dot (0.3,0.59,0.11) = ColorIntensity
-//以下在求 R4 颜色的 强度 Intensity
+//已知 outputCol dot (0.3,0.59,0.11) = ColorIntensity 
+//以下在求 R4 颜色的 强度 Intensity 
 dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000) 
 
 //得到最终基础色 R4 
@@ -138,29 +138,31 @@ mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate(
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
 mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0 存放NoiseTex.x 
 
-//利用posCS构造顶点噪声 -> 存入 r1.w 
+//利用posPS.xy构造顶点噪声 -> 存入 r1.w 
 add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
-add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为r5.xyzw是v4.xyxy，既posCS.xy
+add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为r5.xyzw是对当前fragment在屏幕上的坐标进行前后两次偏移后获得 
 ftou r5.zw, r5.zzzw    -> float to unsigned integer 
-ishl r1.w, r5.w, l(1)  -> posCS.y << 1
-iadd r1.w, r1.w, r5.z  -> posCS.y * 2 + posCS.x 
-udiv null, r1.w, r1.w, l(5)   -> (posCS.y * 2 + posCS.x) mod 5 -> 求余数 -> 记为 R1.w
+ishl r1.w, r5.w, l(1)  -> posPS.y << 1
+iadd r1.w, r1.w, r5.z  -> posPS.y * 2 + posPS.x 
+udiv null, r1.w, r1.w, l(5)   -> (posPS.y * 2 + posPS.x) mod 5 -> 求余数 -> 记为 R1.w (可取值: 0,1,2,3,4)
 utof r1.w, r1.w 
 
-//采样 Common Noise，uv来自于posCS的变换 -> 采样返回 R 通道的一个数值 
-//随机值 -> R1.w -> 本质是基于 posCS 当前点的一顿混淆和采样操作所得 -> 理论上会随着 view 的改变而改变，并不是固定在模型空间上的随机 
-mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625 = 1/64 -> int型 posCS.xy / 64 
-sample_b_indexable(texture2d)(float,float,float,float) r2.w, r5.xyxx, t4.yzwx, s3, cb0[142].y
-add r1.w, r1.w, r2.w 
-mul r1.w, r1.w, cb1[6].y       -> cb1[6].y = 17 
-mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6 
+//采样 Common Noise，uv来自于posPS的变换 -> 采样返回 R 通道的一个数值 
+//随机值 -> R1.w -> 本质是基于 posPS 当前点的一顿混淆和采样操作所得 -> 理论上会随着 view 的改变而改变，并不是固定在模型空间上的随机 
+mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625 = 1/64 -> int型 posPS.xy / 64 -> 一个Tile=64*64么? 
+//在64*64见方的像素内，如下采样会得到相同的返回值 
+sample_b_indexable(texture2d)(float,float,float,float) r2.w, r5.xyxx, t4.yzwx, s3, cb0[142].y 
+add r1.w, r1.w, r2.w           -> r1.w           取值 0.0 ~ 4.99 
+mul r1.w, r1.w, cb1[6].y       -> cb1[6].y = 17  取值 0.0 ~ 84.99 
+mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6   取值 0.0 ~ 14.16
 
-//最终丢弃 R1.w，转化为 R1.y -> 某种 Noise  -> TODO：弄清这种调和方式的用意 
+//最终丢弃 R1.w，转化为 R1.y -> 某种基于距离的 Noise  -> TODO：弄清这种调和方式的用意 
 mad r1.y, r1.y, v4.w, l(-24.000000)   -> r1.y = 1 * Clip.w - 24 
-div_sat r1.y, r1.y, cb1[6].z          -> cb1[6].z = -1.51 -> r1.y=(Clip.w - 24) / -1.51 
-mad r1.y, r1.y, r1.w, r1.z            -> r1.y = (Clip.w - 24) / -1.51 * R1.w + Clip.w 
-div r1.y, r1.x, r1.y                  -> r1.y = (Clip_z * Clip_w) / ((Clip.w - 24) / -1.51 * R1.w + Clip.w) 
-min r1.y, r1.y, v4.z                  -> r1.y 不能大于 Clip_z 
+//以下div_sat要求 Clip.w 落在 [22.49~24] 间，小于22.49则返回值横为1，大于24则为0 
+div_sat r1.y, r1.y, cb1[6].z          -> cb1[6].z = -1.51 -> r1.y = saturate((Clip.w-24)/-1.51) 
+mad r1.y, r1.y, r1.w, r1.z            -> r1.y = saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w 
+div r1.y, r1.x, r1.y                  -> r1.y = Clip_z / (saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w) 
+min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z 
 
 //清理
 mov_sat r1.w, cb1[5].w    -> 清零
@@ -196,34 +198,42 @@ max o3.w, r0.w, r2.z          -> **填充 o3.w** -> max(UV.y, r0.w)  -> 实际�
 mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz       -> R2.yzw = R5 * 0.45 + R6 -> 是 R5 和 R6 色混合, UV.y丢失 
 max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)                -> r3 应该还是 (0,0,0,0)
 lt r0.w, l(0.000000), cb0[139].x     -> r0.w = 0 < cb0[139].x  结果未知 -> 猜测是false -> 返回 0x00000000 
+
 if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是当r0.w有任意bit不是0时就为true 
-  mul r5.xyzw, v4.yyyy, cb0[45].xyzw    从这里判断，cb0 应该以float4格式打开 
-  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
+  mul r5.xyzw, v4.yyyy, cb0[45].xyzw              -> 从这里判断，cb0 应该以float4格式打开 
+  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw     -> 从后面的逻辑看： v4 = NDC 不是 posCS 
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
   add r5.xyzw, r5.xyzw, cb0[47].xyzw
-  div r5.xyz, r5.xyzx, r5.wwww
+  div r5.xyz, r5.xyzx, r5.wwww          -> 以上是对 pos.xyz 做矩阵仿射变换后 -> 除以w分量 -> 似乎是获取 posWS 的基本方法 
   add r6.xyz, r5.xyzx, -cb0[70].xyzx
   dp3 r0.w, -r5.xyzx, -r5.xyzx
   rsq r0.w, r0.w
-  mul r5.xyz, r0.wwww, -r5.xyzx
+  mul r5.xyz, r0.wwww, -r5.xyzx         -> 求 posWS_?? 的单位向量  
+
   mad r0.w, -r1.y, r1.z, r1.x
   div r0.w, r0.w, r1.y
   mad r5.xyz, r5.xyzx, r0.wwww, r6.xyzx
+
+  //采样t0
+  //-> r6.xyz = t0[5].xyz   -> [758.2, -20064.57, 4490.1, 272.46]
+  //-> r7.xyz = t0[19].xyz  -> [237.22, 231.05, 184.73, 1.0]
   imad r1.xz, v3.xxxx, l(35, 0, 35, 0), l(5, 0, 19, 0)
-  ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx
-  add r6.xyz, r5.xyzx, -r6.xyzx
-  ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx
+  ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx 
+  add r6.xyz, r5.xyzx, -r6.xyzx 
+  ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx 
   add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)
   lt r6.xyz, r7.xyzx, |r6.xyzx|
-  or r0.w, r6.y, r6.x
-  or r0.w, r6.z, r0.w
+  or r0.w, r6.y, r6.x     -> Bitwise or 
+  or r0.w, r6.z, r0.w     -> Bitwise or 
   dp3 r1.x, r5.xyzx, l(0.577000, 0.577000, 0.577000, 0.000000)
   mul r1.x, r1.x, l(0.002000)
-  frc r1.x, r1.x
-  lt r1.x, l(0.500000), r1.x
+  frc r1.x, r1.x                  -> fraction 求小数部分 
+  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5 
   movc r5.xyz, r1.xxxx, l(0,1.000000,1.000000,0), l(1.000000,1.000000,0,0)
-  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx
+
+  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx   -> 要么是R5(GB or RG为1的固定范式)，要么是R3(基于cb1[1]和cb1[4]相乘得到的一种颜色?)
 endif 
+
 mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) 
 mul o0.xyz, r2.yzwy, cb0[134].yyyy
@@ -237,11 +247,12 @@ mov oDepthLE, r1.y          -> 功能类似于Clip? r1.y 存放了噪声过的Cl
 ret 
 // Approximately 0 instruction slots used
 
-o0 = [混淆后的BaseColor.rgb, 0]                                 -> 未知：类似剪影，基本上值渲染上了天空盒，以及极少数半透明物件
-o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                           -> [NormalWS.xyz, 0.333] 
-o2 = [UV.x, CommonNoise.R关联值, NoiseTex.R关联值, 0.694118]    -> [0,0,1,0.694118]
-o3 = [去除强度的BaseColor.rgb, max(UV.y, UV.y与BaseCol的混淆)]   -> [rgb, 1]
-o4 = [0,0,0,0]                                                 -> 未知：感觉是区分了角色，树木和建筑等的一种Mask 
+//后记 
+//o0 = [混淆后的BaseColor.rgb, 0]                                 T:8264 -> 未知：类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件
+//o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                           T:8220 -> [NormalWS.xyz, 0.333] 
+//o2 = [UV.x, CommonNoise.R关联值, NoiseTex.R关联值, 0.694118]    T:8241 -> [0,0,1,0.694118]
+//o3 = [去除强度的BaseColor.rgb, max(UV.y, UV.y与BaseCol的混淆)]   T:8222 -> [rgb, 1]
+//o4 = [0,0,0,0]                                                 T:8223 -> 未知：感觉是区分了角色，树木和建筑等的一种Mask 
 
-mov oDepthLE, r1.y          
--> 参考：https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-registers-output-depth 
+//mov oDepthLE, r1.y          
+//-> 参考：https://docs.microsoft.com/en-us/windows/win32/direct3dhlsl/dx9-graphics-reference-asm-ps-registers-output-depth 
