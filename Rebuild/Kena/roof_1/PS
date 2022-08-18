@@ -99,35 +99,36 @@ mad r0.xyz, r3.xxxx, v0.xyzx, r0.xyzx
 mad r0.xyz, r3.zzzz, v1.xyzx, r0.xyzx
 dp3 r1.w, r0.xyzx, r0.xyzx
 rsq r1.w, r1.w
-mul r0.xyz, r0.xyzx, r1.wwww    归一化
+mul r0.xyz, r0.xyzx, r1.wwww    再归一化
 mul r0.xyz, r0.wwww, r0.xyzx    调整朝向
 
-mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = 0
+mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = 0 -> 无意义操作 
 
 //采样 Grass 纹理，获取基础色 
 sample_b_indexable(texture2d)(float,float,float,float) r4.xyz, r2.xzxx, t2.xyzw, s1, cb0[142].y 
 mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对原始颜色调整  cb1[3].xyz = [0.28,0.23,0.08]  -> 此后称 R4 颜色 
-mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [1]               -> 此后称 R5 颜色 
+mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [1]               -> 此后称 R5 颜色 -> 本质还是 R4 颜色 
 
 //设 k = float3(0.577350, 0.577350, 0.577350)
 // r1.w = k * dot(R5, k)
-dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx   
+dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx    -> r0.w = dot(R5, k)，内含 R5颜色  
 mul r1.w, r0.w, l(0.577350)  
 
-mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww    -> 这才是参与色调变换的新颜色 R4，具体说 R4 = R5 - k * dot(R5, k)
+mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww    -> 接下来会对颜色 R4' 进行色调变换，此处返回值为 R4' = R4 * 1 - k * dot(R5, k) 
 
-mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)
-mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz      -> R5 = cross(R4, k) 
+mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)                -> mul + mad 组合的标注叉乘形式 
+mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz      -> cross(R4', k) 
 
 sincos r6.x, r7.x, cb1[5].x              -> cb1[5].x = [2] 记为角度A  
 mul r5.xyz, r5.xyzx, r6.xxxx 
-mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx    -> R4 = R4 * cosA + cross(R4, k) * sinA 
-mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * dot(老R5, k) + R4 * cosA + cross(R4, k) * sinA  
-//以上操作是：获取Grass的基础色R4，然后依据存储在 cb1[5].x 内的角度，进行色调变换，返回颜色存入R4 
+mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx    -> R4' * cosA + cross(R4', k) * sinA 
+mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * dot(R5颜色, k) + R4' * cosA + cross(R4', k) * sinA  
+//以上操作含义是：获取Grass的基础色R4，然后依据存储在 cb1[5].x 内的角度，进行色调变换，返回颜色存入R4 
+//接下来将只涉及 R4 颜色 -> 来自 GrassTexture 采样 + 混淆 + 色调偏转后的返回值 
 //参考链接：https://forum.unity.com/threads/hue-saturation-brightness-contrast-shader.260649/ 
 
 //已知 outputCol dot (0.3,0.59,0.11) = ColorIntensity 
-//以下在求 R4 颜色的 强度 Intensity 或叫做 Cdlum 
+//以下逻辑用于求取 R4 颜色的 强度 Intensity 或叫做 Cdlum 
 dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000) 
 
 //通过 Lerp 得到最终基础色 R4 
