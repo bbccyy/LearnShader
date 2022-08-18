@@ -135,10 +135,10 @@ dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
 add r5.xyz, -r4.xyzx, r0.wwww   -> 设置R5颜色 = 从R4颜色中去掉强度，变成只有色调和饱和度的部分？ 
 mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate((Cdlum - R4) * Rate + R4) -> 从 R4 lerp 到 Cdlum 
 
-//采样 Noise RGB 纹理 -> r0.w 存放噪声的一个维度 
-//注意此后 R2.xz 不再代表 UV 了！ 
+//采样 Noise RGB 纹理 
+//注意此后 R2.xz 不再代表 UV，存放了 NoiseRGB.yz
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
-mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0 存放NoiseTex.x 
+mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0.w 存放NoiseTex.y  
 
 //利用posPS.xy构造顶点噪声 -> 存入 r1.w 
 add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
@@ -158,9 +158,10 @@ add r1.w, r1.w, r2.w           -> r1.w           取值 0.0 ~ 4.99
 mul r1.w, r1.w, cb1[6].y       -> cb1[6].y = 17  取值 0.0 ~ 84.99 
 mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6   取值 0.0 ~ 14.16
 
-//最终丢弃 R1.w，转化为 R1.y -> 某种基于距离的 Noise  -> TODO：弄清这种调和方式的用意 
+//最终丢弃 R1.w，转化为 R1.y -> 某种基于距离的 Noise -> 推测用于 Dithering(?) 在一定距离内
+//R1.y 等效于一种计算出来的 NDC.z 
 mad r1.y, r1.y, v4.w, l(-24.000000)   -> r1.y = 1 * Clip.w - 24 
-//以下div_sat要求 Clip.w 落在 [22.49~24] 间，小于22.49则返回值横为1，大于24则为0 
+//以下div_sat要求 Clip.w 落在 [22.49~24] 间，小于22.49则返回值恒为1，大于24则为0 
 div_sat r1.y, r1.y, cb1[6].z          -> cb1[6].z = -1.51 -> r1.y = saturate((Clip.w-24)/-1.51) 
 mad r1.y, r1.y, r1.w, r1.z            -> r1.y = saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w 
 div r1.y, r1.x, r1.y                  -> r1.y = Clip_z / (saturate((Clip.w-24)/-1.51) * rand[0, 14.16] + Clip.w) 
@@ -192,53 +193,54 @@ mad r7.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r6.xyzx   -> R7 
 movc r6.xyz, r0.wwww, r7.xyzx, r6.xyzx      -> R6 应该还是 R6 
 movc r5.xyz, r0.wwww, l(0,0,0,0), r5.xyzx   -> R5 应该还是 R5 
 dp3 r0.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)  -> 求取R5代表的RGB颜色的 Intensity，如果R5在上面指令中被置为0，则此处强度=0
-mad r7.xyz, r0.wwww, l(2.040400, -4.795100, 2.755200, 0.000000), l(-0.332400, 0.641700, 0.690300, 0.000000) -> 看起来R7已经不能算个颜色了 
+mad r7.xyz, r0.wwww, l(2.040400, -4.795100, 2.755200, 0.000000), l(-0.332400, 0.641700, 0.690300, 0.000000) -> 看起来R7已经不能算个颜色了 -> R5.Intencity * float3_A + float3_B -> 随后使用R7和噪声纹理做了大量混淆处理获得 r0.w 
 mad r0.w, r2.z, r7.x, r7.y    -> r0.w = NoiseRGB.z * R7.x + R7.y
 mad r0.w, r0.w, r2.z, r7.z    -> r0.w = (NoiseRGB.z * R7.x + R7.y) * NoiseRGB.z + R7.z
-mul r0.w, r2.z, r0.w          -> r0.w = ((NoiseRGB.z * R7.x + R7.y) * NoiseRGB.z + R7.z) * NoiseRGB.z
-max o3.w, r0.w, r2.z          -> **填充 o3.w** -> max(NoiseRGB.z, r0.w)  -> 实际采样结果均为 1 
+mul r0.w, r2.z, r0.w          -> r0.w = ((NoiseRGB.z * R7.x + R7.y) * NoiseRGB.z + R7.z) * NoiseRGB.z  >= 1 
+max o3.w, r0.w, r2.z          -> **填充 o3.w** -> max(NoiseRGB.z, r0.w)  -> 实际采样结果均为 1 -> 说明 r0.w >= 1 
 mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz       -> R2.yzw = R5 * 0.45 + R6 -> 是 R5 和 R6 色混合  
 max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)                -> r3 应该还是 (0,0,0,0)
 lt r0.w, l(0.000000), cb0[139].x     -> r0.w = 0 < cb0[139].x  结果未知 -> 猜测是false -> 返回 0x00000000 
 
 if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是当r0.w有任意bit不是0时就为true 
   mul r5.xyzw, v4.yyyy, cb0[45].xyzw              -> 从这里判断，cb0 应该以float4格式打开 
-  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw     -> 从后面的逻辑看，似乎 v4 = NDC 不是 posPS，待考证(TODO) 
-  mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
+  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw     -> 从后面的逻辑看，似乎 v4.xyz = NDC.xyz -> 待考证(TODO) 
+  mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw     
   add r5.xyzw, r5.xyzw, cb0[47].xyzw
-  div r5.xyz, r5.xyzx, r5.wwww          -> 以上是对 pos.xyz 做矩阵仿射变换后 -> 除以w分量 -> 似乎是获取 posWS 的基本方法 
-  add r6.xyz, r5.xyzx, -cb0[70].xyzx
-  dp3 r0.w, -r5.xyzx, -r5.xyzx
+  div r5.xyz, r5.xyzx, r5.wwww          -> 以上是对 pos.xyz 做矩阵仿射变换后 -> 除以w分量 -> 似乎是获取 posWS 的基本方法，待考证(TODO) 
+  add r6.xyz, r5.xyzx, -cb0[70].xyzx    -> cb0[70] = [0.0001957,0,0]  ->  对 Pos 做一个微小偏移 -> R6 
+  dp3 r0.w, -r5.xyzx, -r5.xyzx 
   rsq r0.w, r0.w
-  mul r5.xyz, r0.wwww, -r5.xyzx         -> 求 posWS_?? 的单位向量  
+  mul r5.xyz, r0.wwww, -r5.xyzx         -> 对坐标取反 + 归一化 -> 如果是 posView -> 等于求取了该像素点朝向视点的单位向量，待考证(TODO) 
 
-  mad r0.w, -r1.y, r1.z, r1.x
-  div r0.w, r0.w, r1.y
-  mad r5.xyz, r5.xyzx, r0.wwww, r6.xyzx
+  mad r0.w, -r1.y, r1.z, r1.x    -> r1.x=v4.w*v4.z; r1.z=v4.w -> v4.w*v4.z - v4.w*v4.z_new -> v4.w*(v4.z - v4.z_new)
+  div r0.w, r0.w, r1.y           -> v4.w*(v4.z - v4.z_new) / v4.z_new
+  mad r5.xyz, r5.xyzx, r0.wwww, r6.xyzx  ->  单位方向 * (v4.w*(v4.z - v4.z_new) / v4.z_new) + 小偏移后的坐标Pos -> 似乎是一个新的坐标Pos
 
   //采样t0
   //-> r6.xyz = t0[5].xyz   -> [758.2, -20064.57, 4490.1, 272.46]
   //-> r7.xyz = t0[19].xyz  -> [237.22, 231.05, 184.73, 1.0]
   imad r1.xz, v3.xxxx, l(35, 0, 35, 0), l(5, 0, 19, 0)
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx 
-  add r6.xyz, r5.xyzx, -r6.xyzx 
+  add r6.xyz, r5.xyzx, -r6.xyzx       -> PRIMTIVE级别的整体位置偏移 -> 获取新位置 R6
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx 
-  add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)
-  lt r6.xyz, r7.xyzx, |r6.xyzx|
-  or r0.w, r6.y, r6.x     -> Bitwise or 
-  or r0.w, r6.z, r0.w     -> Bitwise or 
-  dp3 r1.x, r5.xyzx, l(0.577000, 0.577000, 0.577000, 0.000000)
+  add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R7 是个预存的今天数据(坐标?) 
+  lt r6.xyz, r7.xyzx, |r6.xyzx|                                     -> 判断 预存坐标 R7 是否小于计算所得的新位置 R6 
+  or r0.w, r6.y, r6.x                                               -> Bitwise or 
+  or r0.w, r6.z, r0.w                                               -> Bitwise or -> 只要 R7 有任意通道 < |R6| 则 r0.w = true 
+  dp3 r1.x, r5.xyzx, l(0.577000, 0.577000, 0.577000, 0.000000) 
   mul r1.x, r1.x, l(0.002000)
   frc r1.x, r1.x                  -> fraction 求小数部分 
-  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5 
-  movc r5.xyz, r1.xxxx, l(0,1.000000,1.000000,0), l(1.000000,1.000000,0,0)
+  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5       -> r1.x = fraction(dot(R5, 0.577) * 0.002) > 0.5 ? ture : flase
+  
+  movc r5.xyz, r1.xxxx, l(0,1.000000,1.000000,0), l(1.000000,1.000000,0,0) 
 
-  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx   -> 要么是R5(GB or RG为1的固定范式)，要么是R3(基于cb1[1]和cb1[4]相乘得到的一种颜色?)
+  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx   -> 要么是R5(yz or xy分量为1的固定范式)，要么是R3(基于cb1[1]和cb1[4]相乘得到的一种颜色?) 
 endif 
 
 mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) 
-mul o0.xyz, r2.yzwy, cb0[134].yyyy
+mul o0.xyz, r2.yzwy, cb0[134].yyyy   -> cb0[134].y 本身应该也是个控制阀门 
 mov o0.w, l(0)
 mov o2.x, r2.x              -> NoiseRGB.x -> 实际上均为 0  -> TODO: 为何是0，从采样贴图上看不可能存在0返回值 
 mov o2.w, l(0.694118)
