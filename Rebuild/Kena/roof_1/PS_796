@@ -29,7 +29,7 @@ PS
 ps_5_0
 dcl_globalFlags refactoringAllowed
 dcl_constantbuffer CB0[178], immediateIndexed
-dcl_constantbuffer CB1[7], immediateIndexed
+dcl_constantbuffer CB1[7], immediateIndexed             -> CBV 1465
 dcl_sampler s0, mode_default
 dcl_sampler s1, mode_default
 dcl_sampler s2, mode_default
@@ -53,7 +53,7 @@ dcl_input_ps_sgv constant v5.x, is_front_face                         -> VFACE
 dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
 dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220             DONE 
 dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241                              DONE
-dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222       DONE 这张w通道不为0，区别于o0.w == 0
+dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222       DONE 这张w通道不为0，区别于o0.w == 0 
 dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223 
 dcl_output oDepthLE
 dcl_temps 8
@@ -132,11 +132,11 @@ mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx  -> k * 
 dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000) 
 
 //通过 Lerp 得到最终基础色 R4 
-add r5.xyz, -r4.xyzx, r0.wwww   -> 设置R5颜色 = 从R4颜色中去掉强度，变成只有色调和饱和度的部分？ 
+add r5.xyz, -r4.xyzx, r0.wwww                    -> Cdlum - R4 
 mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate((Cdlum - R4) * Rate + R4) -> 从 R4 lerp 到 Cdlum 
 
 //采样 Noise RGB 纹理 
-//注意此后 R2.xz 不再代表 UV，存放了 NoiseRGB.yz
+//注意此后 R2.xz 不再代表 UV，存放了 NoiseRGB.yz 
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
 mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0.w 存放NoiseTex.y  
 
@@ -214,15 +214,15 @@ if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是�
   mul r5.xyz, r0.wwww, -r5.xyzx         -> 对坐标取反 + 归一化 -> 如果是 posView -> 等于求取了该像素点朝向视点的单位向量，待考证(TODO) 
 
   mad r0.w, -r1.y, r1.z, r1.x    -> r1.x=v4.w*v4.z; r1.z=v4.w -> v4.w*v4.z - v4.w*v4.z_new -> v4.w*(v4.z - v4.z_new)
-  div r0.w, r0.w, r1.y           -> v4.w*(v4.z - v4.z_new) / v4.z_new
-  mad r5.xyz, r5.xyzx, r0.wwww, r6.xyzx  ->  单位方向 * (v4.w*(v4.z - v4.z_new) / v4.z_new) + 小偏移后的坐标Pos -> 似乎是一个新的坐标Pos
+  div r0.w, r0.w, r1.y           -> v4.w*(v4.z - v4.z_new) / v4.z_new -> 标量 -> 用作 Scale 
+  mad r5.xyz, r5.xyzx, r0.wwww, r6.xyzx  ->  单位方向 * Scale + 小偏移后的坐标Pos -> 似乎是一个新的坐标Pos
 
   //采样t0
   //-> r6.xyz = t0[5].xyz   -> [758.2, -20064.57, 4490.1, 272.46]
   //-> r7.xyz = t0[19].xyz  -> [237.22, 231.05, 184.73, 1.0]
   imad r1.xz, v3.xxxx, l(35, 0, 35, 0), l(5, 0, 19, 0)
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx 
-  add r6.xyz, r5.xyzx, -r6.xyzx       -> PRIMTIVE级别的整体位置偏移 -> 获取新位置 R6
+  add r6.xyz, r5.xyzx, -r6.xyzx       -> 基于坐标 R5，进行PRIMTIVE级别的整体位置偏移 -> 获取新位置 R6 
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx 
   add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R7 是个预存的今天数据(坐标?) 
   lt r6.xyz, r7.xyzx, |r6.xyzx|                                     -> 判断 预存坐标 R7 是否小于计算所得的新位置 R6 
@@ -231,7 +231,7 @@ if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是�
   dp3 r1.x, r5.xyzx, l(0.577000, 0.577000, 0.577000, 0.000000) 
   mul r1.x, r1.x, l(0.002000)
   frc r1.x, r1.x                  -> fraction 求小数部分 
-  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5       -> r1.x = fraction(dot(R5, 0.577) * 0.002) > 0.5 ? ture : flase
+  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5       -> r1.x = fraction(dot(R5, 0.577) * 0.002) > 0.5 ? ture : false
   
   movc r5.xyz, r1.xxxx, l(0,1.000000,1.000000,0), l(1.000000,1.000000,0,0) 
 
@@ -247,7 +247,7 @@ mov o2.w, l(0.694118)
 mov o2.y, r1.w              -> CommonNoise.R关联值 
 mov o3.xyz, r4.xyzx         -> 存放经过Hue shift，并重新调整了Intensity的 BaseColor 
 mov o4.xyzw, l(0,0,0,0)
-mov oDepthLE, r1.y          -> 功能类似于Clip? r1.y 存放了噪声过的Clip.z，由于视方向远方为-z方向，所以取min(r1.y, Clip.z)得到的点要么在z上，要么在当前z平面的后方(更远处)，通过 oDepthLE 寄存器，在 Z-TEST期间丢掉不需要的 Pixels 
+mov oDepthLE, r1.y          -> 功能类似于Clip? r1.y 存放了噪声过的Clip.z，由于视方向远方为-z方向，所以取min(r1.y, Clip.z) 得到的点要么在z上，要么在当前z平面的后方(更远处)，通过 oDepthLE 寄存器，在 Z-TEST期间丢掉不需要的 Pixels 
 ret 
 // Approximately 0 instruction slots used
 
