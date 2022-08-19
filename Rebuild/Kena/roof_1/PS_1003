@@ -28,7 +28,7 @@ PS
 //
 ps_5_0
 dcl_globalFlags refactoringAllowed
-dcl_constantbuffer CB0[178], immediateIndexed
+dcl_constantbuffer CB0[178], immediateIndexed   ->  与 PS_796 一致 CBV 1433
 dcl_constantbuffer CB1[7], immediateIndexed     ->  区别于 PS_796  ->  当前使用CBV 1318
 dcl_sampler s0, mode_default
 dcl_sampler s1, mode_default
@@ -37,8 +37,8 @@ dcl_sampler s3, mode_default
 dcl_resource_structured t0, 16                          -> Data Buffer 
 dcl_resource_texture2d (float,float,float,float) t1     -> Normal Tex rg
 dcl_resource_texture2d (float,float,float,float) t2     -> Grass RGBA 
-dcl_resource_texture2d (float,float,float,float) t3     -> Purple RGB
-dcl_resource_texture2d (float,float,float,float) t4     -> Common Noise R
+dcl_resource_texture2d (float,float,float,float) t3     -> Purple RGB 
+dcl_resource_texture2d (float,float,float,float) t4     -> Common Noise R 
 
 dcl_input_ps linear centroid v0.xyz         -> NormalWS
 dcl_input_ps linear centroid v1.xyzw        -> TangentWS
@@ -50,13 +50,13 @@ dcl_input_ps_sgv constant v5.x, is_front_face
 
 dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
                           o0 = [混淆后的BaseColor.rgb, 0]  ->  混淆是基于空间位置的，分为靠近世界中心部分和远离世界中心部分 
-dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220
-                          o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]
-dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241  
-                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]
-dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222 
-                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆] 
-dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223 
+dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33                T:8220 
+                          o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                               -> [NormalWS.xyz, 0.333] 
+dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量为手K的值                                       T:8241  
+                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]  -> [?,?,?,0.694118]
+dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色         T:8222 
+                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆]              -> [rgb, 1]
+dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?                  T:8223 
                           o4 = [0,0,0,0]   
 dcl_output oDepthLE
 dcl_temps 8
@@ -66,9 +66,9 @@ mul r0.xyz, v0.yzxy, v1.zxyz
 mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
 mul r0.xyz, r0.xyzx, v1.wwww
 
-//r1.x = posPS.z * posPS.w  ->  NDC.z * Clip.w = Clip.z 所有r1.x保存了Clip.z的数值 
+//r1.x = VertexInput.z * VertexInput.w  ->  NDC.z * Clip.w = Clip.z 所有r1.x保存了Clip.z的数值 
 //r1.y = 1 
-//r1.z = posPS.w  
+//r1.z = VertexInput.w  
 mov r1.x, v4.z 
 mov r1.y, l(1.000000) 
 mul r1.xz, r1.xxyx, v4.wwww 
@@ -88,11 +88,11 @@ dp2 r1.w, r3.xyxx, r3.xyxx
 add r1.w, -r1.w, l(1.000000)
 max r1.w, r1.w, l(0.000000)   -> w在 [0,1] 区间
 sqrt r3.z, r1.w               -> 到这里从RG通道中解出了第三个通道B
-add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)   -> 这两行add + mad的组合符合 lerp 指令 -> lerp((0,0,1), Norm, Rate)
-mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         -> cb1[4].y = 0 -> (float3(0,0,1) - TexNorm) * Rate + TexNorm
+add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)   -> 这两行add + mad的组合符合 lerp 指令 -> lerp((0,0,1), Norm, Rate) 
+mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         -> cb1[4].y = Rate = 0 -> [float3(0,0,1) - TexNorm] * Rate + TexNorm 
 mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx                 -> 对切线空间法线进行 Scale 和 Offset 等常规操作 
 dp3 r1.w, r3.xyzx, r3.xyzx                                        -> 以下 3 行负责 归一化 TexNormal 
-rsq r1.w, r1.w
+rsq r1.w, r1.w 
 mul r3.xyz, r1.wwww, r3.xyzx 
 
 //应用TBN矩阵将贴图法线转换到世界空间下，随后归一化，调整朝向 
@@ -104,52 +104,62 @@ rsq r1.w, r1.w
 mul r0.xyz, r0.xyzx, r1.wwww    再归一化
 mul r0.xyz, r0.wwww, r0.xyzx    调整朝向
 
-mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = 0 -> 无意义操作 
+mul r3.xyz, cb1[1].xyzx, cb1[4].zzzz    ->  r3.xyz = cb1[1].xyzx * cb1[4].z -> 0 
 
 //采样 Grass 纹理，获取基础色 
 sample_b_indexable(texture2d)(float,float,float,float) r4.xyz, r2.xzxx, t2.xyzw, s1, cb0[142].y 
-mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对原始颜色调整  cb1[3].xyz = [0.149,0.1098,0.078]  -> 此后称 R4 颜色 
-mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [1]                   -> 此后称 R5 颜色 -> 本质还是 R4 颜色 
+mul r4.xyz, r4.xyzx, cb1[3].xyzx    -> 对采样Grass颜色RGB分别调整  cb1[3].xyz = [0.149,0.1098,0.078]  -> 此后称 R4 颜色 
+mul r5.xyz, r4.xyzx, cb1[5].yyyy    -> 对调整后的颜色缩放 cb1[5].y = [1]  -> R5 颜色 -> 本质还是 R4 颜色 
 
+//设 k = float3(0.577350, 0.577350, 0.577350)
+//按照cb1[5].x规定的角度，旋转色调，返回值存入 R4.xyz 
+dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx                  -> 则有 r0.w = dot(R5, k)
+mul r1.w, r0.w, l(0.577350)                                                   -> r1.w = k * dot(R5, k)
+mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww  -> 接下来会对临时颜色R4'(存入了r4)进行色调变换，设此处返回值 R4' = R5 - k * dot(R5, k) 
+mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)                -> mul + mad 组合 -> 标准叉乘形式 
+mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz      -> cross(R4', k) 
+sincos r6.x, r7.x, cb1[5].x                                                   -> cb1[5].x = 0 记为角度A 
+mul r5.xyz, r5.xyzx, r6.xxxx                                                  -> cross(R4', k) * sinA 
+mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx                                         -> R4' * cosA + cross(R4', k) * sinA 
+mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx       -> k * dot(R4, k) + R4' * cosA + cross(R4', k) * sinA 
 
-dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r5.xyzx
-mul r1.w, r0.w, l(0.577350)
-mad r4.xyz, r4.xyzx, cb1[5].yyyy, -r1.wwww
-mul r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)
-mad r5.xyz, r4.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r5.zxyz
-sincos r6.x, r7.x, cb1[5].x
-mul r5.xyz, r5.xyzx, r6.xxxx
-mad r4.xyz, r4.xyzx, r7.xxxx, r5.xyzx
-mad r4.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx
+//已知 Color dot (0.3,0.59,0.11) = Color_Intensity 
+//以下逻辑用于求取 R4 颜色的 强度 Intensity 或叫做 Cdlum 
 dp3 r0.w, r4.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
-add r5.xyz, -r4.xyzx, r0.wwww
-mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx
-sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y
-mul_sat r0.w, r2.x, cb1[6].x
 
+//通过 Lerp 得到最终基础色
+add r5.xyz, -r4.xyzx, r0.wwww                   -> Cdlum - R4
+mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx   -> cb1[5].z=Rate=0.2 -> R4=saturate((Cdlum - R4) * Rate + R4) -> 从 R4 lerp 到 Cdlum 
 
-//利用posPS.xy构造顶点噪声 -> 存入 r1.w 
-add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
-add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为r5.xyzw是对当前fragment在屏幕上的坐标进行前后两次偏移后获得 
-ftou r5.zw, r5.zzzw    -> float to unsigned integer 
-ishl r1.w, r5.w, l(1)  -> posPS.y << 1
-iadd r1.w, r1.w, r5.z  -> posPS.y * 2 + posPS.x 
-udiv null, r1.w, r1.w, l(5)   -> (posPS.y * 2 + posPS.x) mod 5 -> 求余数 -> 记为 R1.w (可取值: 0,1,2,3,4) 
+//采样 Purple RGB 纹理 -> 存放在 R2.xz 中
+sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y   -> r2.xz = PurpleRGB.yz 
+mul_sat r0.w, r2.x, cb1[6].x                    -> R0.w = saturate(1.5 * PurpleRGB.y) 
+
+//利用 VertexInput.xy 构造噪声         -> 存入 r1.w   ->  此噪声基于屏幕空间，与EyePosition相关 
+add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0 
+add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为 r5.xy|zw 是对当前fragment在屏幕上的坐标进行前后两次偏移后获得 
+ftou r5.zw, r5.zzzw                   -> r5.xy是屏幕坐标原始值，r5.zw是屏幕坐标‘整数’值 -> 这步可以佐证 VertexInput.xy = 屏幕像素坐标 
+ishl r1.w, r5.w, l(1)                 -> VertexInput.y << 1 
+iadd r1.w, r1.w, r5.z                 -> VertexInput.y * 2 + VertexInput.x 
+udiv null, r1.w, r1.w, l(5)           -> (VertexInput.y * 2 + VertexInput.x) mod 5 -> 求余数 -> 记为 R1.w (可取值: 0,1,2,3,4) 
 utof r1.w, r1.w 
 
+//采样 Common Noise，采样uv来自于屏幕像素坐标的变换，纹理的尺寸是 64 x 64  
+//随机值 R1.w 基于屏幕像素位置 -> 理论上会随着 视点View 的改变而改变 -> 并不是固定在模型空间上的随机数 
+mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625=1/64 -> 屏幕坐标XY/64 -> [1/64]的整数倍 
+sample_b_indexable(texture2d)(float,float,float,float) r2.w, r5.xyxx, t4.yzwx, s3, cb0[142].y 
+add r1.w, r1.w, r2.w                  -> r1.w            取值 0.0 ~ 4.99   
+mul r1.w, r1.w, cb1[6].y              -> cb1[6].y = 10   取值 0.0 ~ 49.99 
+mul r1.w, r1.w, l(0.166667)           -> 0.1667 = 1/6    取值 0.0 ~ 8.33  
 
-mul r5.xy, r5.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)
-sample_b_indexable(texture2d)(float,float,float,float) r2.w, r5.xyxx, t4.yzwx, s3, cb0[142].y
-add r1.w, r1.w, r2.w
-mul r1.w, r1.w, cb1[6].y
-mul r1.w, r1.w, l(0.166667)
+
 mad r1.y, r1.y, v4.w, l(-24.000000)
-div_sat r1.y, r1.y, cb1[6].z
+div_sat r1.y, r1.y, cb1[6].z 
 mad r1.y, r1.y, r1.w, r1.z
 div r1.y, r1.x, r1.y
 min r1.y, r1.y, v4.z
 mov_sat r1.w, cb1[5].w
-mov_sat r2.xz, r2.xxzx
+mov_sat r2.xz, r2.xxzx                  -> R2.xz = saturate(PurpleRGB.yz)
 mad o2.z, r0.w, cb0[138].y, cb0[138].x
 ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r2.y, l(4), t0.xxxx
 mul r0.w, r1.w, l(0.080000)

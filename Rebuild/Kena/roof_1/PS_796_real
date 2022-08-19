@@ -78,8 +78,8 @@ mul r1.xz, r1.xxyx, v4.wwww
 imad r2.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
 ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r2.x, l(12), t0.xxxx
 mul r0.w, r0.w, cb0[140].w
-movc r1.w, v5.x, l(1.000000), l(-1.000000)   根据VFACE判断当前像素所在几何体是正面朝向视点还是背面 
-mul r0.w, r0.w, r1.w    这里赋值r0.w 而r0.xyz是Bitangent 
+movc r1.w, v5.x, l(1.000000), l(-1.000000)      -> 根据VFACE判断当前像素所在几何体是正面朝向视点还是背面 
+mul r0.w, r0.w, r1.w                            -> 这里赋值r0.w 而r0.xyz是Bitangent 
 
 
 //采样法线纹理，解码位于切线空间的法线原始数，R2 在采样后就不再代表UV了
@@ -117,7 +117,7 @@ mul r4.xyz, r3.xyzx, cb1[3].xyzx    -> cb1[3].xyz = [0.28,0.23,0.08] -> 在RGB�
 dp3 r0.w, l(0.577350, 0.577350, 0.577350, 0.000000), r4.xyzx                  -> 则有 r0.w = dot(R4, k)
 mul r1.w, r0.w, l(0.577350)                                                   -> r1.w = k * dot(R4, k)
 mad r3.xyz, r3.xyzx, cb1[3].xyzx, -r1.wwww  -> 接下来会对临时颜色R4'(存入了r3)进行色调变换，设此处返回值 R4' = R4 - k * dot(R4, k)
-mul r4.xyz, r3.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)                -> mul + mad 组合的标注叉乘形式 
+mul r4.xyz, r3.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000)                -> mul + mad 组合 -> 标准叉乘形式 
 mad r4.xyz, r3.zxyz, l(0.577350, 0.577350, 0.577350, 0.000000), -r4.zxyz      -> cross(R4', k) 
 sincos r5.x, r6.x, cb1[4].w                                                   -> cb1[4].w = 0 记为角度A 
 mul r4.xyz, r4.xyzx, r5.xxxx                                                  -> cross(R4', k) * sinA 
@@ -128,13 +128,13 @@ mad r3.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r3.xyzx       ->
 //采样 GrassTexture + RGB各分量缩放和修正 + 色调偏转后 -> 返回到 R3 中  
 //色调(Hue)旋转参考链接：https://forum.unity.com/threads/hue-saturation-brightness-contrast-shader.260649/ 
 
-//已知 outputCol dot (0.3,0.59,0.11) = ColorIntensity 
+//已知 Color dot (0.3,0.59,0.11) = Color_Intensity 
 //以下逻辑用于求取 R3 颜色的 强度 Intensity 或叫做 Cdlum 
 dp3 r0.w, r3.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
 
 //通过 Lerp 得到最终基础色 R3
 add r4.xyz, -r3.xyzx, r0.wwww                   -> Cdlum - R3
-mad_sat r3.xyz, cb1[5].zzzz, r4.xyzx, r3.xyzx   -> cb1[5].z=0 -> R3=saturate((Cdlum - R3) * Rate + R3) -> 从 R3 lerp 到 Cdlum 
+mad_sat r3.xyz, cb1[5].zzzz, r4.xyzx, r3.xyzx   -> cb1[5].z=Rate=0 -> R3=saturate((Cdlum - R3) * Rate + R3) -> 从 R3 lerp 到 Cdlum 
 
 //采样 Noise RGB 纹理 -> 存放在 R0.w 中
 mul r4.xy, v2.xyxx, cb1[6].yyyy    -> cb1[6].y=17 -> UV scale by 17 
@@ -149,9 +149,9 @@ iadd r1.w, r1.w, r4.z                 -> VertexInput.y * 2 + VertexInput.x
 udiv null, r1.w, r1.w, l(5)           -> (VertexInput.y * 2 + VertexInput.x) mod 5 -> 求余数 -> 存入R1.w(可取值: 0,1,2,3,4) 
 utof r1.w, r1.w
 
-//采样 Common Noise，uv来自于屏幕像素坐标的变换 -> 采样返回 R 通道的一个数值 
+//采样 Common Noise，采样uv来自于屏幕像素坐标的变换，纹理的尺寸是 64 x 64  
 //随机值 R1.w 基于屏幕像素位置 -> 理论上会随着 视点View 的改变而改变 -> 并不是固定在模型空间上的随机数 
-mul r4.xy, r4.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625=1/64 -> Int型posPS.xy/64 -> 一个Tile=64*64么? 
+mul r4.xy, r4.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625=1/64 -> 屏幕坐标XY/64 -> [1/64]的整数倍 
 //在64*64见方的像素内，如下采样会得到相同的返回值 
 sample_b_indexable(texture2d)(float,float,float,float) r3.w, r4.xyxx, t4.yzwx, s3, cb0[142].y
 add r1.w, r1.w, r3.w            -> r1.w           取值 0.0 ~ 4.99 
@@ -213,7 +213,7 @@ lt r1.w, l(0.000000), cb0[139].x                                            -> 0
 //(1)已知 NDC = Clip/Clip.w； World = M^-1 * Clip -> World = M^-1 * (NDC * Clip.w)
 //(2)又 1=World.w=[M^-1*(NDC*Clip.w)].w=(M^-1*NDC).w*Clip.w -> 1=(M^-1*NDC).w*Clip.w -> Clip.w=1/(M^-1*NDC).w
 //于是将(2)带入(1)得 World = M^-1 * (NDC * Clip.w) = (M^-1*NDC) / (M^-1*NDC).w 
-if_nz r1.w                                                                  -> 这里进不去 
+if_nz r1.w                                              -> 这里进不去 
   mul r5.xyzw, v4.yyyy, cb0[45].xyzw                    -> 疑惑: v4.xyz 是屏幕像素坐标 还是 NDC.xyz ? 
   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw           -> 一种可能: 在能进入该分支的shader中，V4是通过插值寄存器传递来的NDC坐标 
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw

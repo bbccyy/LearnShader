@@ -138,7 +138,7 @@ mad_sat r4.xyz, cb1[5].zzzz, r5.xyzx, r4.xyzx    -> cb1[5].z = 0 -> R4=saturate(
 //采样 Noise RGB 纹理 
 //注意此后 R2.xz 不再代表 UV，存放了 NoiseRGB.yz 
 sample_b_indexable(texture2d)(float,float,float,float) r2.xz, r2.xzxx, t3.yxzw, s2, cb0[142].y 
-mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0.w 存放NoiseTex.y  
+mul_sat r0.w, r2.x, cb1[6].x          -> cb1[6].x = 1  -> r0.w 存放NoiseTex.y 
 
 //利用posPS.xy构造顶点噪声 -> 存入 r1.w 
 add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
