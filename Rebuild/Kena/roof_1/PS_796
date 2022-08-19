@@ -223,8 +223,9 @@ if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是�
   imad r1.xz, v3.xxxx, l(35, 0, 35, 0), l(5, 0, 19, 0)
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx 
   add r6.xyz, r5.xyzx, -r6.xyzx       -> 基于坐标 R5，进行PRIMTIVE级别的整体位置偏移 -> 获取新位置 R6 
+  
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx 
-  add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R7 是个预存的今天数据(坐标?) 
+  add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R7 是个预存在buffer中的数据(坐标?) 
   lt r6.xyz, r7.xyzx, |r6.xyzx|                                     -> 判断 预存坐标 R7 是否小于计算所得的新位置 R6 
   or r0.w, r6.y, r6.x                                               -> Bitwise or 
   or r0.w, r6.z, r0.w                                               -> Bitwise or -> 只要 R7 有任意通道 < |R6| 则 r0.w = true 

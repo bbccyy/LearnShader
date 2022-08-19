@@ -215,36 +215,52 @@ lt r1.w, l(0.000000), cb0[139].x                                            -> 0
 //于是将(2)带入(1)得 World = M^-1 * (NDC * Clip.w) = (M^-1*NDC) / (M^-1*NDC).w 
 if_nz r1.w                                                                  -> 这里进不去 
   mul r5.xyzw, v4.yyyy, cb0[45].xyzw                    -> 疑惑: v4.xyz 是屏幕像素坐标 还是 NDC.xyz ? 
-  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
+  mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw           -> 一种可能: 在能进入该分支的shader中，V4是通过插值寄存器传递来的NDC坐标 
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
   add r5.xyzw, r5.xyzw, cb0[47].xyzw                    -> 对 VertexInput.xyz 进行仿射变化 -> M^-1 * VertexInput.xyz 
   div r5.xyz, r5.xyzx, r5.wwww                          -> 对 M^-1 * VertexInput.xyz 的结果除以 (M^-1 * VertexInput.xyz).W -> 世界坐标? 
-  add r6.xyz, r5.xyzx, -cb0[70].xyzx
+  add r6.xyz, r5.xyzx, -cb0[70].xyzx                    -> cb0[70] = [0.0001957,0,0]  ->  对 R5_posWS 做一个微小偏移 -> R6_posWS 
   dp3 r1.w, -r5.xyzx, -r5.xyzx
   rsq r1.w, r1.w
-  mul r5.xyz, r1.wwww, -r5.xyzx
+  mul r5.xyz, r1.wwww, -r5.xyzx                         -> 对 R5_posWS 坐标取反朝向 + 归一化 -> 从世界中心指向外围的一个单位向量 
+
+  //求坐标 R1 -> 是基于R6朝世界外做一定偏移的新的一点  
   mad r1.x, -r1.y, r1.z, r1.x
   div r1.x, r1.x, r1.y
-  mad r1.xzw, r5.xxyz, r1.xxxx, r6.xxyz
+  mad r1.xzw, r5.xxyz, r1.xxxx, r6.xxyz                 -> [(r1.x - r1.y * r1.z) / r1.y] * R5_posWS + R6_posWS -> 基于R6朝世界外做偏移 
+  
+  //采样t0
+  //-> r5.xzw = t0[5].xyz   -> [758.2, -20064.57, 4490.1, 272.46]
+  //-> r6.xyz = t0[19].xyz  -> [237.22, 231.05, 184.73, 1.0]
   imad r5.xy, v3.xxxx, l(35, 35, 0, 0), l(5, 19, 0, 0)
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r5.xzw, r5.x, l(0), t0.xxyz
-  add r5.xzw, r1.xxzw, -r5.xxzw
+  add r5.xzw, r1.xxzw, -r5.xxzw     -> 新位置R5 = 基于坐标 R1，进行PRIMTIVE级别的整体位置偏移 
+
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r5.y, l(0), t0.xyzx
-  add r6.xyz, r6.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)
-  lt r5.xyz, r6.xyzx, |r5.xzwx|
-  or r2.w, r5.y, r5.x
-  or r2.w, r5.z, r2.w
+  add r6.xyz, r6.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R6 是个预存在buffer中的数据(坐标?) 
+
+  //判断是否处于 立方体 中心范围内   
+  lt r5.xyz, r6.xyzx, |r5.xzwx|                                     -> 判断 预存坐标 R6 是否小于计算所得的新位置 R5 
+  or r2.w, r5.y, r5.x                                               -> Bitwise or 
+  or r2.w, r5.z, r2.w                                               -> Bitwise or -> 只要 R6 有任意通道 < |R5| 则返回 true
+
+  // 判断是否处于屏幕空间某个中心范围内 
+  // r1.x = fraction(dot(r1.xzw, 0.577) * 0.002) > 0.5 ? ture : false
+  // r1.xzw 是空间位置相关的参数，且不属于[0, 1]区间，不然为何要乘以0.002，这里应该是为了判断当前像素点在屏幕空间的那个区域 -> 是否居中？ 
   dp3 r1.x, r1.xzwx, l(0.577000, 0.577000, 0.577000, 0.000000)
   mul r1.x, r1.x, l(0.002000)
-  frc r1.x, r1.x
-  lt r1.x, l(0.500000), r1.x
-  movc r1.xzw, r1.xxxx, l(0,0,1.000000,1.000000), l(1.000000,0,1.000000,0)
-  movc r2.xyz, r2.wwww, r1.xzwx, r2.xyzx
+  frc r1.x, r1.x                  -> fraction 求小数部分 
+  lt r1.x, l(0.500000), r1.x      -> 阈值判断，r1.x是否小于0.5  
+
+  movc r1.xzw, r1.xxxx, l(0,0,1.000000,1.000000), l(1.000000,0,1.000000,0)  -> r1.xzw: ture = [0,1,1], false = [1,1,0]
+
+  //r2.xyz 应该是遮罩 
+  movc r2.xyz, r2.wwww, r1.xzwx, r2.xyzx  -> 要么r2是 [0,1,1]或[1,1,0] 这种固定范式，要么是 r2.xyz = cb1[1].xyz * cb1[4].y 的值
 endif 
 
 mad r1.xzw, cb0[144].yyyy, r4.xxyz, r2.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)
-mul o0.xyz, r1.xzwx, cb0[134].yyyy
+mul o0.xyz, r1.xzwx, cb0[134].yyyy   -> [颜色 + 基于空间范围而觉得的一种“遮罩”或“强度”] * 修正因子 -> o0.xyz  
 mov o0.w, l(0)
 mov o2.xw, l(0,0,0,0.694118)
 mov o2.y, r0.w
