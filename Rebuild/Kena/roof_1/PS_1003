@@ -45,18 +45,18 @@ dcl_input_ps linear centroid v1.xyzw        -> TangentWS
 dcl_input_ps linear v2.xy                   -> UV
 dcl_input_ps constant v3.x                  -> PRIMITIVE_ID
 
-dcl_input_ps_siv linear noperspective centroid v4.xyzw, position     -> [pixelIdx.xy, NDC.z, -Clip.w] ? 
+dcl_input_ps_siv linear noperspective centroid v4.xyzw, position     -> [pixelIdx.xy, NDC.z, -Clip.w] 
 dcl_input_ps_sgv constant v5.x, is_front_face 
 
 dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
-                          o0 = [混淆后的BaseColor.rgb, 0]
+                          o0 = [混淆后的BaseColor.rgb, 0]  ->  混淆是基于空间位置的，分为靠近世界中心部分和远离世界中心部分 
 dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220
                           o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]
 dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241  
                           o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222 
                           o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆] 
-dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223
+dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223 
                           o4 = [0,0,0,0]   
 dcl_output oDepthLE
 dcl_temps 8

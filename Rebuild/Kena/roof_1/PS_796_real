@@ -49,17 +49,17 @@ dcl_input_ps_siv linear noperspective centroid v4.xyzw, position      -> PosHCS 
 dcl_input_ps_sgv constant v5.x, is_front_face                         -> VFACE 
 
 dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
-                          o0 = [混淆后的BaseColor.rgb, 0]
-dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220
+                          o0 = [混淆后的BaseColor.rgb, 0]  ->  混淆是基于空间位置的，分为靠近世界中心部分和远离世界中心部分 
+dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33         T:8220
                           o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                                 -> [NormalWS.xyz, 0.333] 
-dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241  
-                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]    -> [0,0,1,0.694118]
+dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118                          T:8241  
+                          o2 = [NoiseTex.x, cb值, NoiseTex.y偏移值, 0.694118]                   -> [0,0,1,0.694118]
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222 
-                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆]                -> [rgb, 1]
-dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223
+                          o3 = [去除强度的BaseColor.rgb, AO:来自BaseCol与NoiseTex的混淆]          -> [rgb, 1]
+dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?           T:8223 
                           o4 = [0,0,0,0]   
-dcl_output oDepthLE
-dcl_temps 7
+dcl_output oDepthLE 
+dcl_temps 7 
 
 //获取 BitangentWS -> r0.xyz = Cross(NormalWS，TangentWS) * sign 
 mul r0.xyz, v0.yzxy, v1.zxyz
@@ -259,13 +259,13 @@ if_nz r1.w                                                                  -> �
 endif 
 
 mad r1.xzw, cb0[144].yyyy, r4.xxyz, r2.xxyz
-mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)
-mul o0.xyz, r1.xzwx, cb0[134].yyyy   -> [颜色 + 基于空间范围而觉得的一种“遮罩”或“强度”] * 修正因子 -> o0.xyz  
+mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)  -> [0,1]区间的NormalWS 
+mul o0.xyz, r1.xzwx, cb0[134].yyyy   -> [颜色 + 基于空间范围的一种“遮罩”或“强度”] * 修正因子 -> o0.xyz  
 mov o0.w, l(0)
 mov o2.xw, l(0,0,0,0.694118)
-mov o2.y, r0.w
-mov o3.xyz, r3.xyzx
+mov o2.y, r0.w                       -> 这里的 r0.w = cb1[5].w = 0 
+mov o3.xyz, r3.xyzx                  -> 经过Hue shift，并重新调整了Intensity的 BaseColor 
 mov o4.xyzw, l(0,0,0,0)
-mov oDepthLE, r1.y
+mov oDepthLE, r1.y 
 ret 
 // Approximately 0 instruction slots used

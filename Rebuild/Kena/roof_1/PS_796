@@ -172,7 +172,7 @@ mov_sat r1.w, cb1[5].w    -> 清零
 mov_sat r2.xz, r2.xxzx    -> saturate(NoisseTexRGB.xz) 
 
 //**填充 o2.z**
-//r0.w 存放 NoiseTex.x 采样结果，这里通过未知缩放和平移(cb0部分数据感觉不对)，变换后输出到偏蓝图片Blue通道中去  
+//r0.w 存放 NoiseTex.y 采样结果，这里通过未知缩放和平移(cb0部分数据感觉不对)，变换后输出到偏蓝图片Blue通道中去  
 mad o2.z, r0.w, cb0[138].y, cb0[138].x     
 
 //**填充 o1.w** -> 采样自 t0 buffer 
@@ -223,7 +223,7 @@ if_nz r0.w   -> if_z 只有当r0.w所有bit都是0时才为true； if_nz 则是�
   imad r1.xz, v3.xxxx, l(35, 0, 35, 0), l(5, 0, 19, 0)
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r1.x, l(0), t0.xyzx 
   add r6.xyz, r5.xyzx, -r6.xyzx       -> 基于坐标 R5，进行PRIMTIVE级别的整体位置偏移 -> 获取新位置 R6 
-  
+
   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r1.z, l(0), t0.xyzx 
   add r7.xyz, r7.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000)    -> R7 是个预存在buffer中的数据(坐标?) 
   lt r6.xyz, r7.xyzx, |r6.xyzx|                                     -> 判断 预存坐标 R7 是否小于计算所得的新位置 R6 
@@ -241,11 +241,11 @@ endif
 
 mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) 
-mul o0.xyz, r2.yzwy, cb0[134].yyyy   -> cb0[134].y 本身应该也是个控制阀门 
+mul o0.xyz, r2.yzwy, cb0[134].yyyy   -> [颜色 + 基于空间范围的一种“遮罩”或“强度”] * 修正因子 -> o0.xyz  
 mov o0.w, l(0)
 mov o2.x, r2.x              -> NoiseRGB.x 
 mov o2.w, l(0.694118)
-mov o2.y, r1.w              -> CommonNoise.R关联值 
+mov o2.y, r1.w              -> cb1[5].w = 0 
 mov o3.xyz, r4.xyzx         -> 存放经过Hue shift，并重新调整了Intensity的 BaseColor 
 mov o4.xyzw, l(0,0,0,0)
 mov oDepthLE, r1.y          -> 功能类似于Clip? r1.y 存放了噪声过的Clip.z，由于视方向远方为-z方向，所以取min(r1.y, Clip.z) 得到的点要么在z上，要么在当前z平面的后方(更远处)，通过 oDepthLE 寄存器，在 Z-TEST期间丢掉不需要的 Pixels 
