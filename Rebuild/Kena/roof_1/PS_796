@@ -173,7 +173,7 @@ mov_sat r2.xz, r2.xxzx    -> saturate(NoisseTexRGB.xz)
 
 //**填充 o2.z**
 //r0.w 存放 NoiseTex.x 采样结果，这里通过未知缩放和平移(cb0部分数据感觉不对)，变换后输出到偏蓝图片Blue通道中去  
-mad o2.z, r0.w, cb0[138].y, cb0[138].x     -> o2.z 实际数值为 1.0 
+mad o2.z, r0.w, cb0[138].y, cb0[138].x     
 
 //**填充 o1.w** -> 采样自 t0 buffer 
 //r2.y = PRIMITIVE_ID * 35 + 20
@@ -182,10 +182,10 @@ ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o
 
 //将 Noise 作用到 baseCol 
 //拆分出了 2 个不同混淆后的基础色 R5 和 R6 
-mul r0.w, r1.w, l(0.080000)    -> CommonNoise.R关联值 * 0.08
-mad r5.xyz, -r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx   -> baseCol关联值 - (CommonNoise.R关联值 * 0.08)
-mad r5.xyz, r2.xxxx, r5.xyzx, r0.wwww                 -> R5=(baseCol值 - (CNoise.R值 * 0.08)) * NoiseRGB.x + (CNoise.R值 * 0.08)
-mad r6.xyz, -r4.xyzx, r2.xxxx, r4.xyzx                -> R6= baseCol值 - (baseCol值 * NoiseRGB.x)
+mul r0.w, r1.w, l(0.080000)    -> cb1[5].w * 0.08 -> 很可能还是 0 
+mad r5.xyz, -r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx   -> baseCol关联值R4 - (cb1[5].w * 0.08^2)
+mad r5.xyz, r2.xxxx, r5.xyzx, r0.wwww                 -> R5= [baseCol值R4 - (cb1[5].w * 0.08^2)] * NoiseRGB.x + (cb1[5].w * 0.08) = R4 * NoiseX
+mad r6.xyz, -r4.xyzx, r2.xxxx, r4.xyzx                -> R6= baseCol值R4 - (baseCol值R4 * NoiseRGB.x) = R4 * (1 - NoiseX)
 mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx     -> 未知缩放 + 平移 可以默认为 scale=1，offset=0
 mad r5.xyz, r5.xyzx, cb0[136].wwww, cb0[136].xyzx
 ne r0.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w            ->  r0.w = ( cb0[177].w != 0 )  -> 已知cb0[177].w=0
@@ -242,7 +242,7 @@ mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) 
 mul o0.xyz, r2.yzwy, cb0[134].yyyy   -> cb0[134].y 本身应该也是个控制阀门 
 mov o0.w, l(0)
-mov o2.x, r2.x              -> NoiseRGB.x -> 实际上均为 0  -> TODO: 为何是0，从采样贴图上看不可能存在0返回值 
+mov o2.x, r2.x              -> NoiseRGB.x 
 mov o2.w, l(0.694118)
 mov o2.y, r1.w              -> CommonNoise.R关联值 
 mov o3.xyz, r4.xyzx         -> 存放经过Hue shift，并重新调整了Intensity的 BaseColor 
@@ -254,7 +254,7 @@ ret
 //后记 
 //o0 = [混淆后的BaseColor.rgb, 0]                          T:8264 -> 未知：类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件
 //o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                                 T:8220 -> [NormalWS.xyz, 0.333] 
-//o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]    T:8241 -> [0,0,1,0.694118]
+//o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]    T:8241 -> [?,?,?,0.694118]
 //o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆]                T:8222 -> [rgb, 1]
 //o4 = [0,0,0,0]                                                       T:8223 -> 未知：感觉是区分了角色，树木和建筑等的一种Mask 
 

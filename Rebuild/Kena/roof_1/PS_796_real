@@ -51,11 +51,11 @@ dcl_input_ps_sgv constant v5.x, is_front_face                         -> VFACE
 dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天空盒，以及极少数半透明物件(灯笼？)  T:8264 
                           o0 = [混淆后的BaseColor.rgb, 0]
 dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33   T:8220
-                          o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]
+                          o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                                 -> [NormalWS.xyz, 0.333] 
 dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量设置为 0.694118  T:8241  
-                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]
+                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]    -> [0,0,1,0.694118]
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色  T:8222 
-                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆] 
+                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆]                -> [rgb, 1]
 dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?    T:8223
                           o4 = [0,0,0,0]   
 dcl_output oDepthLE
@@ -132,7 +132,7 @@ mad r3.xyz, r0.wwww, l(0.577350, 0.577350, 0.577350, 0.000000), r3.xyzx       ->
 //以下逻辑用于求取 R3 颜色的 强度 Intensity 或叫做 Cdlum 
 dp3 r0.w, r3.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
 
-//通过 Lerp 得到最终基础色 R4 
+//通过 Lerp 得到最终基础色 R3
 add r4.xyz, -r3.xyzx, r0.wwww                   -> Cdlum - R3
 mad_sat r3.xyz, cb1[5].zzzz, r4.xyzx, r3.xyzx   -> cb1[5].z=0 -> R3=saturate((Cdlum - R3) * Rate + R3) -> 从 R3 lerp 到 Cdlum 
 
@@ -170,18 +170,28 @@ min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z -> 既取到的
 
 add r0.w, r0.w, l(-0.100000)          -> NoiseRGB.x - 0.1
 lt r0.w, r0.w, l(0.000000)            -> (NoiseRGB.x - 0.1) < 0 ? true : false 
-discard_nz r0.w
-mov_sat r0.w, cb1[5].w
-mov_sat r1.w, cb1[6].x
-mad o2.z, r1.w, cb0[138].y, cb0[138].x
+discard_nz r0.w                       -> Discard 部分像素 -> 依据 NoiseRGB.x 
+
+
+mov_sat r0.w, cb1[5].w                -> cb1[5].w = 0  -> 清空 r0.w 
+mov_sat r1.w, cb1[6].x                -> cb1[6].x = 1  -> r1.w = 1 
+
+//**填充 o2.z**
+mad o2.z, r1.w, cb0[138].y, cb0[138].x   -> cb0[138].xy = [0, 1] -> 从实际返回值中读取到的 o2.z = 1 
+
+//**填充 o1.w** -> 采样自 t0 buffer 
+//r2.y = PRIMITIVE_ID * 35 + 20  ->  取 35 * 0 + 20 = 20 
+//o1.w = 0.333
 ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r2.y, l(4), t0.xxxx
-mul r1.w, r0.w, cb0[136].w
-mad r4.xyz, r3.xyzx, cb0[135].wwww, cb0[135].xyzx
-mad r5.xyz, r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), cb0[136].xyzx
-ne r1.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w
-mad r6.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx
-movc r4.xyz, r1.wwww, r6.xyzx, r4.xyzx
-movc r5.xyz, r1.wwww, l(0,0,0,0), r5.xyzx
+
+
+mul r1.w, r0.w, cb0[136].w                                -> r1.w = 0
+mad r4.xyz, r3.xyzx, cb0[135].wwww, cb0[135].xyzx         -> 颜色 R3 的缩放 + 平移 -> cb0[135]数据异常，默认 r4 == R3 
+mad r5.xyz, r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), cb0[136].xyzx     -> r5.xyz = 0 ? 
+ne r1.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w                    -> cb0[177].w = 0 -> r1.w = false 
+mad r6.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx           -> R6 是 R5颜色 和 R4颜色的线性组合 -> = R4 = R3 
+movc r4.xyz, r1.wwww, r6.xyzx, r4.xyzx       -> R4 应该还是 R4 
+movc r5.xyz, r1.wwww, l(0,0,0,0), r5.xyzx    -> R5 应该还是 R5
 dp3 r1.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
 mad r2.y, r1.w, l(2.040400), l(-0.332400)
 mad r2.y, r1.w, l(-4.795100), r2.y
