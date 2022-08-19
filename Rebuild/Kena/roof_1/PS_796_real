@@ -181,32 +181,44 @@ mad o2.z, r1.w, cb0[138].y, cb0[138].x   -> cb0[138].xy = [0, 1] -> 从实际返
 
 //**填充 o1.w** -> 采样自 t0 buffer 
 //r2.y = PRIMITIVE_ID * 35 + 20  ->  取 35 * 0 + 20 = 20 
-//o1.w = 0.333
-ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r2.y, l(4), t0.xxxx
+//o1.w = 0.333 
+ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r2.y, l(4), t0.xxxx 
 
 
-mul r1.w, r0.w, cb0[136].w                                -> r1.w = 0
+mul r1.w, r0.w, cb0[136].w                                -> r1.w & r0.w = 0
 mad r4.xyz, r3.xyzx, cb0[135].wwww, cb0[135].xyzx         -> 颜色 R3 的缩放 + 平移 -> cb0[135]数据异常，默认 r4 == R3 
-mad r5.xyz, r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), cb0[136].xyzx     -> r5.xyz = 0 ? 
-ne r1.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w                    -> cb0[177].w = 0 -> r1.w = false 
-mad r6.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx           -> R6 是 R5颜色 和 R4颜色的线性组合 -> = R4 = R3 
+//估计下面 R5 是某种环境光底色(或遮蔽AO)，由强度 0.8*(cb0[136].w * cb1[5].w) 和 色调 cb0[136].xyz 组成(?) 
+mad r5.xyz, r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), cb0[136].xyzx     -> r5.xyz = 0.8*(cb0[136].w * cb1[5].w)+cb0[136].xyz=0 
+//cb0[177].w 应该是一个控制开关，控制是否提前合并“基础环境光(遮蔽)”，或者把 “基础环境光(遮蔽)” 输出到纹理中 
+ne r1.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb0[177].w                    -> cb0[177].w = 0 -> r1.w = false
+//R6颜色 是 R5颜色(基础环境光) 和 R4颜色(纹理采样色)的线性组合
+mad r6.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx           -> R6 = 0.45*R5 + R4 
 movc r4.xyz, r1.wwww, r6.xyzx, r4.xyzx       -> R4 应该还是 R4 
-movc r5.xyz, r1.wwww, l(0,0,0,0), r5.xyzx    -> R5 应该还是 R5
-dp3 r1.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
+movc r5.xyz, r1.wwww, l(0,0,0,0), r5.xyzx    -> R5 应该还是 R5 
+//**填充 o3.w** 一般认为 o3.w 是作为 AO 贴图使用的 
+//由此佐证了 R5 颜色的本质是环境光(遮蔽)相关的 
+dp3 r1.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)                -> 提取 R5颜色(环境光) 的光强度，记为 Value 
 mad r2.y, r1.w, l(2.040400), l(-0.332400)
 mad r2.y, r1.w, l(-4.795100), r2.y
-mad r1.w, r1.w, l(2.755200), r2.y
-add r1.w, r1.w, l(1.332000)
-max o3.w, r1.w, l(1.000000)
-mad r4.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx
-max r2.xyz, r2.xzwx, l(0.000000, 0.000000, 0.000000, 0.000000)
-lt r1.w, l(0.000000), cb0[139].x
-if_nz r1.w
-  mul r5.xyzw, v4.yyyy, cb0[45].xyzw
+mad r1.w, r1.w, l(2.755200), r2.y                                           -> 2.04*Value - 0.33 - 4.79*Value + 2.75*Value -> -0.33
+add r1.w, r1.w, l(1.332000)                                                 -> 1.33 - 0.33 -> 接近 1 的值 
+max o3.w, r1.w, l(1.000000)                                                 -> **填充 o3.w** -> 非常接近 1 的值 
+
+mad r4.xyz, r5.xyzx, l(0.450000, 0.450000, 0.450000, 0.000000), r4.xyzx     -> R4 = 0.45*R5 + R4 
+max r2.xyz, r2.xzwx, l(0.000000, 0.000000, 0.000000, 0.000000)              -> max(cb1[1].xyz * cb1[4].y, 0) -> 查cb1得 0 
+lt r1.w, l(0.000000), cb0[139].x                                            -> 0 < cb0[139].x ? true : false -> false 
+
+//if_z 只有当r1.w所有bit都是0时才为true； if_nz 则是当r1.w有任意bit不是0时就为true
+//此外补充个重建世界坐标的推导：
+//(1)已知 NDC = Clip/Clip.w； World = M^-1 * Clip -> World = M^-1 * (NDC * Clip.w)
+//(2)又 1=World.w=[M^-1*(NDC*Clip.w)].w=(M^-1*NDC).w*Clip.w -> 1=(M^-1*NDC).w*Clip.w -> Clip.w=1/(M^-1*NDC).w
+//于是将(2)带入(1)得 World = M^-1 * (NDC * Clip.w) = (M^-1*NDC) / (M^-1*NDC).w 
+if_nz r1.w                                                                  -> 这里进不去 
+  mul r5.xyzw, v4.yyyy, cb0[45].xyzw                    -> 疑惑: v4.xyz 是屏幕像素坐标 还是 NDC.xyz ? 
   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
-  add r5.xyzw, r5.xyzw, cb0[47].xyzw
-  div r5.xyz, r5.xyzx, r5.wwww
+  add r5.xyzw, r5.xyzw, cb0[47].xyzw                    -> 对 VertexInput.xyz 进行仿射变化 -> M^-1 * VertexInput.xyz 
+  div r5.xyz, r5.xyzx, r5.wwww                          -> 对 M^-1 * VertexInput.xyz 的结果除以 (M^-1 * VertexInput.xyz).W -> 世界坐标? 
   add r6.xyz, r5.xyzx, -cb0[70].xyzx
   dp3 r1.w, -r5.xyzx, -r5.xyzx
   rsq r1.w, r1.w
@@ -229,6 +241,7 @@ if_nz r1.w
   movc r1.xzw, r1.xxxx, l(0,0,1.000000,1.000000), l(1.000000,0,1.000000,0)
   movc r2.xyz, r2.wwww, r1.xzwx, r2.xyzx
 endif 
+
 mad r1.xzw, cb0[144].yyyy, r4.xxyz, r2.xxyz
 mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)
 mul o0.xyz, r1.xzwx, cb0[134].yyyy
