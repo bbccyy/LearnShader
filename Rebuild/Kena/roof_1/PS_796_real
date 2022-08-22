@@ -158,7 +158,7 @@ add r1.w, r1.w, r3.w            -> r1.w           取值 0.0 ~ 4.99
 mul r1.w, r1.w, cb1[6].w        -> cb1[6].w = 30  取值 0.0 ~ 149.99 
 mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6    取值 0.0 ~ 24.99 
 
-//目的是为了转换出 R1.y -> 某种基于距离的 Noise -> 推测用于 Dithering(?) 在一定距离内
+//目的是为了转换出 R1.y -> 某种基于距离的 Noise -> 推测用于 Dithering(?) 在一定距离内 
 //R1.y 等效于一种计算出来的 NDC.z 
 //若 Clip.w 没有落在 [24~280] 间，则下面的 div_sat 指令会在结果小于24时返回值恒为0，大于280时返回恒为1 
 //Clip.w 等效视空间z轴距离 
@@ -168,7 +168,7 @@ mad r1.y, r1.y, r1.w, r1.z            -> r1.y = saturate((Clip.w-24)/256) * rand
 div r1.y, r1.x, r1.y                  -> r1.y = Clip.z / (saturate((Clip.w-24)/256) * rand[0, 24.99] + Clip.w) 
 min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z -> 既取到的 R1.y 总是在原始 NDC.z 之前（靠近摄像机) 
 
-add r0.w, r0.w, l(-0.100000)          -> NoiseRGB.x - 0.1
+add r0.w, r0.w, l(-0.100000)          -> NoiseRGB.x - 0.1 
 lt r0.w, r0.w, l(0.000000)            -> (NoiseRGB.x - 0.1) < 0 ? true : false 
 discard_nz r0.w                       -> Discard 部分像素 -> 依据 NoiseRGB.x 
 
