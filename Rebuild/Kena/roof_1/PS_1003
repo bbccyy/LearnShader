@@ -167,8 +167,8 @@ mov_sat r2.xz, r2.xxzx                  -> R2.xz = saturate(PurpleRGB.yz)
 
 //**填充 o2.z**
 //r0.w 存放 PurpleRGB.y 采样并放大1.5倍的结果，这里通过某种缩放和平移(cb0部分数据感觉不对)，变换后输出到偏蓝图片Blue通道中去 
-//从输出截图来看，效果类似于草皮上的粗糙度(待考?) 
-mad o2.z, r0.w, cb0[138].y, cb0[138].x
+//从输出截图来看，效果类似于原始的 PurpleRGB.y 通道采样结果 
+mad o2.z, r0.w, cb0[138].y, cb0[138].x  -> cb0[138].y可能是 1 / 1.5 
 
 //**填充 o1.w** -> 采样自 t0 buffer 
 //r2.y = PRIMITIVE_ID * 35 + 20
@@ -199,9 +199,13 @@ mad r0.w, r0.w, r2.z, r7.z
 mul r0.w, r2.z, r0.w              -> 利用随机数 R7 对 PurpleRGB.z 进行处理 
 max o3.w, r0.w, r2.z              -> max(随机化处理的PurpleRGB.z, PurpleRGB.z原始值) 
 
-mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz
-max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
-lt r0.w, l(0.000000), cb0[139].x
+mad r2.yzw, r5.xxyz, l(0.000000, 0.450000, 0.450000, 0.450000), r6.xxyz     -> R2.yzw 是 R5 和 R6 的混合结果 -> R5 * 0.45 + R6 
+max r3.xyz, r3.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)              -> R3 = max(cb1[1].xyzx * cb1[4].z, 0) -> 0 
+
+//依据buffer参数控制开关：会影响部分(基于空间的)后处理效果 
+lt r0.w, l(0.000000), cb0[139].x                                            -> 0 < cb0[139].x ? true : false -> false 
+
+//这部分具体参考 PS_796, 两者是一样的 
 if_nz r0.w
   mul r5.xyzw, v4.yyyy, cb0[45].xyzw
   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
@@ -228,16 +232,19 @@ if_nz r0.w
   frc r1.x, r1.x
   lt r1.x, l(0.500000), r1.x
   movc r5.xyz, r1.xxxx, l(0,1.000000,1.000000,0), l(1.000000,1.000000,0,0)
-  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx
+
+  //这是分支计算的最后返回值 R3.xyz 
+  movc r3.xyz, r0.wwww, r5.xyzx, r3.xyzx  -> 要么r3是 [0,1,1]或[1,1,0] 这种固定范式，要么是 max(cb1[1].xyzx * cb1[4].z, 0) 的值
 endif 
-mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz
-mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000)
-mul o0.xyz, r2.yzwy, cb0[134].yyyy
+
+mad r2.yzw, cb0[144].yyyy, r2.yyzw, r3.xxyz  ->  R5,R6混合色缩放 + 偏移 (此时数值可能超 1.0)
+mad o1.xyz, r0.xyzx, l(0.500000, 0.500000, 0.500000, 0.000000), l(0.500000, 0.500000, 0.500000, 0.000000) -> [0,1]区间的NormalWS 
+mul o0.xyz, r2.yzwy, cb0[134].yyyy  -> 缩放修正，确保输出值小于1.0 
 mov o0.w, l(0)
-mov o2.x, r2.x
+mov o2.x, r2.x                      -> PurpleRGB.y 
 mov o2.w, l(0.694118)
-mov o2.y, r1.w
-mov o3.xyz, r4.xyzx
+mov o2.y, r1.w                      -> cb1[5].w = 0.2 
+mov o3.xyz, r4.xyzx                 -> 经过Hue shift，并重新调整了Intensity的 BaseColor 
 mov o4.xyzw, l(0,0,0,0)
 mov oDepthLE, r1.y
 ret 

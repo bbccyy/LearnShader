@@ -255,7 +255,7 @@ if_nz r1.w                                              -> 这里进不去
   movc r1.xzw, r1.xxxx, l(0,0,1.000000,1.000000), l(1.000000,0,1.000000,0)  -> r1.xzw: ture = [0,1,1], false = [1,1,0]
 
   //r2.xyz 应该是遮罩 
-  movc r2.xyz, r2.wwww, r1.xzwx, r2.xyzx  -> 要么r2是 [0,1,1]或[1,1,0] 这种固定范式，要么是 r2.xyz = cb1[1].xyz * cb1[4].y 的值
+  movc r2.xyz, r2.wwww, r1.xzwx, r2.xyzx  -> 要么r2是 [0,1,1]或[1,1,0] 这种固定范式，要么是 max(cb1[1].xyzx * cb1[4].z, 0) 的值
 endif 
 
 mad r1.xzw, cb0[144].yyyy, r4.xxyz, r2.xxyz
