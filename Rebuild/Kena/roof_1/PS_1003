@@ -53,10 +53,10 @@ dcl_output o0.xyzw        未知 -> 类似剪影，基本上只渲染上了天�
 dcl_output o1.xyzw        可能是 normal  A通道在角色上0.66，在某些其他物件上0.33                T:8220 
                           o1 = [NormalWS.xyz, t0[PRIMTIVE_ID]]                               -> [NormalWS.xyz, 0.333] 
 dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量为手K的值                                       T:8241  
-                          o2 = [NoiseTex.x, CommonNoise.x关联值, NoiseTex.x偏移值, 0.694118]  -> [?,?,?,0.694118]
+                          o2 = [PurpleRGB.y, cb1[5].w=0.2, PurpleRGB.y偏移值, 0.694118]       -> [?,0.2,?,0.694118] 
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色         T:8222 
-                          o3 = [去除强度的BaseColor.rgb, BaseCol与NoiseTex的混淆]              -> [rgb, 1]
-dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建筑 -> 一种 Mask ?                  T:8223 
+                          o3 = [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z]              -> [rgb, ?] 
+dcl_output o4.xyzw        未知 -> 似乎区分了角色衣服布料和树叶 -> 一种 Mask ?                   T:8223 
                           o4 = [0,0,0,0]   
 dcl_output oDepthLE
 dcl_temps 8
