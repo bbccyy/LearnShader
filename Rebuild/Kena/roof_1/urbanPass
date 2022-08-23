@@ -152,7 +152,10 @@ add r13.xyz, -r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) 				-> 1-{R12-
 mad r13.xyz, r7.wwww, r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) -> R13=0.85*(NdotL-1)*{1+0.78*[(R12)^2 - R12]-R12} + 1 
 mul r12.xyz, r12.xyzx, r13.xyzx 												-> R12 颜色 = R12 * R13 
 
-
+//r5.x 来自 T11，既纹理11，似乎是用来控制(开关) 菲尼尔效果的Flag
+//如下的 r12.w 构成了 Shilick Fresnel 的核心元素: (1 - cosθ)^5 
+//对于茅草和实木而言，输出颜色 R12 任然只是趋向 R10
+//而少部分高处的树叶，输出颜色 R12 则受到Fresnel影响比较大 
 add r7.w, -r3.x, l(1.000000)  				-> 1 - NdotL -> [0, 1] 
 mul r11.w, r7.w, r7.w 						-> (1 - NdotL)^2 
 mul r11.w, r11.w, r11.w 					-> (1 - NdotL)^4 
@@ -161,9 +164,8 @@ mad r7.w, -r11.w, r7.w, l(1.000000)  		-> 1 - (1 - NdotL)^5
 mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5 
 mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - {0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5} * r5.x -> r5.x = 0
 mul r13.xyz, r7.wwww, r10.xyzx 				-> R13 = R10 * 1
-
 mul r12.xyz, r7.zzzz, r12.xyzx 				-> R12 颜色 * [形似NdotL] 
-mul r7.z, r5.x, r6.w 						-> r5.x=0 * Purple.y 
+mul r7.z, r5.x, r6.w 						-> r7.z = [0] * [0 or Purple.y] 
 mad r12.xyz, r12.xyzx, l(0.900000, 0.900000, 0.900000, 0.000000), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R10颜色 
 mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> R13 
 
