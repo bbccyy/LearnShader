@@ -56,11 +56,12 @@ dcl_temps 20
 
 mul r0.xy, v0.xyxx, cb1[131].zwzz  		屏幕像素序号xy * 像素倒数  ->  用于采样贴图的屏幕 UV 
 
-//未知 
-add r0.zw, v0.xxxy, -cb1[129].xxxy 
-mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000)
-mul r1.xy, r1.xyxx, v0.wwww 
-mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000) 
+//未知 -> r1.xy 应当趋向 NDC.xy 
+//注意 v0.w 对应全屏 Blit 使用的三角形面片的视深度 
+add r0.zw, v0.xxxy, -cb1[129].xxxy     -> cb1[129].xy = 0 
+mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000) -> v0.xy/[height,width] - [0.5,0.5] 
+mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * Clip.w 
+mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * Clip.w 
 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33
 sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
@@ -68,8 +69,8 @@ sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyz
 sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 ?? 
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
-//Linear01Depth
-//Z buffer to linear 0..1 depth
+//Decode Depth
+//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								-> 0 
 mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								-> 0.1 * depthRaw
 div r1.z, l(1.000000, 1.000000, 1.000000, 1.000000), r1.z 			-> 1/(0.1*depthRaw)
@@ -78,56 +79,69 @@ add r1.z, r1.z, r1.w 												-> 1/(0.1*depthRaw) + (depthRaw*a+b)
 mul r6.xy, r0.xyxx, cb1[131].xyxx 									-> 像素坐标索引 
 ftou r6.xy, r6.xyxx
 
+//Condition: 某种 2x2 块状像素分割逻辑 
 ftou r1.w, cb1[151].x 		-> 1
 iadd r2.w, r6.y, r6.x 		-> x + y 
 iadd r1.w, r1.w, r2.w 		-> x + y + 1
 and r1.w, r1.w, l(1)        -> 判断奇偶?   ->  某种块状分割逻辑 
 
+//法线 
 mad r2.xyz, r2.xyzx, l(2.000000, 2.000000, 2.000000, 0.000000), l(-1.000000, -1.000000, -1.000000, 0.000000) 
 dp3 r2.w, r2.xyzx, r2.xyzx
 rsq r2.w, r2.w
-mul r6.xyz, r2.wwww, r2.xyzx
+mul r6.xyz, r2.wwww, r2.xyzx   -> R6 
+
+//r3.zy = [Purple.y修改值, 0.2]
 mul r7.xy, r3.zyzz, l(255.000000, 0.080000, 0.000000, 0.000000)
-round_ne r6.w, r7.x
+round_ne r6.w, r7.x     -> 四舍五入到整数float值 ->  颜色[0~255]
 ftou r6.w, r6.w
-and r7.xz, r6.wwww, l(15, 0, 16, 0)
-movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw
-ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)
-movc r6.w, r8.x, l(0), r3.x
-mad r9.xyz, -r3.yyyy, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx
-mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy
-or r7.y, r8.x, r8.y
-lt r7.z, l(0.000000), cb1[155].x
-lt r7.w, l(0.000000), cb1[200].z
-and r7.z, r7.w, r7.z
-ne r7.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb1[155].x
-movc r8.xyw, r7.wwww, l(1.000000,1.000000,0,1.000000), r4.xyxz
-movc r10.xy, r1.wwww, l(1.000000,0,0,0), l(0,1.000000,0,0)
-mul r11.xyz, r9.xyzx, r10.yyyy
-mul r11.w, r3.y, r10.y
-movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx
-mov r9.w, r3.y
-movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw
+and r7.xz, r6.wwww, l(15, 0, 16, 0)   	-> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
+movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  -> 未知纹理采样返回值 
+ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    	-> Condition: r7.x 返回值是否落在给定区间 
+movc r6.w, r8.x, l(0), r3.x    			-> r3.x = Purple.y 
+mad r9.xyz, -r3.yyyy, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx  -> BaseCol.rgb - 0.2*0.08 
+mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   -> (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  -> R9 颜色 
+or r7.y, r8.x, r8.y 					-> Condition: 比 r8 单个通道几率更高 
+lt r7.z, l(0.000000), cb1[155].x 		-> 0 < 1 ? true 
+lt r7.w, l(0.000000), cb1[200].z  		-> 0 < 1 ? true 
+and r7.z, r7.w, r7.z 					-> 同时满足才OK 
+ne r7.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb1[155].x  	-> false 
+movc r8.xyw, r7.wwww, l(1.000000,1.000000,0,1.000000), r4.xyxz		-> r8.xyw = BaseCol.rgb
+movc r10.xy, r1.wwww, l(1.000000,0,0,0), l(0,1.000000,0,0) 			-> 某种2x2块状分割逻辑 -> r10.xy = [1,0] or [0,1] 
+mul r11.xyz, r9.xyzx, r10.yyyy 					-> R11 颜色 -> R9 颜色 * 方块Mask  -> 可颜色 可0 
+mul r11.w, r3.y, r10.y 							-> R11 颜色透明通道 = 0.2 * 方块Mask 
+movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx 		-> R10 颜色 -> 要么 互补方块Mask的值[0 or 1] (√)，要么 BaseCol.rgb 
+mov r9.w, r3.y 									-> R9 颜色透明通道 = 0.2
+movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> 互补方块Mask决定 R11 <- 用R11颜色 (√) 还是 R9颜色 
 mov r10.w, r11.w
-mov r12.xyz, r4.xyzx
+mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb， Alpha = 0.2 
 mov r12.w, r9.w
-movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw
-mul r4.xy, r1.zzzz, r1.xyxx
+movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 R12 颜色
+
+//重构世界坐标 
+mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> Clip.xy (待考?) 
 mul r8.xyw, r4.yyyy, cb1[49].xyxz
 mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx
 mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx
-add r4.xyz, r4.xyzx, cb1[51].xyzx
-add r8.xyw, r4.xyxz, -cb1[67].xyxz
+add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> R4.xyz = PosWS 
+
+//LightDir -> R8 -> From Sun To ViewPoint 
+add r8.xyw, r4.xyxz, -cb1[67].xyxz    		-> 猜测这是光源(也可能是摄像机?)的世界空间坐标[-58890, 27509, -6150] 
 dp3 r1.w, r8.xywx, r8.xywx
 rsq r1.w, r1.w
 mul r8.xyw, r1.wwww, r8.xyxw
-dp3 r1.w, r6.xyzx, -r8.xywx
-mov_sat r3.x, r1.w
-mad r7.z, r3.x, l(0.500000), l(0.500000)
-mad r7.z, r7.z, r3.x, l(-1.000000)
-mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)
-mul r9.w, r7.w, r7.z
-mad r7.z, r7.z, r7.w, l(1.000000)
+
+
+//计算类似 Half Lambert的值，存入 R7.z 
+dp3 r1.w, r6.xyzx, -r8.xywx  					-> 法线 点乘 光方向(的反方向)  -> Lambert 模型  
+mov_sat r3.x, r1.w   							-> saturate(dot(NormalWS, -ViewDir)) = NdotL -> [0, 1]区间 
+mad r7.z, r3.x, l(0.500000), l(0.500000)    	-> NdotL * 0.5 + 0.5 -> half Lambert 
+mad r7.z, r7.z, r3.x, l(-1.000000) 				-> (NdotL * 0.5 + 0.5) * NdotL - 1  -> 若(L ⊥ N) 得-1，反之得0 
+mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)	-> saturate(1.25 - 1.25 * NdotL)  -> 若(L ⊥ N)得1，反之得0 
+mul r9.w, r7.w, r7.z 							-> saturate(1.25 - 1.25 * NdotL) * (half_Lambert * NdotL - 1) -> [-1, 0]区间
+mad r7.z, r7.z, r7.w, l(1.000000) 				-> 类似 R9.w -> 转换到 [0, 1] 区间，垂直得0，同向得1 
+
+
 mul r12.xyz, r10.xyzx, l(1.111111, 1.111111, 1.111111, 0.000000)
 add r7.w, r3.x, l(-1.000000)
 mul r7.w, r7.w, l(0.850000)
