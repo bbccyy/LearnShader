@@ -116,7 +116,7 @@ movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> 互补方块Mask决定 R11 <- 用
 mov r10.w, r11.w
 mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb， Alpha = 0.2 
 mov r12.w, r9.w
-movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 R12 颜色
+movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 BaseCol.rgb 
 
 //重构世界坐标 
 mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> Clip.xy (待考?) 
@@ -153,18 +153,21 @@ mad r13.xyz, r7.wwww, r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) -> R13
 mul r12.xyz, r12.xyzx, r13.xyzx 												-> R12 颜色 = R12 * R13 
 
 
-add r7.w, -r3.x, l(1.000000)
-mul r11.w, r7.w, r7.w
-mul r11.w, r11.w, r11.w
-mul r12.w, r7.w, r11.w
-mad r7.w, -r11.w, r7.w, l(1.000000)
-mad r7.w, r7.w, l(0.040000), r12.w
-mad r7.w, r5.x, -r7.w, l(1.000000)
-mul r13.xyz, r7.wwww, r10.xyzx
-mul r12.xyz, r7.zzzz, r12.xyzx
-mul r7.z, r5.x, r6.w
-mad r12.xyz, r12.xyzx, l(0.900000, 0.900000, 0.900000, 0.000000), -r13.xyzx
-mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx
+add r7.w, -r3.x, l(1.000000)  				-> 1 - NdotL -> [0, 1] 
+mul r11.w, r7.w, r7.w 						-> (1 - NdotL)^2 
+mul r11.w, r11.w, r11.w 					-> (1 - NdotL)^4 
+mul r12.w, r7.w, r11.w 						-> R12.w = (1 - NdotL)^5 
+mad r7.w, -r11.w, r7.w, l(1.000000)  		-> 1 - (1 - NdotL)^5 
+mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5 
+mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - {0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5} * r5.x -> r5.x = 0
+mul r13.xyz, r7.wwww, r10.xyzx 				-> R13 = R10 * 1
+
+mul r12.xyz, r7.zzzz, r12.xyzx 				-> R12 颜色 * [形似NdotL] 
+mul r7.z, r5.x, r6.w 						-> r5.x=0 * Purple.y 
+mad r12.xyz, r12.xyzx, l(0.900000, 0.900000, 0.900000, 0.000000), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R10颜色 
+mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> R13 
+
+//AO 
 sample_l_indexable(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0.000000)
 mad r13.xy, -cb1[129].xyxx, cb1[131].zwzz, r0.xyxx
 min r13.xy, r13.xyxx, cb0[6].xyxx
