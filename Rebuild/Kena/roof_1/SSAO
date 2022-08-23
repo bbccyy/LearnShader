@@ -25,9 +25,9 @@ dcl_constantbuffer CB1[66], immediateIndexed
 dcl_sampler s0, mode_default
 dcl_sampler s1, mode_default
 dcl_sampler s2, mode_default
-dcl_resource_texture2d (float,float,float,float) t0
-dcl_resource_texture2d (float,float,float,float) t1
-dcl_resource_texture2d (float,float,float,float) t2
+dcl_resource_texture2d (float,float,float,float) t0			-> 法线 
+dcl_resource_texture2d (float,float,float,float) t1			-> 深度 
+dcl_resource_texture2d (float,float,float,float) t2   		-> 格子图 
 dcl_input_ps linear noperspective v0.xyzw
 dcl_input_ps_siv linear noperspective v1.xy, position
 dcl_output o0.xyzw
