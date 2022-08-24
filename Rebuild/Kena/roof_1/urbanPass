@@ -40,7 +40,7 @@ dcl_resource_texturecubearray (float,float,float,float) t2 		-> 同上
 dcl_resource_buffer (uint,uint,uint,uint) t3 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
-dcl_resource_texture2d (float,float,float,float) t6 			-> PosWS (看起来像) -> TODO 
+dcl_resource_texture2d (float,float,float,float) t6 			-> PosWS (看起来像) 被模糊过 -> TODO 
 dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
 dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118] 
@@ -152,9 +152,9 @@ add r13.xyz, -r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) 				-> 1-{R12-
 mad r13.xyz, r7.wwww, r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) -> R13=0.85*(NdotL-1)*{1+0.78*[(R12)^2 - R12]-R12} + 1 
 mul r12.xyz, r12.xyzx, r13.xyzx 												-> R12 颜色 = R12 * R13 
 
-//r5.x 来自 T11，既纹理11，似乎是用来控制(开关) 菲尼尔效果的Flag
+//r5.x 来自 T11，既纹理11 (叶子+人物有颜色，其他为黑的纹理)，似乎用来控制(开关) 菲尼尔效果的Flag 
 //如下的 r12.w 构成了 Shilick Fresnel 的核心元素: (1 - cosθ)^5 
-//对于茅草和实木而言，输出颜色 R12 任然只是趋向 R10
+//对于屋顶和木墙而言，输出颜色 R12 任然只是趋向 R10
 //而少部分高处的树叶，输出颜色 R12 则受到Fresnel影响比较大 
 add r7.w, -r3.x, l(1.000000)  				-> 1 - NdotL -> [0, 1] 
 mul r11.w, r7.w, r7.w 						-> (1 - NdotL)^2 
@@ -169,40 +169,52 @@ mul r7.z, r5.x, r6.w 						-> r7.z = [0] * [0 or Purple.y]
 mad r12.xyz, r12.xyzx, l(0.900000, 0.900000, 0.900000, 0.000000), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R10颜色 
 mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> R13 
 
-//AO 
-sample_l_indexable(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0.000000)
-mad r13.xy, -cb1[129].xyxx, cb1[131].zwzz, r0.xyxx
-min r13.xy, r13.xyxx, cb0[6].xyxx
-mul r13.zw, cb1[131].xxxy, l(0.000000, 0.000000, 0.500000, 0.500000)
-round_ni r13.zw, r13.zzzw
-div r14.xy, l(1.000000, 1.000000, 1.000000, 1.000000), r13.zwzz
-mad r15.xy, r13.xyxx, r13.zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000)
-round_ni r15.xy, r15.xyxx
-div r15.xy, r15.xyxx, r13.zwzz
-mad r15.xy, r14.xyxx, l(0.500000, 0.500000, 0.000000, 0.000000), r15.xyxx
-add r13.xy, r13.xyxx, -r15.xyxx
-mul r15.zw, r13.zzzw, r13.xxxy
-sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000)
-mov r14.z, l(0)
-add r17.xyzw, r14.xzzy, r15.xyxy
-sample_l_indexable(texture2d)(float,float,float,float) r18.xyzw, r17.xyxx, t6.xyzw, s5, l(0.000000)
-sample_l_indexable(texture2d)(float,float,float,float) r17.xyzw, r17.zwzz, t6.xyzw, s5, l(0.000000)
-add r14.xy, r14.xyxx, r15.xyxx
-sample_l_indexable(texture2d)(float,float,float,float) r14.xyzw, r14.xyxx, t6.xyzw, s5, l(0.000000)
-mad r13.xy, -r13.yxyy, r13.wzww, l(1.000000, 1.000000, 0.000000, 0.000000)
-mul r19.x, r13.y, r13.x
-mul r19.yz, r15.zzwz, r13.xxyx
-mul r19.w, r15.z, r15.w
-mov r13.x, r16.w
+//采样 AO -> R7.z  
+sample_l_indexable(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0.000000) 
+
+//求半分辨率下的 UV 
+mad r13.xy, -cb1[129].xyxx, cb1[131].zwzz, r0.xyxx 						-> 屏幕UV - 0 * (屏幕长宽的倒数) -> UV 偏移 
+min r13.xy, r13.xyxx, cb0[6].xyxx 										-> 不能超过 0.998 -> 确保在像素中点位置? 
+mul r13.zw, cb1[131].xxxy, l(0.000000, 0.000000, 0.500000, 0.500000) 	-> 求 "半" 屏幕的长宽 
+round_ni r13.zw, r13.zzzw  												-> floor("半"屏幕的长宽) 
+div r14.xy, l(1.000000, 1.000000, 1.000000, 1.000000), r13.zwzz 		-> "半"屏幕的长宽 の 倒数 
+mad r15.xy, r13.xyxx, r13.zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000) -> 屏幕UV * "半"屏幕的长宽 -> 分辨率降半后的像素位置 
+round_ni r15.xy, r15.xyxx 												-> floor("半"屏幕下的像素位置) 
+div r15.xy, r15.xyxx, r13.zwzz 											-> 新UV, 采样率相对原始UV减半，位置在田字格的左下角(真角落)  
+mad r15.xy, r14.xyxx, l(0.500000, 0.500000, 0.000000, 0.000000), r15.xyxx -> 增加偏移 -> 让当前降采样UV对准田字格左下格子中心 
+add r13.xy, r13.xyxx, -r15.xyxx   				-> 正常采样的当前点 UV - 半分辨率对应 UV = UV_delta -> 田的左下中心到另外3中心距离 
+mul r15.zw, r13.zzzw, r13.xxxy					-> 半分辨率下 UV_delta 占用了(0或0.5)个大像素点长度  
+
+//采样 T6 (疑似posWS纹理, 本身分辨率为原始值的一半)  
+//使用的 UV -> 半分辨率下的 UV 
+//采样了田字四邻域，分布存放在 R16,R17,R18和R14中 
+sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000)  -> T6:被模糊过的疑似posWS纹理 
+mov r14.z, l(0)  						-> r14.xyz = ["半"屏幕的长宽の倒数, 0]; r15.xy = [降采样后当前点UV] 
+add r17.xyzw, r14.xzzy, r15.xyxy		-> r17.xyzw = [降采样后U + 一个像素, 降采样后V, 降采样后U, 降采样后V + 一个像素] 
+sample_l_indexable(texture2d)(float,float,float,float) r18.xyzw, r17.xyxx, t6.xyzw, s5, l(0.000000) 
+sample_l_indexable(texture2d)(float,float,float,float) r17.xyzw, r17.zwzz, t6.xyzw, s5, l(0.000000) 
+add r14.xy, r14.xyxx, r15.xyxx    		-> r14.xy = [UV + 一个像素] 
+sample_l_indexable(texture2d)(float,float,float,float) r14.xyzw, r14.xyxx, t6.xyzw, s5, l(0.000000) 
+
+//这里从T6纹理(半分辨率) W 通道获取 Depth_1，拿来和(全分辨率下)深度图的 Depth_2 求差异 
+//最后基于当前像素在田字格位置，加权求和 Diff_Depth，存入 R7.w 
+// r13 = [UV_delta, "半"屏幕的长宽] 
+mad r13.xy, -r13.yxyy, r13.wzww, l(1.000000, 1.000000, 0.000000, 0.000000)	-> (1 - 大像素_delta).yx 
+mul r19.x, r13.y, r13.x  				-> r19.x = [当前点在田字左下格时: 1], [右上: 0.25], [其他: 0.5] 
+mul r19.yz, r15.zzwz, r13.xxyx 			-> 大像素_delta.xy * (1 - 大像素_delta).yx  -> 可以区分 ↑，→，↗和本身共4中情况 
+mul r19.w, r15.z, r15.w 				-> 区分是否是 右上 格子 -> [右上: 0.25], [其他: 0] 
+mov r13.x, r16.w 						-> R13 = [左下, 上，右, 右上].(看起来像距离参数，数值普遍大于100，天空在65530附近) 
 mov r13.y, r18.w
 mov r13.z, r17.w
 mov r13.w, r14.w
-add r13.xyzw, -r1.zzzz, r13.xyzw
-add r13.xyzw, |r13.xyzw|, l(0.000100, 0.000100, 0.000100, 0.000100)
-div r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000), r13.xyzw
-mul r13.xyzw, r13.xyzw, r19.xyzw
-dp4 r7.w, r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000)
-div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w
+add r13.xyzw, -r1.zzzz, r13.xyzw 		-> R13 = 田字4个位置的: T6纹理存的Depth - 当前帧深度纹理解码的Depth 
+add r13.xyzw, |r13.xyzw|, l(0.000100, 0.000100, 0.000100, 0.000100) 	-> 给 Diff_Depth 加上一个很小的正数，确保都大于0 
+div r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000), r13.xyzw 		-> Diff_Depth の 倒数 
+mul r13.xyzw, r13.xyzw, r19.xyzw 										-> 基于当前像素在田字格中位置，修正4个 (1/D_Depth) 
+dp4 r7.w, r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000) 			-> 求和田字格区域的这 4个 (1/D_Depth) 
+div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w 				-> 相当于求解了4个 Diff_Depth 的加权平均 
+
+
 mul r15.xyz, r18.xyzx, r13.yyyy
 mad r15.xyz, r13.xxxx, r16.xyzx, r15.xyzx
 mad r13.xyz, r13.zzzz, r17.xyzx, r15.xyzx
