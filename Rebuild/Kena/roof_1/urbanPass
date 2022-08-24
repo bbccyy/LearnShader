@@ -40,7 +40,8 @@ dcl_resource_texturecubearray (float,float,float,float) t2 		-> 同上
 dcl_resource_buffer (uint,uint,uint,uint) t3 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
-dcl_resource_texture2d (float,float,float,float) t6 			-> PosWS (看起来像) 被模糊过 -> TODO 
+dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] (看起来像) 被模糊过，且分辨率减半 
+																-> 后续可能关联计算: Motion Blur;  Depth of Field; ... 
 dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
 dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118] 
@@ -178,19 +179,19 @@ min r13.xy, r13.xyxx, cb0[6].xyxx 										-> 不能超过 0.998 -> 确保在�
 mul r13.zw, cb1[131].xxxy, l(0.000000, 0.000000, 0.500000, 0.500000) 	-> 求 "半" 屏幕的长宽 
 round_ni r13.zw, r13.zzzw  												-> floor("半"屏幕的长宽) 
 div r14.xy, l(1.000000, 1.000000, 1.000000, 1.000000), r13.zwzz 		-> "半"屏幕的长宽 の 倒数 
-mad r15.xy, r13.xyxx, r13.zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000) -> 屏幕UV * "半"屏幕的长宽 -> 分辨率降半后的像素位置 
-round_ni r15.xy, r15.xyxx 												-> floor("半"屏幕下的像素位置) 
+mad r15.xy, r13.xyxx, r13.zwzz, l(-0.5, -0.5, 0, 0) -> 正常屏幕UV * "半"屏幕的长宽 - 0.5 -> '大'像素位置, 注意可能移到左/下邻'大'像素  
+round_ni r15.xy, r15.xyxx 												-> floor("半"屏幕下的像素位置) , 最小为 0 
 div r15.xy, r15.xyxx, r13.zwzz 											-> 新UV, 采样率相对原始UV减半，位置在田字格的左下角(真角落)  
-mad r15.xy, r14.xyxx, l(0.500000, 0.500000, 0.000000, 0.000000), r15.xyxx -> 增加偏移 -> 让当前降采样UV对准田字格左下格子中心 
-add r13.xy, r13.xyxx, -r15.xyxx   				-> 正常采样的当前点 UV - 半分辨率对应 UV = UV_delta -> 田的左下中心到另外3中心距离 
-mul r15.zw, r13.zzzw, r13.xxxy					-> 半分辨率下 UV_delta 占用了(0或0.5)个大像素点长度  
+mad r15.xy, r14.xyxx, l(0.500000, 0.500000, 0.000000, 0.000000), r15.xyxx -> 增加1小像素偏移 -> 让当前降采样UV对准田字格正中心 
+add r13.xy, r13.xyxx, -r15.xyxx   				-> 正常采样的当前点UV - 半分辨率UV = UV_delta -> 田的中心点到实际当前像素距离 
+mul r15.zw, r13.zzzw, r13.xxxy					-> 半分辨率下 UV_delta 占用了(0.25或0.75)个大像素点长度  
 
-//采样 T6 (疑似posWS纹理, 本身分辨率为原始值的一半)  
-//使用的 UV -> 半分辨率下的 UV 
+//采样 T6 (疑似NormalWS纹理, 本身分辨率为原始值的一半)  
 //采样了田字四邻域，分布存放在 R16,R17,R18和R14中 
-sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000)  -> T6:被模糊过的疑似posWS纹理 
+//注意，降分辨率下的一个田字的每个口，都代表正常分辨率下的一个田 -> 采样覆盖正常分辨率下16邻域 
+sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000)  
 mov r14.z, l(0)  						-> r14.xyz = ["半"屏幕的长宽の倒数, 0]; r15.xy = [降采样后当前点UV] 
-add r17.xyzw, r14.xzzy, r15.xyxy		-> r17.xyzw = [降采样后U + 一个像素, 降采样后V, 降采样后U, 降采样后V + 一个像素] 
+add r17.xyzw, r14.xzzy, r15.xyxy		-> r17.xyzw = [降采样后U + 1, 降采样后V, 降采样后U, 降采样后V + 1] 
 sample_l_indexable(texture2d)(float,float,float,float) r18.xyzw, r17.xyxx, t6.xyzw, s5, l(0.000000) 
 sample_l_indexable(texture2d)(float,float,float,float) r17.xyzw, r17.zwzz, t6.xyzw, s5, l(0.000000) 
 add r14.xy, r14.xyxx, r15.xyxx    		-> r14.xy = [UV + 一个像素] 
@@ -200,9 +201,9 @@ sample_l_indexable(texture2d)(float,float,float,float) r14.xyzw, r14.xyxx, t6.xy
 //最后基于当前像素在田字格位置，加权求和 Diff_Depth，存入 R7.w 
 // r13 = [UV_delta, "半"屏幕的长宽] 
 mad r13.xy, -r13.yxyy, r13.wzww, l(1.000000, 1.000000, 0.000000, 0.000000)	-> (1 - 大像素_delta).yx 
-mul r19.x, r13.y, r13.x  				-> r19.x = [当前点在田字左下格时: 1], [右上: 0.25], [其他: 0.5] 
-mul r19.yz, r15.zzwz, r13.xxyx 			-> 大像素_delta.xy * (1 - 大像素_delta).yx  -> 可以区分 ↑，→，↗和本身共4中情况 
-mul r19.w, r15.z, r15.w 				-> 区分是否是 右上 格子 -> [右上: 0.25], [其他: 0] 
+mul r19.x, r13.y, r13.x  				-> r19.x = [当前点在田字左下格时: 1], [右上: 0.25], [其他: 0.5]  ?
+mul r19.yz, r15.zzwz, r13.xxyx 			-> 大像素_delta.xy * (1 - 大像素_delta).yx  -> 可以区分 ↑，→，↗和本身共4中情况 ?
+mul r19.w, r15.z, r15.w 				-> 区分是否是 右上 格子 -> [右上: 0.25], [其他: 0] ?
 mov r13.x, r16.w 						-> R13 = [左下, 上，右, 右上].(看起来像距离参数，数值普遍大于100，天空在65530附近) 
 mov r13.y, r18.w
 mov r13.z, r17.w
@@ -214,19 +215,21 @@ mul r13.xyzw, r13.xyzw, r19.xyzw 										-> 基于当前像素在田字格中�
 dp4 r7.w, r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000) 			-> 求和田字格区域的这 4个 (1/D_Depth) 
 div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w 				-> 相当于求解了4个 Diff_Depth 的加权平均 
 
+mul r15.xyz, r18.xyzx, r13.yyyy 				-> 对应田字位置的 (1/D_Depth) * 对应位置的采样结果.xyz 
+mad r15.xyz, r13.xxxx, r16.xyzx, r15.xyzx 		-> 4个位置的结果累加起来 -> R13 
+mad r13.xyz, r13.zzzz, r17.xyzx, r15.xyzx 
+mad r13.xyz, r13.wwww, r14.xyzx, r13.xyzx 
 
-mul r15.xyz, r18.xyzx, r13.yyyy
-mad r15.xyz, r13.xxxx, r16.xyzx, r15.xyzx
-mad r13.xyz, r13.zzzz, r17.xyzx, r15.xyzx
-mad r13.xyz, r13.wwww, r14.xyzx, r13.xyzx
-add r11.w, -r1.z, cb0[2].w
-mul_sat r11.w, r11.w, cb0[3].x
-mov r14.xyz, -r6.xyzx
-mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx
-mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx
+add r11.w, -r1.z, cb0[2].w 						-> 20000 - 当前帧深度纹理解码的Depth 
+mul_sat r11.w, r11.w, cb0[3].x 					-> saturate((20000-Depth)/6000) -> 用于Scale，距离近:1，距离远:0 
+mov r14.xyz, -r6.xyzx 							-> R14 = -Normal 
+mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 		-> (田字4方向独自通过(1/D_Depth)累加后 * D_Depth加权平均).xyz + (-Normal) 
+mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 某种向量 + Normal 
+
+
 if_nz r7.x
   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx
-  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx
+  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx 
   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx
   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx
   dp3 r7.w, r13.xyzx, r13.xyzx
