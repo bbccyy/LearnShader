@@ -225,7 +225,7 @@ add r11.w, -r1.z, cb0[2].w 						-> 20000 - 当前帧深度纹理解码的Depth
 mul_sat r11.w, r11.w, cb0[3].x 					-> saturate((20000-Depth)/6000) -> 用于Scale，距离近:1，距离远:0 
 mov r14.xyz, -r6.xyzx 							-> R14 = -Normal 
 mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 		-> (田字4方向独自通过(1/D_Depth)累加后 * D_Depth加权平均).xyz + (-Normal) 
-mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm起点指向新Norm起点的向量 + 原Normal向量 
+mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm起点指向新Norm起点的向量(正向扰动矢量) + 原Normal向量 
 
 
 if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0  
@@ -234,34 +234,37 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				-> R12颜色 - R12颜色 * Purple.y 
   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx 				-> Condition 使用一种颜色 
 
-  dp3 r7.w, r13.xyzx, r13.xyzx  							-> 归一化 R13 法线扰动向量 
+  dp3 r7.w, r13.xyzx, r13.xyzx  							-> 归一化 R13 扰动法线向量 -> R16 -> 定义为RandomNorm 或 (Rn)
   sqrt r7.w, r7.w
   max r11.w, r7.w, l(0.000010)
   div r16.xyz, r13.xyzx, r11.wwww
 
-  mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx
-  mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx
-  dp3 r11.w, r16.xyzx, r6.xyzx
-  add r12.w, -r11.w, l(1.000000)
-  mad r11.w, r7.w, r12.w, r11.w
-  mad r7.w, r7.w, l(10.000000), l(-5.000000)
-  mul r7.w, r7.w, -cb0[8].x
-  mul r7.w, r7.w, l(1.442695)
-  exp r7.w, r7.w
-  add r7.w, r7.w, l(1.000000)
-  div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w
-  mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z
-  log r7.w, r7.w
-  mul r7.w, r7.w, cb0[8].w
-  exp r7.w, r7.w
-  add r12.w, -r7.w, l(1.000000)
-  mad r7.w, cb0[1].w, r12.w, r7.w
-  eq r12.w, cb0[9].x, l(0.000000)
-  min r13.w, r4.w, r7.z
-  min r15.w, r7.w, r13.w
-  mul r7.w, r7.w, r13.w
-  movc r7.w, r12.w, r15.w, r7.w
-  ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7)
+  //计算标量r11.w -> 无扰动时=1, 强扰动时=扰动向量模长 
+  mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx  				-> 法向量 - 扰动法线向量 = 反向扰动矢量 
+  mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx 					-> 按R13的模长放大 '反向扰动矢量' 
+  dp3 r11.w, r16.xyzx, r6.xyzx 								-> Dot(扰动法线向量, NormalWS) -> NdotRn 
+  add r12.w, -r11.w, l(1.000000) 							-> 1 - NdotRn -> 扰动越大，值越大 
+  mad r11.w, r7.w, r12.w, r11.w  							-> (1 - NdotRn) * 扰动向量模长 + NdotRn 
+
+
+  mad r7.w, r7.w, l(10.000000), l(-5.000000)   				-> 扰动向量模长 * 10 - 5 
+  mul r7.w, r7.w, -cb0[8].x 								-> (扰动向量模长 * 10 - 5) * (-0.01) 
+  mul r7.w, r7.w, l(1.442695) 								-> -1.442695 * (10*模长 - 5) / 100 -> Log2E = 1.442695 
+  exp r7.w, r7.w 											-> exp((5 - 10*模长) / 100) 	-> 这里假设 exp 实际上是 exp2 
+  add r7.w, r7.w, l(1.000000) 								-> exp((5 - 10*模长) / 100) + 1 
+  div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w -> 1 / [exp((5 - 10*模长) / 100) + 1] 
+  mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z 					-> saturate(40.0/[exp((5 - 10*模长) / 100) + 1] - 19.5) -> 记为X 
+  log r7.w, r7.w 											-> r7.w = LOG(X) -> 小于0的数 
+  mul r7.w, r7.w, cb0[8].w 									-> LOG(X) * 0.7 
+  exp r7.w, r7.w 											-> exp(LOG(X) * 0.7) -> X^0.7 
+  add r12.w, -r7.w, l(1.000000) 							-> 1 - X^0.7 
+  mad r7.w, cb0[1].w, r12.w, r7.w 							-> (1 - X^0.7) * 0 + X^0.7 -> lerp 
+  eq r12.w, cb0[9].x, l(0.000000) 							-> 1 != 0 -> r12.w = false
+  min r13.w, r4.w, r7.z 									-> min(Purple.z, {Tex11.x * [0 or Purple.y]}) -> Tex11.x = 0
+  min r15.w, r7.w, r13.w 									-> min(X^0.7, 0)
+  mul r7.w, r7.w, r13.w 									-> X^0.7 * 0
+  movc r7.w, r12.w, r15.w, r7.w 							-> 还是 r7.w -> 0
+  ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						-> 
   if_nz r16.x
     mov r14.w, l(1.000000)
     dp4 r18.x, cb1[181].xyzw, r14.xyzw
