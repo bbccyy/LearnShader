@@ -73,6 +73,7 @@ sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s
 
 //Decode Depth
 //R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100 
+//注意: UE4 默认距离单位 = 厘米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								-> 0 
 mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								-> 0.1 * depthRaw
 div r1.z, l(1.000000, 1.000000, 1.000000, 1.000000), r1.z 			-> 1/(0.1*depthRaw)
@@ -120,12 +121,13 @@ mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb， Alpha = R11.w = r3.y 
 mov r12.w, r9.w 
 movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 BaseCol.rgb 
 
-//重构世界坐标 
-mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> Clip.xy (待考?) 
+//重构世界坐标  
+mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ViewSpace.xy 
 mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_V -> 将物体从视空间转回世界空间的矩阵 
-mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx
-mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx
-add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> R4.xyz = PosWS 
+mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx 
+mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx 
+add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> 最后一列存有: '-CameraPosWS' 
+											-> toCameraVector= (inverse(viewMatrix)*vec4(0,0,0,1.0)).xyz-worldPosition.xyz; 
 
 //-ViewDirWS -> R8 -> From Camera To ViewPoint 
 add r8.xyw, r4.xyxz, -cb1[67].xyxz    		-> 猜测这是摄像机(也可能是别的什么?)的世界空间坐标[-58890, 27509, -6150] 
@@ -291,7 +293,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx
   movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx
   if_nz r16.w 												-> r16.w 分支控制 
-  
+
   	//求 -ViewDirWS
     mul r18.xyz, r1.yyyy, cb1[49].xyzx						-> Matrix_Inv_V 的前 3X3 区域
     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx			-> 相当于将视空间坐标的 z 分量设置为1
