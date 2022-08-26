@@ -97,31 +97,35 @@ mul r6.xyz, r2.wwww, r2.xyzx   -> R6
 
 //r3.zy = [Purple.y修改值, 0.2]
 //利用采样 T9 纹理的 Z 通道，获取当前urbanPass分支逻辑控制符 
-mul r7.xy, r3.zyzz, l(255.000000, 0.080000, 0.000000, 0.000000) 
+//利用采样 T9 纹理的 Y 通道，计算环境光底色 
+mul r7.xy, r3.zyzz, l(255.000000, 0.080000, 0.000000, 0.000000)  	-> 255用于将8bit通道转换到整数范围，0.08推测是环境光缩放因子 
 round_ne r6.w, r7.x     -> 四舍五入到整数float值 ->  颜色[0~255]
-ftou r6.w, r6.w
+ftou r6.w, r6.w 
 and r7.xz, r6.wwww, l(15, 0, 16, 0)   	-> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
-movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  -> 未知纹理采样返回值 
+movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  -> T11 纹理采样返回值 
 ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    	-> Condition: r7.x 返回值是否落在给定区间 
-movc r6.w, r8.x, l(0), r3.x    			-> r3.x = Purple.y 
-mad r9.xyz, -r3.yyyy, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx  -> BaseCol.rgb - 0.2*0.08 
-mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   -> (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  -> R9 颜色 
-or r7.y, r8.x, r8.y 					-> Condition: 比 r8 单个通道几率更高 
+movc r6.w, r8.x, l(0), r3.x    			-> r3.x = Purple.y  -> 若为0，则环境光底色 = 0.2*0.08 
+mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - 0.2*0.08 
+mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   -> (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  -> R9 颜色似乎是环境光底色 
+
+or r7.y, r8.x, r8.y 					-> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
 lt r7.z, l(0.000000), cb1[155].x 		-> 0 < 1 ? true 
-lt r7.w, l(0.000000), cb1[200].z  		-> 0 < 1 ? true 
-and r7.z, r7.w, r7.z 					-> 同时满足才OK 
-ne r7.w, l(0.000000, 0.000000, 0.000000, 0.000000), cb1[155].x  	-> false 
-movc r8.xyw, r7.wwww, l(1.000000,1.000000,0,1.000000), r4.xyxz		-> r8.xyw = BaseCol.rgb
-movc r10.xy, r1.wwww, l(1.000000,0,0,0), l(0,1.000000,0,0) 			-> 某种2x2块状分割逻辑 -> r10.xy = [1,0] or [0,1] 
-mul r11.xyz, r9.xyzx, r10.yyyy 					-> R11 颜色 -> R9 颜色 * 方块Mask  -> 可颜色 可0 
-mul r11.w, r3.y, r10.y 							
-movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx 		-> R10 颜色 -> 要么 互补方块Mask的值[0 or 1] (√)，要么 BaseCol.rgb 
+lt r7.w, l(0.000000), cb1[200].z  		-> 0 < 1 ? true  -> 这2个开关负责什么? TODO 
+and r7.z, r7.w, r7.z 					-> 同时满足上面2个开关 -> 才OK 
+ne r7.w, l(0, 0, 0, 0), cb1[155].x  	-> false 
+movc r8.xyw, r7.wwww, l(1,1,0,1), r4.xyxz		-> r8.xyw = BaseCol.rgb 
+
+//构建了 R10 颜色/遮罩 -> TODO 
+movc r10.xy, r1.wwww, l(1,0,0,0), l(0,1,0,0) 	-> 某种2x2块状分割逻辑 -> r10.xy = [1,0] or [0,1] 
+mul r11.xyz, r9.xyzx, r10.yyyy 					-> R11 颜色 -> R9 颜色 * 方块Mask.y  -> 可颜色 可0 
+mul r11.w, r3.y, r10.y 		 					-> 0.2 * [1 or 0] -> 0.2 * 方块Mask.y
+movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx 		-> R10 颜色 -> 要么是 方块Mask.x 既[0 or 1] (√)，要么 BaseCol.rgb 
 mov r9.w, r3.y 
-movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> 互补方块Mask决定 R11 <- 用R11颜色 (√) 还是 R9颜色 
-mov r10.w, r11.w 								-> R10 颜色透明通道 = 0.2 * 方块Mask 
-mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb， Alpha = R11.w = r3.y = 0.2 
-mov r12.w, r9.w 
-movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 BaseCol.rgb 
+movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> R11 颜色 <- [R9颜色*方块Mask.y] (√) 还是 [R9颜色.rgb, 0.2] 
+mov r10.w, r11.w 								-> R10 颜色透明通道 = 0.2 * 方块Mask.y -> [0,0,0,0.2] or [1,1,1,0]
+mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb
+mov r12.w, r9.w 								-> R12 颜色.Alpha = R11.w = r3.y = 0.2 
+movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 概率选 R10 或 R12=[BaseCol.rgb, 0.2] -> 是9号或5号方案就选10 
 
 //重构世界坐标  
 //TODO: 如何通过 [-1, +1] * Clip.w * View.z 计算出 ViewSpace下当前点xy值? 
