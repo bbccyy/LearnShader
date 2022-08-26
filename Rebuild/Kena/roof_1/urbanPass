@@ -58,12 +58,12 @@ dcl_temps 20
 
 mul r0.xy, v0.xyxx, cb1[131].zwzz  		屏幕像素序号xy * 像素倒数  ->  用于采样贴图的屏幕 UV 
 
-//未知 -> r1.xy 应当趋向 NDC.xy 
+//未知 -> r1.xy  
 //注意 v0.w 对应全屏 Blit 使用的三角形面片的视深度 
-add r0.zw, v0.xxxy, -cb1[129].xxxy     -> cb1[129].xy = 0 
-mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.500000, -0.500000, 0.000000, 0.000000) -> v0.xy/[height,width] - [0.5,0.5] 
+add r0.zw, v0.xxxy, -cb1[129].xxxy     -> cb1[129].xy = 0 		-> v0.xy 是屏幕像素索引(+0.5) 
+mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.5, -0.5, 0.0, 0.0) 		-> v0.xy / [height, width] - [0.5, 0.5] -> [-0.5, +0.5]区间UV 
 mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * Clip.w 
-mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * Clip.w 
+mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * Clip.w -> 未知 ??
 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
 sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
@@ -72,20 +72,20 @@ sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyz
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
 //Decode Depth
-//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100 
+//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100, 既大于1米  
 //注意: UE4 默认距离单位 = 厘米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								-> 0 
-mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								-> 0.1 * depthRaw
-div r1.z, l(1.000000, 1.000000, 1.000000, 1.000000), r1.z 			-> 1/(0.1*depthRaw)
+mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								-> 0.1 * depthRaw 
+div r1.z, l(1.000000, 1.000000, 1.000000, 1.000000), r1.z 			-> 1/(0.1*depthRaw) 
 add r1.z, r1.z, r1.w 												-> 1/(0.1*depthRaw) + (depthRaw*a+b) 
 
 mul r6.xy, r0.xyxx, cb1[131].xyxx 									-> 像素坐标索引 
 ftou r6.xy, r6.xyxx
 
 //Condition: 某种 2x2 块状像素分割逻辑 
-ftou r1.w, cb1[151].x 		-> 1
+ftou r1.w, cb1[151].x 		-> 1 
 iadd r2.w, r6.y, r6.x 		-> x + y 
-iadd r1.w, r1.w, r2.w 		-> x + y + 1
+iadd r1.w, r1.w, r2.w 		-> x + y + 1 
 and r1.w, r1.w, l(1)        -> 判断奇偶?   ->  某种块状分割逻辑 
 
 //法线 
@@ -122,54 +122,56 @@ mov r12.w, r9.w
 movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 一定概率选 R10 颜色，一定概率选 BaseCol.rgb 
 
 //重构世界坐标  
-mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ViewSpace.xy 
+//TODO: 如何通过 [-1, +1] * Clip.w * View.z 计算出 ViewSpace下当前点xy值? 
+mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ViewSpace.xy -> [-1, +1] * Clip.w * View.z 
 mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_V -> 将物体从视空间转回世界空间的矩阵 
 mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx 
 mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx 
-add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> 最后一列存有: '-CameraPosWS' 
+add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> 最后一列存有: 'CameraPosWS' 
 											-> toCameraVector= (inverse(viewMatrix)*vec4(0,0,0,1.0)).xyz-worldPosition.xyz; 
 
 //-ViewDirWS -> R8 -> From Camera To ViewPoint 
-add r8.xyw, r4.xyxz, -cb1[67].xyxz    		-> 猜测这是摄像机(也可能是别的什么?)的世界空间坐标[-58890, 27509, -6150] 
-dp3 r1.w, r8.xywx, r8.xywx
-rsq r1.w, r1.w
-mul r8.xyw, r1.wwww, r8.xyxw
+add r8.xyw, r4.xyxz, -cb1[67].xyxz    		-> 摄像机的世界空间坐标[-58890, 27509, -6150] 
+dp3 r1.w, r8.xywx, r8.xywx 
+rsq r1.w, r1.w 
+mul r8.xyw, r1.wwww, r8.xyxw 				-> 归一化 
 
 
-//计算类似 Half Lambert的值，存入 R7.z 
-dp3 r1.w, r6.xyzx, -r8.xywx  					-> 法线 点乘 视方向  -> Lambert 模型  
-mov_sat r3.x, r1.w   							-> saturate(dot(NormalWS, -ViewDir)) = NdotL -> [0, 1]区间 
-mad r7.z, r3.x, l(0.500000), l(0.500000)    	-> NdotL * 0.5 + 0.5 -> half_Lambert 
-mad r7.z, r7.z, r3.x, l(-1.000000) 				-> (NdotL * 0.5 + 0.5) * NdotL - 1  -> 若(L ⊥ N) 得-1，反之得0 
-mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)	-> saturate(1.25 - 1.25*[t9.w=0.69])  
-mul r9.w, r7.w, r7.z 							-> saturate(1.25 - 1.25*[t9.w=0.69]) * (half_Lambert * NdotL - 1) -> [-1, 0]区间
+//计算不同材质的参数 R7.Z 和 R9.W：基于NdotV，掠视时值小， 俯视时值大 
+dp3 r1.w, r6.xyzx, -r8.xywx  					-> NdotV -> Normal 和 ViewDir 都是单位向量，所有点乘后得到 cosθ 
+mov_sat r3.x, r1.w   							-> saturate(NdotV) = NdotV -> 做sat似乎没必要 
+mad r7.z, r3.x, l(0.500000), l(0.500000)    	-> NdotV * 0.5 + 0.5 
+mad r7.z, r7.z, r3.x, l(-1.000000) 				-> (NdotV * 0.5 + 0.5) * NdotV - 1  -> 若(V ⊥ N) 得-1，反之得0 
+mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)	-> saturate(1.25 - 1.25*[t9.w=0.69]) -> 不同材质不同缩放比例 
+mul r9.w, r7.w, r7.z 							-> saturate(1.25 - 1.25*[t9.w=0.69]) * ((NdotV*0.5+0.5)*NdotV-1) -> [-1, 0]区间 
 mad r7.z, r7.z, r7.w, l(1.000000) 				-> 类似 R9.w -> 转换到 [0, 1] 区间，垂直得0，同向得1 
 
-//将 R10 颜色 与 NdotL 以某种形式混淆， 
+//将 R10 颜色 与 NdotV 以某种形式混淆  ->  目的未知 
 //R13 属于 [0.15, 1.01]区间; R12 属于 [0, 1.11]区间 
 mul r12.xyz, r10.xyzx, l(1.111111, 1.111111, 1.111111, 0.000000)  				-> R12 颜色 = R10 颜色 * 1.11 
-add r7.w, r3.x, l(-1.000000) 													-> NdotL - 1 
-mul r7.w, r7.w, l(0.850000) 													-> 0.85 * (NdotL - 1) -> [-0.85, 0]区间 
+add r7.w, r3.x, l(-1.000000) 													-> NdotV - 1 
+mul r7.w, r7.w, l(0.850000) 													-> 0.85 * (NdotV - 1) -> [-0.85, 0]区间 
 mad r13.xyz, r12.xyzx, r12.xyzx, -r12.xyzx 										-> (R12)^2 - R12 -> [-0.25, 0.1221]区间 
 mad r13.xyz, r13.xyzx, l(-0.780000, -0.780000, -0.780000, 0.000000), r12.xyzx   -> R12-0.78*[(R12)^2 - R12] -> [0, 1.01]区间 
 add r13.xyz, -r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) 				-> 1-{R12-0.78*[(R12)^2 - R12]}->[-0.01, 1]区间 
-mad r13.xyz, r7.wwww, r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) -> R13=0.85*(NdotL-1)*{1+0.78*[(R12)^2 - R12]-R12} + 1 
+mad r13.xyz, r7.wwww, r13.xyzx, l(1.000000, 1.000000, 1.000000, 0.000000) -> R13=0.85*(NdotV-1)*{1+0.78*[(R12)^2 - R12]-R12} + 1 
 mul r12.xyz, r12.xyzx, r13.xyzx 												-> R12 颜色 = R12 * R13 
 
 //r5.x 来自 T11，既纹理11 (叶子+人物有颜色，其他为黑的纹理)，似乎用来控制(开关) 菲尼尔效果的Flag 
-//如下的 r12.w 构成了 Shilick Fresnel 的核心元素: (1 - cosθ)^5 
-//对于屋顶和木墙而言，输出颜色 R12 任然只是趋向 R10
-//而少部分高处的树叶，输出颜色 R12 则受到Fresnel影响比较大 
-add r7.w, -r3.x, l(1.000000)  				-> 1 - NdotL -> [0, 1] 
-mul r11.w, r7.w, r7.w 						-> (1 - NdotL)^2 
-mul r11.w, r11.w, r11.w 					-> (1 - NdotL)^4 
-mul r12.w, r7.w, r11.w 						-> R12.w = (1 - NdotL)^5 
-mad r7.w, -r11.w, r7.w, l(1.000000)  		-> 1 - (1 - NdotL)^5 
-mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5 
-mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - {0.04 * [1 - (1 - NdotL)^5] + (1 - NdotL)^5} * r5.x -> r5.x = 0
-mul r13.xyz, r7.wwww, r10.xyzx 				-> R13 = R10 * 1
-mul r12.xyz, r7.zzzz, r12.xyzx 				-> R12 颜色 * [形似NdotL] 
-mul r7.z, r5.x, r6.w 						-> r7.z = [0] * [0 or Purple.y] 
+//如下的 r12.w 构成了 Shilick Fresnel 的核心元素: (1 - cosθ)^5, 而 r7.w 关联 Fresnel_Term (可通过函数曲线验证) 
+//r7.z 与 r7.w 相比，随着视角倾斜，数值下降趋势比较缓和 
+//对于屋顶和木墙而言，输出颜色 R12 任然只是趋向 R10 
+//而树叶之类，其输出颜色 R12 受到Fresnel影响比较大 
+add r7.w, -r3.x, l(1.000000)  				-> 1 - NdotV -> [0, 1] 
+mul r11.w, r7.w, r7.w 						-> (1 - NdotV)^2 
+mul r11.w, r11.w, r11.w 					-> (1 - NdotV)^4 
+mul r12.w, r7.w, r11.w 						-> R12.w = (1 - NdotV)^5 
+mad r7.w, -r11.w, r7.w, l(1.000000)  		-> 1 - (1 - NdotV)^5 
+mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotV)^5] + (1 - NdotV)^5 -> Fresnel_Term
+mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - Fresnel_Term * r5.x -> 如果r5.x为控制开启阀门，整体返回值是与1的互补数   
+mul r13.xyz, r7.wwww, r10.xyzx 				-> R13 = R10颜色 * (1 - Fresnel_Term) -> 如果开启，掠视时R10会被压制 
+mul r12.xyz, r7.zzzz, r12.xyzx 				-> R12颜色 * [形似(1-Fresnel_Term),但缓和]  
+mul r7.z, r5.x, r6.w 						-> r7.z = [0] * [0 or Purple.y]  -> 开关 
 mad r12.xyz, r12.xyzx, l(0.900000, 0.900000, 0.900000, 0.000000), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R10颜色 
 mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> R13 
 
