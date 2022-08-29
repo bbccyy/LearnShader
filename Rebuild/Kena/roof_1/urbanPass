@@ -35,9 +35,9 @@ dcl_sampler s4, mode_default
 dcl_sampler s5, mode_default
 dcl_sampler s6, mode_default
 dcl_sampler s7, mode_default
-dcl_resource_texturecube (float,float,float,float) t0 			-> 天空
+dcl_resource_texturecube (float,float,float,float) t0 			-> 天空 
 dcl_resource_texturecube (float,float,float,float) t1 			-> cubemap 几乎全黑 
-dcl_resource_texturecubearray (float,float,float,float) t2 		-> 同上 
+dcl_resource_texturecubearray (float,float,float,float) t2 		-> 确认是 IBL 探针，有 57 张  
 dcl_resource_buffer (uint,uint,uint,uint) t3 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
@@ -59,12 +59,12 @@ dcl_temps 20
 
 mul r0.xy, v0.xyxx, cb1[131].zwzz  		屏幕像素序号xy * 像素倒数  ->  用于采样贴图的屏幕 UV 
 
-//未知 -> r1.xy  
+//r1.xy -> 经过如下变换后，r1.xy 介于 ScreenSpace & ClipSpace 之间... 
 //注意 v0.w 对应全屏 Blit 使用的三角形面片的视深度 
 add r0.zw, v0.xxxy, -cb1[129].xxxy     -> cb1[129].xy = 0 		-> v0.xy 是屏幕像素索引(+0.5) 
-mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.5, -0.5, 0.0, 0.0) 		-> v0.xy / [height, width] - [0.5, 0.5] -> [-0.5, +0.5]区间UV 
-mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * Clip.w 
-mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * Clip.w -> 未知 ??
+mad r1.xy, r0.zwzz,  [130].zwzz, l(-0.5, -0.5, 0.0, 0.0) 		-> v0.xy / [height, width] - [0.5, 0.5] -> [-0.5, +0.5]区间UV 
+mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * v0.w 	-> v0.w = Clip.w 
+mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * v0.w -> 上下翻转 -> 预乘"三角面片深度"的半成品 
 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
 sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
@@ -118,19 +118,20 @@ movc r8.xyw, r7.wwww, l(1,1,0,1), r4.xyxz		-> r8.xyw = BaseCol.rgb
 //构建了 R10 颜色/遮罩 -> TODO 
 movc r10.xy, r1.wwww, l(1,0,0,0), l(0,1,0,0) 	-> 某种2x2块状分割逻辑 -> r10.xy = [1,0] or [0,1] 
 mul r11.xyz, r9.xyzx, r10.yyyy 					-> R11 颜色 -> R9 颜色 * 方块Mask.y  -> 可颜色 可0 
-mul r11.w, r3.y, r10.y 		 					-> 0.2 * [1 or 0] -> 0.2 * 方块Mask.y
+mul r11.w, r3.y, r10.y 		 					-> 0.2 * [1 or 0] -> 0.2 * 方块Mask.y 
 movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx 		-> R10 颜色 -> 要么是 方块Mask.x 既[0 or 1] (√)，要么 BaseCol.rgb 
 mov r9.w, r3.y 
 movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> R11 颜色 <- [R9颜色*方块Mask.y] (√) 还是 [R9颜色.rgb, 0.2] 
-mov r10.w, r11.w 								-> R10 颜色透明通道 = 0.2 * 方块Mask.y -> [0,0,0,0.2] or [1,1,1,0]
-mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb
+mov r10.w, r11.w 								-> R10 颜色透明通道 = 0.2 * 方块Mask.y -> [0,0,0,0.2] or [1,1,1,0] 
+mov r12.xyz, r4.xyzx 							-> R12 颜色 = BaseCol.rgb 
 mov r12.w, r9.w 								-> R12 颜色.Alpha = R11.w = r3.y = 0.2 
 movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 概率选 R10 或 R12=[BaseCol.rgb, 0.2] -> 是9号或5号方案就选10 
 
-//重构世界坐标  
-//TODO: 如何通过 [-1, +1] * Clip.w * View.z 计算出 ViewSpace下当前点xy值? 
-mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ViewSpace.xy -> [-1, +1] * Clip.w * View.z 
-mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_V -> 将物体从视空间转回世界空间的矩阵 
+//重构世界坐标 
+//先通过 [-1, +1] * Clip.w * View.z 计算出 Clip Space 下当前点xy，随后结合采样深度z重建世界空间坐标 
+//注意，矩阵运算的目标向量处在Clip Space中，所以变换矩阵理应是 Inv_VP，且P矩阵只修改了XY分量(最后一列为[0,0,1,0])，保留Z分量不动 
+mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ClipSpace.xy -> [-1, +1] * (Clip.w * View.z) 
+mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_VP -> 将物体从裁剪空间转回世界空间的矩阵 
 mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx 
 mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx 
 add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> 最后一列存有: 'CameraPosWS' 
@@ -309,7 +310,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   	//求 -ViewDirWS
     mul r18.xyz, r1.yyyy, cb1[49].xyzx						-> Matrix_Inv_V 的前 3X3 区域
     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx			-> 相当于将视空间坐标的 z 分量设置为1
-    add r18.xyz, r18.xyzx, cb1[50].xyzx    				 	-> 然后行向量 左乘 逆矩阵中控制旋转和缩放的部分 
+    add r18.xyz, r18.xyzx, cb1[50].xyzx    				 	-> 然后以行向量形式 左乘 逆矩阵中控制旋转和缩放的部分 
     dp3 r1.x, r18.xyzx, r18.xyzx
     rsq r1.x, r1.x
     mul r18.xyz, r1.xxxx, r18.xyzx 							-> 再归一化 -> 得到 -ViewDirWS -> 疑惑:为何不用 CamWS - PosWS 
@@ -326,7 +327,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     min r5.z, r5.z, l(1.000000) 							-> min(0.69, 1.0) 
     dp3 r12.w, -r18.xyzx, r17.xyzx 							-> ViewDir dot <法-视平偏向量> 
 
-    dp3 r13.w, r6.xyzx, r17.xyzx 							-> Normal dot <法-视平偏向量>
+    dp3 r13.w, r6.xyzx, r17.xyzx 							-> Normal dot <法-视平偏向量> -> TODO: 这是0么 
 
     //以下代码为: fast_acos(float v) -> 搜索关键数值'-0.156583'可得相关资料 
     //π/2 = 1.570796
@@ -353,8 +354,8 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     mul r14.w, |r14.w|, l(0.500000)  						-> 0.5 * |dif_Angle| 
     sincos null, r14.w, r14.w 								-> cos(0.5 * |dif_Angle|) 
 
-    mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 
-    dp3 r15.w, r18.xyzx, r19.xyzx
+    mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 				-> -Normal * Dot(Normal, <法-视平偏向量>) + 归一化<法-视平偏向量>
+    dp3 r15.w, r18.xyzx, r19.xyzx 							-> 上面的向量 dot 原始<法-视平偏向量> 
     dp3 r18.x, r18.xyzx, r18.xyzx
     mad r1.y, r18.x, r1.y, l(0.000100)
     rsq r1.y, r1.y
@@ -481,7 +482,7 @@ if_nz r1.x
   sqrt r1.w, r1.y
   mad r1.w, r3.w, r3.w, r1.w
   mul r1.y, r1.w, r1.y
-  mad r2.xyz, -r2.xyzx, r2.wwww, r11.yzwy
+  mad r2.xyz, -r2.xyzx, r2.wwww, r11.yzwy 				-> 这是什么 
   mad r2.yzw, r1.yyyy, r2.xxyz, r6.xxyz
   sample_indexable(texture2d)(float,float,float,float) r6.xyzw, r0.xyxx, t12.xyzw, s6
   add r0.x, -r6.w, l(1.000000)
@@ -510,9 +511,9 @@ if_nz r1.x
   iadd r0.z, r0.z, cb3[0].w
   ishl r0.w, r0.z, l(1)
   ld_indexable(buffer)(uint,uint,uint,uint) r0.w, r0.wwww, t3.yzwx
-  umin r0.w, r0.w, cb3[0].y
-  bfi r0.z, l(31), l(1), r0.z, l(1)
-  ld_indexable(buffer)(uint,uint,uint,uint) r0.z, r0.zzzz, t3.yzxw
+  umin r0.w, r0.w, cb3[0].y 											-> r0.w = 1 
+  bfi r0.z, l(31), l(1), r0.z, l(1) 									-> 
+  ld_indexable(buffer)(uint,uint,uint,uint) r0.z, r0.zzzz, t3.yzxw 		-> 
   ieq r1.y, r7.x, l(6)
   lt r1.z, l(0.000000), cb0[0].x
   if_nz r1.z
@@ -559,27 +560,27 @@ if_nz r1.x
     mov r1.y, l(1.000000)
   endif 
   log r1.w, r3.w
-  mad r1.w, -r1.w, l(1.200000), l(1.000000)
+  mad r1.w, -r1.w, l(1.200000), l(1.000000) 
   add r4.w, cb1[188].z, l(-1.000000)
   add r5.z, -r1.w, r4.w
   mov r2.x, l(0)
   mov r8.xyw, l(0,0,0,0)
-  mov r5.w, r1.x
-  mov r6.w, l(0)
+  mov r5.w, r1.x 
+  mov r6.w, l(0) 				-> Loop Index (i) -> 初始为 0 
   loop 
-    uge r7.w, r6.w, r0.w
-    breakc_nz r7.w
-    lt r7.w, r5.w, l(0.001000)
-    if_nz r7.w
+    uge r7.w, r6.w, r0.w  		-> index >= r0.w ? true : false 
+    breakc_nz r7.w 				-> 如果 index >= buffer_size -> 跳出循环 
+    lt r7.w, r5.w, l(0.001000)	-> r5.w < 0.001 ? true : false 
+    if_nz r7.w 					-> 如果 
       break 
     endif 
-    iadd r7.w, r0.z, r6.w
-    ld_indexable(buffer)(uint,uint,uint,uint) r7.w, r7.wwww, t4.yzwx
-    add r14.xyz, r4.xyzx, -cb4[r7.w + 0].xyzx
-    dp3 r9.w, r14.xyzx, r14.xyzx
-    sqrt r10.w, r9.w
-    lt r12.w, r10.w, cb4[r7.w + 0].w
-    if_nz r12.w
+    iadd r7.w, r0.z, r6.w 
+    ld_indexable(buffer)(uint,uint,uint,uint) r7.w, r7.wwww, t4.yzwx 	-> 使用 uint4 查看 T4 buffer 数据，这是张映射表 
+    add r14.xyz, r4.xyzx, -cb4[r7.w + 0].xyzx 		-> 当前点世界空间坐标 - cb4[0-49] -> cb4前50组数据记录的是 IBL 探针的posWS 
+    dp3 r9.w, r14.xyzx, r14.xyzx 
+    sqrt r10.w, r9.w 
+    lt r12.w, r10.w, cb4[r7.w + 0].w 				-> 探针距离是否在范围内 
+    if_nz r12.w 
       div_sat r10.w, r10.w, cb4[r7.w + 0].w
       dp3 r12.w, r2.yzwy, r14.xyzx
       mad r9.w, -cb4[r7.w + 0].w, cb4[r7.w + 0].w, r9.w
@@ -595,9 +596,9 @@ if_nz r1.x
       mad r9.w, -r9.w, l(2.000000), l(3.000000)
       mad r14.x, -r10.w, r9.w, l(1.000000)
       movc r14.xyzw, r13.wwww, r14.xyzw, r2.xyzw
-      mov r15.xyz, r14.yzwy
-      mov r15.w, cb4[r7.w + 341].y
-      sample_l_indexable(texturecubearray)(float,float,float,float) r15.xyzw, r15.xyzw, t2.xyzw, s3, r5.z
+      mov r15.xyz, r14.yzwy 							->  
+      mov r15.w, cb4[r7.w + 341].y 						-> 
+      sample_l_indexable(texturecubearray)(float,float,float,float) r15.xyzw, r15.xyzw, t2.xyzw, s3, r5.z  -> 采样 IBL 探针纹理 
       mul r14.yzw, r15.xxyz, cb4[r7.w + 341].xxxx
       mul r14.yzw, r14.xxxx, r14.yyzw
       mul r14.yzw, r5.wwww, r14.yyzw
