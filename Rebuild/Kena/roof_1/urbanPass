@@ -129,7 +129,8 @@ movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 概率选 R10 或 R12=
 
 //重构世界坐标 
 //先通过 [-1, +1] * Clip.w * View.z 计算出 Clip Space 下当前点xy，随后结合采样深度z重建世界空间坐标 
-//注意，矩阵运算的目标向量处在Clip Space中，所以变换矩阵理应是 Inv_VP，且P矩阵只修改了XY分量(最后一列为[0,0,1,0])，保留Z分量不动 
+//注意1: 矩阵运算的目标向量处在Clip Space中，所以变换矩阵理应是 Inv_VP，且P矩阵只修改了XY分量(最后一列为[0,0,1,0])，保留Z分量不动 
+//注意2: r1.xy 一直保持在 [-1, +1] * Clip.w 状态 
 mul r4.xy, r1.zzzz, r1.xyxx 				-> R4.xy -> ClipSpace.xy -> [-1, +1] * (Clip.w * View.z) 
 mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_VP -> 将物体从裁剪空间转回世界空间的矩阵 
 mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx 
@@ -261,7 +262,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   add r12.w, -r11.w, l(1.000000) 							-> 1 - NdotRn -> 扰动越大，值越大 
   mad r11.w, r7.w, r12.w, r11.w  							-> (1 - NdotRn) * 扰动向量模长 + NdotRn 
 
-
+  //未知 
   mad r7.w, r7.w, l(10.000000), l(-5.000000)   				-> 扰动向量模长 * 10 - 5 
   mul r7.w, r7.w, -cb0[8].x 								-> (扰动向量模长 * 10 - 5) * (-0.01) 
   mul r7.w, r7.w, l(1.442695) 								-> -1.442695 * (10*模长 - 5) / 100 -> Log2E = 1.442695 
@@ -279,7 +280,9 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   min r15.w, r7.w, r13.w 									-> min(X^0.7, 0)
   mul r7.w, r7.w, r13.w 									-> X^0.7 * 0
   movc r7.w, r12.w, r15.w, r7.w 							-> 还是 r7.w -> 0
+
   ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						-> [Purple.y修改值] * 255 的后4个bit <-> [6,2,3,7]
+  //未知 
   if_nz r16.x 												-> 后4-bit == 6的情况 
     mov r14.w, l(1.000000)
     dp4 r18.x, cb1[181].xyzw, r14.xyzw 						-> r14 = -Normal
@@ -301,14 +304,16 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   else 
     mov r14.xyz, l(0,0,0,0)
   endif 
-  or r12.w, r16.z, r16.y 									-> 2个渲染分支条件满足一个即可，既r12.w用于控制 r16.zy 所对应分支的渲染  
-  mul r16.xyz, r5.xyzx, r5.xyzx 							-> r5 来自 T11 纹理，对除了人物和叶子外的区域，大多是[0,0,0,0] 
-  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx
-  movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx
-  if_nz r16.w 												-> r16.w 分支控制 
 
-  	//求 -ViewDirWS
-    mul r18.xyz, r1.yyyy, cb1[49].xyzx						-> Matrix_Inv_V 的前 3X3 区域
+  or r12.w, r16.z, r16.y 									-> 2个渲染分支条件满足一个即可，既r12.w用于控制 r16.zy 所对应分支的渲染 
+  mul r16.xyz, r5.xyzx, r5.xyzx 							-> r5 来自 T11 纹理，对除了人物和叶子外的区域，大多是[0,0,0,0] 
+  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx 
+  movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx 
+
+  if_nz r16.w 												-> r16.w 分支控制 
+  	//求 -ViewDirWS? 
+  	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的 
+    mul r18.xyz, r1.yyyy, cb1[49].xyzx						-> Matrix_Inv_VP 的前 3X3 区域
     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx			-> 相当于将视空间坐标的 z 分量设置为1
     add r18.xyz, r18.xyzx, cb1[50].xyzx    				 	-> 然后以行向量形式 左乘 逆矩阵中控制旋转和缩放的部分 
     dp3 r1.x, r18.xyzx, r18.xyzx
@@ -322,12 +327,14 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     rsq r5.z, r1.y
     mul r17.xyz, r5.zzzz, r19.xyzx 							-> 归一化 <法-视平偏向量> 
 
-    //<法-视平偏向量> dot ViewDir -> 视线趋向掠射角:得1,  视线趋向垂直物体表面:得0 
-    max r5.z, r3.w, l(0.003922) 							-> max([t9.w=0.69], 0.0039) 
-    min r5.z, r5.z, l(1.000000) 							-> min(0.69, 1.0) 
-    dp3 r12.w, -r18.xyzx, r17.xyzx 							-> ViewDir dot <法-视平偏向量> 
+    //控制粗糙度范围 
+    max r5.z, r3.w, l(0.003922) 							-> max([t9.w=0.69], 0.0039) -> roughness 
+    min r5.z, r5.z, l(1.000000) 							-> min(0.69, 1.0) -> 粗糙度控制在[0,1]内 
 
-    dp3 r13.w, r6.xyzx, r17.xyzx 							-> Normal dot <法-视平偏向量> -> TODO: 这是0么 
+	//<法-视平偏向量> dot ViewDir -> 视线趋向掠射角:得1,  视线趋向垂直物体表面:得0 
+    dp3 r12.w, -r18.xyzx, r17.xyzx 							-> ViewDir dot <法-视平偏向量> -> 归一化前<法-视平偏向量>的模长 
+
+    dp3 r13.w, r6.xyzx, r17.xyzx 							-> Normal dot <法-视平偏向量> -> 0  
 
     //以下代码为: fast_acos(float v) -> 搜索关键数值'-0.156583'可得相关资料 
     //π/2 = 1.570796
