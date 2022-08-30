@@ -47,7 +47,7 @@ dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道)
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
 dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118(roughness)] 
 dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z] 
-dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 [0,0,0,0] 
+dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? -> [0,0,0,0] 
 																-> X 通道似乎是控制 Fresnel 效果用 
 dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值 
 dcl_resource_texture2d (float,float,float,float) t13 			-> AO (R通道) -> TODO 
@@ -69,7 +69,7 @@ mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
 sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
 sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z 
-sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 ?? 
+sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0  
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
 //Decode Depth
@@ -246,7 +246,7 @@ mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm起点指�
 
 if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0  
   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx 				-> R10颜色 - R10颜色 * Purple.y 
-  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx  		-> 颜色 * 1 + 0 
+  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx  		-> 上面的颜色 * 1 + 0 
   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				-> R12颜色 - R12颜色 * Purple.y 
   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx 				-> Condition 使用一种颜色 
 
@@ -306,10 +306,11 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   endif 
 
   or r12.w, r16.z, r16.y 									-> 2个渲染分支条件满足一个即可，既r12.w用于控制 r16.zy 所对应分支的渲染 
-  mul r16.xyz, r5.xyzx, r5.xyzx 							-> r5 来自 T11 纹理，对除了人物和叶子外的区域，大多是[0,0,0,0] 
-  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx 
-  movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx 
+  mul r16.xyz, r5.xyzx, r5.xyzx 							-> r5^2: r5 来自 T11 纹理，对除了人物和叶子外的区域，大多是[0,0,0,0] 
+  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx  					-> r5^2 + r15颜色 
+  movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx 				-> Condition: 选择 (r5^2 + r15颜色) or r15颜色
 
+  //以下分支计算用于 新的 R15 颜色 
   if_nz r16.w 												-> r16.w 分支控制 
   	//求 -ViewDirWS? 
   	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的 
@@ -450,39 +451,41 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     min r10.xyz, -r10.xyzx, l(0, 0, 0, 0)  					-> min(-新R10颜色, 0) -> 结合下面乘 -π -> 抹去负数 
     mul r15.xyz, r10.xyzx, l(-3.141593, -3.141593, -3.141593, 0)  -> R15颜色 = π * R10颜色 
   endif 
-  
-  ieq r1.x, r7.x, l(8)
-  mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx
-  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx
-  mov r17.w, l(1.000000)
-  dp4 r15.x, cb1[181].xyzw, r17.xyzw
+
+  //以下似乎用于计算 输出颜色的 Alpha 通道 
+  ieq r1.x, r7.x, l(8) 							-> [Purple.y修改值] * 255 的后4个bit <-> [8] -> 是否是 8 号材质 
+  mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx 		-> T11.w * [r5^2] + R15颜色 
+  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	-> Condition: 依据 r1.x 选择 {[r5^2] + R15颜色} 或 R15颜色
+  mov r17.w, l(1.000000) 						-> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <法-视平偏向量> nvpv 
+  dp4 r15.x, cb1[181].xyzw, r17.xyzw 			-> 调整向量朝向 -> R15 
   dp4 r15.y, cb1[182].xyzw, r17.xyzw
   dp4 r15.z, cb1[183].xyzw, r17.xyzw
-  mul r16.xyzw, r17.yzzx, r17.xyzz
-  dp4 r18.x, cb1[184].xyzw, r16.xyzw
+  mul r16.xyzw, r17.yzzx, r17.xyzz 				-> 基于R17向量进行一个随机化处理? 
+  dp4 r18.x, cb1[184].xyzw, r16.xyzw 			-> 对处理后向量再进行一次朝向调整 -> R18 
   dp4 r18.y, cb1[185].xyzw, r16.xyzw
   dp4 r18.z, cb1[186].xyzw, r16.xyzw
   mul r1.x, r17.y, r17.y
-  mad r1.x, r17.x, r17.x, -r1.x
-  add r15.xyz, r15.xyzx, r18.xyzx
-  mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx
-  max r15.xyz, r15.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
-  mul r15.xyz, r15.xyzx, cb1[180].xyzx
-  mul r1.x, r11.w, r7.w
-  add r1.y, -r7.w, l(1.000000)
-  mul r16.xyz, r1.yyyy, cb0[1].xyzx
-  mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx
-  mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx
-  mul r10.xyz, r10.xyzx, cb1[134].yyyy
-  eq r1.x, cb1[200].z, l(0.000000)
-  dp3 r1.y, r10.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)
+  mad r1.x, r17.x, r17.x, -r1.x 				-> x^2 - y^2 -> R17.xy 
+  add r15.xyz, r15.xyzx, r18.xyzx 				-> 向量叠加 
+  mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx -> [-0.016,-0.01,-0.003] * (x^2 - y^2) + 上面向量叠加结果 
+  max r15.xyz, r15.xyzx, l(0,0,0,0) 
+  mul r15.xyz, r15.xyzx, cb1[180].xyzx 			-> [4.9,4.19,3.1] * 上面结果 
+  mul r1.x, r11.w, r7.w 						-> [(1 - NdotRn) * 扰动向量模长 + NdotRn] * 0? 
+  add r1.y, -r7.w, l(1.000000) 					-> 1 - 0? = 1 
+  mul r16.xyz, r1.yyyy, cb0[1].xyzx 			-> [0.045,0.05,0.029] * 1 
+  mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx 		-> 叠加并偏移后的向量 * 全局法线扰动Scale(对静态物体为0) + 基础值(向量?) 
+  mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx 	-> R10 = R15向量 * R10颜色 + R14(全0) 
+  mul r10.xyz, r10.xyzx, cb1[134].yyyy 			-> R10 *= 1 -> 这是个颜色 
+  eq r1.x, cb1[200].z, l(0.000000) 				-> 1 == 0 ? false 
+  dp3 r1.y, r10.xyzx, l(0.300000, 0.590000, 0.110000, 0)  -> 取 R10 颜色 强度 
   and r1.y, r1.y, r1.x
   and r1.y, r1.y, r7.y
-  and o0.w, r1.y, r1.x
+  and o0.w, r1.y, r1.x 							-> 输出 Alpha, 因为连续使用了 and，且r1.x 肯定为 0， 这里输出应当为 0 
 else 
-  mov r10.xyz, l(0,0,0,0)
-  mov o0.w, l(0)
+  mov r10.xyz, l(0,0,0,0) 						-> 这是最外层 if 的 else 分支 
+  mov o0.w, l(0) 								-> 设置 r10颜色为 全黑(0), a通道=0 
 endif 
+
 ine r1.xy, r7.xxxx, l(0, 7, 0, 0)
 and r1.x, r1.y, r1.x
 if_nz r1.x
