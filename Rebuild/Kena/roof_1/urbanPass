@@ -38,7 +38,7 @@ dcl_sampler s7, mode_default
 dcl_resource_texturecube (float,float,float,float) t0 			-> 天空 
 dcl_resource_texturecube (float,float,float,float) t1 			-> cubemap 几乎全黑 
 dcl_resource_texturecubearray (float,float,float,float) t2 		-> 确认是 IBL 探针，有 57 张  
-dcl_resource_buffer (uint,uint,uint,uint) t3 
+dcl_resource_buffer (uint,uint,uint,uint) t3  					-> 似乎是一张映射表 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
 dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] (看起来像) 被模糊过，且分辨率减半 
@@ -241,14 +241,14 @@ add r11.w, -r1.z, cb0[2].w 						-> 20000 - 当前帧深度纹理解码的Depth
 mul_sat r11.w, r11.w, cb0[3].x 					-> saturate((20000-Depth)/6000) -> 用于Scale，距离近:1，距离远:0 
 mov r14.xyz, -r6.xyzx 							-> R14 = -Normal 
 mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 		-> (田字4方向独自通过(1/D_Depth)累加后 * D_Depth加权平均).xyz + (-Normal) 
-mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm起点指向新Norm起点的向量(正向扰动矢量) + 原Normal向量 
+mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 
 
 
 if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0  
   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx 				-> R10颜色 - R10颜色 * Purple.y 
   mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx  		-> 上面的颜色 * 1 + 0 
   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				-> R12颜色 - R12颜色 * Purple.y 
-  movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx 				-> Condition 使用一种颜色 
+  movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx 				-> Condition 如果是 4号 材质方案的话，使用R16颜色，不然就用R15  
 
   dp3 r7.w, r13.xyzx, r13.xyzx  							-> 归一化 R13 扰动法线向量 -> R16 -> 定义为RandomNorm 或 (Rn)
   sqrt r7.w, r7.w
@@ -479,87 +479,105 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   eq r1.x, cb1[200].z, l(0.000000) 				-> 1 == 0 ? false 
   dp3 r1.y, r10.xyzx, l(0.300000, 0.590000, 0.110000, 0)  -> 取 R10 颜色 强度 
   and r1.y, r1.y, r1.x
-  and r1.y, r1.y, r7.y
+  and r1.y, r1.y, r7.y 							-> r7.y = 是 9号 或 5号 材质渲染方案之一就为true 
   and o0.w, r1.y, r1.x 							-> 输出 Alpha, 因为连续使用了 and，且r1.x 肯定为 0， 这里输出应当为 0 
 else 
   mov r10.xyz, l(0,0,0,0) 						-> 这是最外层 if 的 else 分支 
   mov o0.w, l(0) 								-> 设置 r10颜色为 全黑(0), a通道=0 
 endif 
 
-ine r1.xy, r7.xxxx, l(0, 7, 0, 0)
-and r1.x, r1.y, r1.x
-if_nz r1.x
-  movc r9.xyz, r7.yyyy, r11.xyzx, r9.xyzx
-  mad r9.xyz, r9.xyzx, cb1[136].wwww, cb1[136].xyzx
-  mad r1.x, r5.x, r9.w, l(1.000000)
-  mul r1.y, r1.x, l(0.080000)
-  mad r11.xyz, -r1.xxxx, l(0.080000, 0.080000, 0.080000, 0.000000), r12.xyzx
-  mad r11.xyz, r6.wwww, r11.xyzx, r1.yyyy
-  movc r9.xyz, r8.zzzz, r11.xyzx, r9.xyzx
-  add r1.x, r1.w, r1.w
-  mad r11.yzw, r1.xxxx, r6.xxyz, r8.xxyw
-  mul r1.x, r3.w, r3.w
-  mad r1.y, -r3.w, r3.w, l(1.000000)
-  sqrt r1.w, r1.y
-  mad r1.w, r3.w, r3.w, r1.w
-  mul r1.y, r1.w, r1.y
-  mad r2.xyz, -r2.xyzx, r2.wwww, r11.yzwy 				-> 这是什么 
-  mad r2.yzw, r1.yyyy, r2.xxyz, r6.xxyz
-  sample_indexable(texture2d)(float,float,float,float) r6.xyzw, r0.xyxx, t12.xyzw, s6
-  add r0.x, -r6.w, l(1.000000)
-  mad r12.xyzw, r6.xyzw, l(1.000000, 1.000000, 1.000000, -1.000000), l(0.000000, 0.000000, 0.000000, 1.000000)
-  add r14.xyzw, -r12.xyzw, l(0.000000, 0.000000, 0.000000, 1.000000)
-  mad r14.xyzw, r5.xxxx, r14.xyzw, r12.xyzw
-  movc r12.xyzw, r8.zzzz, r14.xyzw, r12.xyzw
-  mad r0.y, r4.w, r7.z, r3.x
-  log r0.y, r0.y
-  mul r0.y, r0.y, r1.x
-  exp r0.y, r0.y
-  mad r0.y, r4.w, r7.z, r0.y
-  add_sat r0.y, r0.y, l(-1.000000)
-  mul r1.x, r0.y, r12.w
-  ftou r0.zw, r0.zzzw
-  mad r1.y, r1.z, cb3[3].x, cb3[3].y
-  log r1.y, r1.y
-  mul r1.y, r1.y, cb3[3].z
-  max r1.y, r1.y, l(0.000000)
-  ftou r1.y, r1.y
-  iadd r1.z, cb3[1].z, l(-1)
-  umin r1.y, r1.z, r1.y
-  ushr r0.zw, r0.zzzw, cb3[2].xxxx
-  imad r0.w, r1.y, cb3[1].y, r0.w
-  imad r0.z, r0.w, cb3[1].x, r0.z
-  iadd r0.z, r0.z, cb3[0].w
-  ishl r0.w, r0.z, l(1)
-  ld_indexable(buffer)(uint,uint,uint,uint) r0.w, r0.wwww, t3.yzwx
-  umin r0.w, r0.w, cb3[0].y 											-> r0.w = 1 
-  bfi r0.z, l(31), l(1), r0.z, l(1) 									-> 
-  ld_indexable(buffer)(uint,uint,uint,uint) r0.z, r0.zzzz, t3.yzxw 		-> 
-  ieq r1.y, r7.x, l(6)
-  lt r1.z, l(0.000000), cb0[0].x
-  if_nz r1.z
-    dp3 r1.w, r13.xyzx, r13.xyzx
-    sqrt r1.w, r1.w
-    if_nz cb1[189].x
-      if_z r1.y
-        max r1.y, r3.w, l(0.100000)
-        mul r4.w, r1.w, cb0[0].y
-        mul r5.z, r4.w, l(3.141593)
-        dp3 r5.w, r13.xyzx, r2.yzwy
-        max r6.w, r1.w, l(0.001000)
-        div r5.w, r5.w, r6.w
-        add r6.w, -|r5.w|, l(1.000000)
-        sqrt r6.w, r6.w
-        mad r7.x, |r5.w|, l(-0.018729), l(0.074261)
-        mad r7.x, r7.x, |r5.w|, l(-0.212114)
+//下午干完下面全部! 
+ine r1.xy, r7.xxxx, l(0, 7, 0, 0)  				-> [Purple.y修改值] * 255 的后4个bit <-> [0, 7] 
+and r1.x, r1.y, r1.x 							-> 同时满足 -> 不是0号和7号材质渲染方案  
+if_nz r1.x 
+  movc r9.xyz, r7.yyyy, r11.xyzx, r9.xyzx 		-> 是5或9号材质渲染方案 -> 则使用 R11(环境光底色*方块Mask.y) -> 不然就用R9(环境光底色)  
+  mad r9.xyz, r9.xyzx, cb1[136].wwww, cb1[136].xyzx 		-> R9 * 1 + 0 
+  mad r1.x, r5.x, r9.w, l(1.000000)  			-> 1 + T11.x(菲涅尔等光照效果的开关?) * {[-1, 0]区间,与roughness和NoV有关}
+  mul r1.y, r1.x, l(0.080000)  					-> 0.08 * (1 + T11.x * {[-1, 0]区间,与roughness和NoV有关}) 
+  mad r11.xyz, -r1.xxxx, l(0.08, 0.08, 0.08, 0), r12.xyzx	->R11 = R12颜色 - 0.08*(1 + T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
+  mad r11.xyz, r6.wwww, r11.xyzx, r1.yyyy 		-> R11=[0 or Purple.y] * R11色 + 0.08*(1+T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
+  movc r9.xyz, r8.zzzz, r11.xyzx, r9.xyzx 		-> 依据是否是 4号 材质方案设置 R9颜色 (R11 or R9) 
+  add r1.x, r1.w, r1.w  						-> NdotV + NdotV
+  mad r11.yzw, r1.xxxx, r6.xxyz, r8.xxyw		-> Normal * 2(NdotV) + (-ViewDirWS) 
+  mul r1.x, r3.w, r3.w 							-> roughness^2 
+  mad r1.y, -r3.w, r3.w, l(1.000000) 			-> 1 - roughness^2 
+  sqrt r1.w, r1.y 								-> sqrt(1 - roughness^2)
+  mad r1.w, r3.w, r3.w, r1.w 					-> roughness^2 + sqrt(1 - roughness^2)
+  mul r1.y, r1.w, r1.y 							-> (1 - roughness^2) * [roughness^2 + sqrt(1 - roughness^2)] -> 某种Scale 
+  mad r2.xyz, -r2.xyzx, r2.wwww, r11.yzwy 		-> Normal * 2(NdotV) + (-ViewDirWS)  - Normal -> 略抬视向(-ViewDirUpLite)
+  		-> 这是什么? -> 首先拔高Normal，变为[0,2]区间;其次从入射单位视线的尾，看向Normal的顶;最后用-Norm把视角向下拉一个单位长度 
+  mad r2.yzw, r1.yyyy, r2.xxyz, r6.xxyz			-> 某种Scale * (-ViewDirUpLite) + Normal -> 超抬视向 (注:没有归一化) 
+
+  //使用屏幕UV采样 T12 -> 自发光相关纹理 
+  sample_indexable(texture2d)(float,float,float,float) r6.xyzw, r0.xyxx, t12.xyzw, s6 
+  add r0.x, -r6.w, l(1.000000) 							-> 1 - T12.a 
+  mad r12.xyzw, r6.xyzw, l(1, 1, 1, -1), l(0, 0, 0, 1)	-> [T12.xyz, 1 - T12.w] 
+  add r14.xyzw, -r12.xyzw, l(0, 0, 0, 1)  				-> [-T12.xyz, T12.w] 
+  mad r14.xyzw, r5.xxxx, r14.xyzw, r12.xyzw 			-> r14 = [-T12.xyz, T12.w] * T11.x(控制阀) + [T12.xyz, 1 - T12.w] 
+  movc r12.xyzw, r8.zzzz, r14.xyzw, r12.xyzw 			-> r12 = 4号材质 ? r14 : [T12.xyz, 1 - T12.w] 
+  
+  mad r0.y, r4.w, r7.z, r3.x 							-> Purple.z * {Tex11.x * [0 or Purple.y]} + NdotV
+  log r0.y, r0.y 										-> ln(Purple.z*{Tex11.x*[0 or Purple.y]} + NdotV) -> ln(NoV + noise?)
+  mul r0.y, r0.y, r1.x 									-> ln(NoV + noise?) * roughness^2 
+  exp r0.y, r0.y 										-> exp2( ln(NoV + noise?) * roughness^2 ) 
+  mad r0.y, r4.w, r7.z, r0.y 			-> R0Y = Purple.z * {Tex11.x*[0 or Purple.y]} +  exp2( ln(NoV + noise?) * roughness^2 ) 
+  add_sat r0.y, r0.y, l(-1.000000) 						-> saturate(R0Y - 1) 
+  mul r1.x, r0.y, r12.w 								-> 自发光材质透明度 * saturate(R0Y - 1) 
+  ftou r0.zw, r0.zzzw 									-> 屏幕像素索引(+0.5) to uint 
+  mad r1.y, r1.z, cb3[3].x, cb3[3].y  					-> 当前帧深度纹理解码的Depth * 1 + 1 
+  log r1.y, r1.y 										-> ln(Depth + 1) 
+  mul r1.y, r1.y, cb3[3].z 								-> ln(Depth + 1) + 1 
+  max r1.y, r1.y, l(0.000000) 							-> max(ln(Depth + 1) + 1, 0) -> 返回值不小于 0 
+  ftou r1.y, r1.y 										-> max(ln(Depth + 1) + 1, 0) to uint 
+  iadd r1.z, cb3[1].z, l(-1) 							-> 1 - 1 = 0 
+  umin r1.y, r1.z, r1.y 								-> min(0, max(ln(Depth + 1) + 1, 0)) -> 似乎只能返回 0? -> 距离对数因子? 
+  ushr r0.zw, r0.zzzw, cb3[2].xxxx 						-> 屏幕像素索引(+1) >> 1 -> 相当于半屏幕分辨率 
+  imad r0.w, r1.y, cb3[1].y, r0.w 						-> 距离对数因子 * 1 + 半屏幕像素索引.v 
+  imad r0.z, r0.w, cb3[1].x, r0.z 						-> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u 
+  iadd r0.z, r0.z, cb3[0].w 							-> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1 
+  ishl r0.w, r0.z, l(1) 								-> (距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 0 
+  
+  //访问 T3 表 -> 下标为 r0.w = (距离对数因子 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 0
+  ld_indexable(buffer)(uint,uint,uint,uint) r0.w, r0.wwww, t3.yzwx 		-> 取第一个元素(X)
+  umin r0.w, r0.w, cb3[0].y 											-> min(r0.w=[0,1,...,4,5,6,7...], 1) -> 不高于1? 
+  bfi r0.z, l(31), l(1), r0.z, l(1) 					-> (距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 1 
+  ld_indexable(buffer)(uint,uint,uint,uint) r0.z, r0.zzzz, t3.yzxw  	-> 取第一个元素(X) 
+
+
+  ieq r1.y, r7.x, l(6) 									-> [Purple.y修改值] * 255 的后4个bit <-> [6] 
+  lt r1.z, l(0.000000), cb0[0].x 						-> 0 < 1 ? true -> 总是开启如下逻辑 
+  if_nz r1.z 											-> 这里总是能进入 
+
+  	//R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 -> 记为 Rn 
+    dp3 r1.w, r13.xyzx, r13.xyzx 						-> dot(Rn, Rn)
+    sqrt r1.w, r1.w 									-> Rn 的模长 -> 记为 |Rn| 
+    if_nz cb1[189].x 									-> cb1[189].x 用十六进制解码后的 0x00000001 -> true 
+
+      if_z r1.y 										-> 是否当前像素属于 6号材质 
+
+        max r1.y, r3.w, l(0.100000) 					-> max(roughness, 0.1) 
+        mul r4.w, r1.w, cb0[0].y 						-> |Rn| * 1 
+        mul r5.z, r4.w, l(3.141593) 					-> π * |Rn| 
+        dp3 r5.w, r13.xyzx, r2.yzwy 					-> dot(Rn, '超抬视向') 
+        max r6.w, r1.w, l(0.001000) 					-> max(|Rn|, 0.001) -> 模长不要小于 0.001 
+        
+        //构造传入函数asin_fast的入参 a -> (opposite / hypotenuse) 
+        div r5.w, r5.w, r6.w 							-> R5W = dot(Rn, '超抬视向') / max(|Rn|, 0.001) 
+
+        //asin_fast(a)
+        add r6.w, -|r5.w|, l(1.000000) 					-> 1 - abs(dot(Rn, '超抬视向') / max(|Rn|, 0.001))
+        sqrt r6.w, r6.w 								-> sqrt(1 - |dot(Rn, '超抬视向') / max(|Rn|, 0.001)|)
+        mad r7.x, |r5.w|, l(-0.018729), l(0.074261) 	-> R7X = -0.018729 * |dot(Rn, '超抬视向') / max(|Rn|, 0.001)| + 0.074261
+        mad r7.x, r7.x, |r5.w|, l(-0.212114) 			-> (a*|R5W|+b) * |R5W| - 0.212114
         mad r7.x, r7.x, |r5.w|, l(1.570729)
         mul r7.y, r6.w, r7.x
         mad r7.y, r7.y, l(-2.000000), l(3.141593)
         lt r5.w, r5.w, -r5.w
         and r5.w, r5.w, r7.y
-        mad r5.w, r7.x, r6.w, r5.w
+        mad r5.w, r7.x, r6.w, r5.w 
         mad r6.w, r1.y, l(3.141593), -r5.z
         add r5.w, r5.w, -|r6.w|
+
         mad r1.y, r1.y, l(3.141593), r5.z
         add r1.y, -|r6.w|, r1.y
         div_sat r1.y, r5.w, r1.y
@@ -779,7 +797,7 @@ if_nz r1.x
   min r0.xyz, -r0.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
   add o0.xyz, -r0.xyzx, r10.xyzx
 else 
-  mov o0.xyz, r10.xyzx
+  mov o0.xyz, r10.xyzx 		-> 对于 0号 或 7号 材质渲染方案来说，直接使用 R10.xyz的颜色输出值作为 GI 
 endif 
 ret 
 // Approximately 0 instruction slots used

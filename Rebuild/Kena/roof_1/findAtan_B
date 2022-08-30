@@ -1,0 +1,89 @@
+  dp3 r0.w, r1.xyzx, r1.xyzx        r1.xyz 是 z0
+  sqrt r0.w, r0.w                   这是求length(z0)
+  mov r2.xyz, r1.xyzx               r2 是 z
+  mov r1.w, r0.w                    r = length(z)
+  mov r2.w, l(1.000000)             r2.w -> float dr=1
+  mov r3.x, l(4)                    r3.x -> int i=4
+  loop
+    lt r3.y, r1.w, l(4.000000)      判断 r < 4 
+    iadd r3.z, r3.x, l(-1)          i--
+    ine r3.w, r3.x, l(0)            判断 i ！= 0
+    and r3.y, r3.y, r3.w            while(r < 4 && i--)
+    mov r3.x, r3.z                  更新 i 
+    breakc_z r3.y                   跳出循环 
+
+    //以下是循环内主体逻辑 
+
+    //asin 
+    div r3.y, r2.z, r1.w            -> z.z/zr0 定义为 a;  r2是z
+    add r3.w, -|r3.y|, l(1.000000)
+    sqrt r3.w, r3.w                 -> sqrt(1-a)
+    mad r4.x, |r3.y|, l(-0.018729), l(0.074261) 
+      -> 0.074261-0.018729*|a|
+    mad r4.x, r4.x, |r3.y|, l(-0.212114)
+      -> (0.074261-0.018729*|a|) * |a| - 0.212114
+    mad r4.x, r4.x, |r3.y|, l(1.570729)
+      -> [(0.074261-0.018729*|a|) * |a| - 0.212114] * |a| + 1.570729
+    mul r4.y, r3.w, r4.x
+      -> sqrt(1-a)*(1.570728 - 0.212114*a + 0.074261*a2 - 0.018729*a3) 
+    mad r4.y, r4.y, l(-2.000000), l(3.141593)
+      -> pi - 2 * r4.y
+    lt r3.y, r3.y, -r3.y    如果 a < -a -> 既 判断是否 a < 0 
+    and r3.y, r4.y, r3.y
+    mad r3.y, r4.x, r3.w, r3.y
+    add r3.y, -r3.y, l(1.570796)    ->  这里输出 asin_fast(a)的返回值 
+
+    //atan2 
+    min r3.w, |r2.x|, |r2.y|
+    max r4.x, |r2.x|, |r2.y|
+    div r4.x, l(1.000000, 1.000000, 1.000000, 1.000000), r4.x
+    mul r3.w, r3.w, r4.x
+    mul r4.x, r3.w, r3.w
+    mad r4.y, r4.x, l(0.020835), l(-0.085133)
+    mad r4.y, r4.x, r4.y, l(0.180141)
+    mad r4.y, r4.x, r4.y, l(-0.330299)
+    mad r4.x, r4.x, r4.y, l(0.999866)
+    mul r4.y, r3.w, r4.x
+    lt r4.z, |r2.x|, |r2.y|
+    mad r4.y, r4.y, l(-2.000000), l(1.570796)
+    and r4.y, r4.z, r4.y
+    mad r3.w, r3.w, r4.x, r4.y
+    lt r4.x, r2.x, -r2.x
+    and r4.x, r4.x, l(0xc0490fdb)
+    add r3.w, r3.w, r4.x
+    min r4.x, r2.x, r2.y
+    max r4.y, r2.x, r2.y
+    lt r4.x, r4.x, -r4.x
+    ge r4.y, r4.y, -r4.y
+    and r4.x, r4.x, r4.y
+    movc r3.w, r4.x, -r3.w, r3.w   -> 这里输出 atan2_fast(opposite, adjacent) 
+
+    //Pow(zr0, 7)
+    log r4.x, r1.w                    ln(zr0) 
+    mul r4.x, r4.x, l(7.000000)       7 * ln(zr0) 
+    exp r4.x, r4.x                    exp(7 * ln(zr0)) -> zr0^7 
+
+    //余下不重要 
+    mul r3.yw, r3.yyyw, l(0.000000, 8.000000, 0.000000, 8.000000)
+    mul r4.y, r2.w, r4.x
+    mad r2.w, r4.y, l(8.000000), l(1.000000)
+    mul r4.x, r1.w, r4.x
+    sincos null, r4.yz, r3.yywy
+    mul r5.x, r4.z, r4.y
+    sincos r3.w, null, r3.w
+    mul r5.y, r4.y, r3.w
+    sincos r5.z, null, r3.y
+
+
+
+    mad r2.xyz, r4.xxxx, r5.xyzx, r1.xyzx     z += z0
+
+    dp3 r3.y, r2.xyzx, r2.xyzx                r = length(z)
+    sqrt r1.w, r3.y
+
+    mov r3.x, r3.z                            更新 i 
+  endloop
+  log r0.w, r1.w
+  mul r0.w, r1.w, r0.w
+  mul r0.w, r0.w, l(-0.346574)
+  div r0.w, r0.w, r2.w

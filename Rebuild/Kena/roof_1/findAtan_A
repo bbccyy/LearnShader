@@ -1,0 +1,29 @@
+#define P 8
+inline void powN1(inout float3 z, float zr0, inout float dr) {
+//  float zr = sqrt( dot(z,z) );
+  float zo0 = asin( z.z/zr0 );
+  float zi0 = atan2( z.y,z.x );
+
+  float zr = pow( zr0, P-1 );
+  float zo = zo0 * P;
+  float zi = zi0 * P;
+  
+  dr = zr*dr*P + 1;
+  zr *= zr0;
+  z  = zr*float3( cos(zo)*cos(zi), cos(zo)*sin(zi), sin(zo) );
+}
+
+inline float DE(float3 z0)
+{
+  float3 z=z0;
+  float r;
+  float dr=1;
+  int i=4;
+  r=length(z);
+  while(r<4 && i--) {
+    powN1(z,r,dr);
+    z+=z0;
+    r=length(z);
+  }
+  return -0.5*log(r)*r/dr;
+}
