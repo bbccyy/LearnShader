@@ -443,13 +443,14 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     min r1.x, r1.x, l(1.000000) 							-> min(0.25 * [1 + dot(nvpv, nvpv)], 1) -> 不大于1 -> _R1X
     add r1.y, -r1.x, r16.w 									-> (1 - |dot(n, nvpv)|) - _R1X
     mad r1.x, r1.y, l(0.330000), r1.x 						-> lerp( _R1X, 1-|dot(n, nvpv)|, 0.33 ) 
-    mul r1.x, r1.x, r6.w 									-> 
-    mul r1.x, r1.x, l(0.318310)
-    sqrt r10.xyz, r10.xyzx
-    mad r10.xyz, r10.xyzx, r1.xxxx, r18.xyzx
-    min r10.xyz, -r10.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
-    mul r15.xyz, r10.xyzx, l(-3.141593, -3.141593, -3.141593, 0.000000)
+    mul r1.x, r1.x, r6.w 									-> [0 or Purple.y] * lerp( _R1X, 1-|dot(n, nvpv)|, 0.33 ) 
+    mul r1.x, r1.x, l(0.318310) 							-> 0.31831 * [0 or Purple.y] * lerp( _R1X, 1-|dot(n, nvpv)|, 0.33 ) 
+    sqrt r10.xyz, r10.xyzx  								-> sqrt(R10颜色) 
+    mad r10.xyz, r10.xyzx, r1.xxxx, r18.xyzx  -> R18颜色 + sqrt(R10颜色) * {0.31831*[0 or Purple.y]*lerp(_R1X,1-|dot(n,nvpv)|,0.33)}
+    min r10.xyz, -r10.xyzx, l(0, 0, 0, 0)  					-> min(-新R10颜色, 0) -> 结合下面乘 -π -> 抹去负数 
+    mul r15.xyz, r10.xyzx, l(-3.141593, -3.141593, -3.141593, 0)  -> R15颜色 = π * R10颜色 
   endif 
+  
   ieq r1.x, r7.x, l(8)
   mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx
   movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx
