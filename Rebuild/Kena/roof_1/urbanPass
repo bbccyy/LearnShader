@@ -469,7 +469,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   add r15.xyz, r15.xyzx, r18.xyzx 				-> 向量叠加 
   mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx -> [-0.016,-0.01,-0.003] * (x^2 - y^2) + 上面向量叠加结果 
   max r15.xyz, r15.xyzx, l(0,0,0,0) 
-  mul r15.xyz, r15.xyzx, cb1[180].xyzx 			-> [4.9,4.19,3.1] * 上面结果 
+  mul r15.xyz, r15.xyzx, cb1[180].xyzx 			-> [4.9, 4.19, 3.1] * 上面结果 
   mul r1.x, r11.w, r7.w 						-> [(1 - NdotRn) * 扰动向量模长 + NdotRn] * 0? 
   add r1.y, -r7.w, l(1.000000) 					-> 1 - 0? = 1 
   mul r16.xyz, r1.yyyy, cb0[1].xyzx 			-> [0.045,0.05,0.029] * 1 
@@ -654,8 +654,8 @@ if_nz r1.x
       mul r14.yzw, r14.xxxx, r14.yyzw 					-> [距离缩放因子 or 0] * 探针返回颜色 
       mul r14.yzw, r5.wwww, r14.yyzw			-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {[距离缩放因子 or 0] * 探针返回颜色} 
       mad r8.xyw, r14.yzyw, r1.yyyy, r8.xyxw 			-> [spec * IBL_base_col] * [|Rn|和Roughness关联 の 强度值] + 0 
-      mad r7.w, -r15.w, r14.x, l(1.000000) 				-> 1 - [spec * IBL_base_col] * IBL_base_alpha 
-      mul r5.w, r5.w, r7.w  		-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {1 - [spec * IBL_base_col] * IBL_base_alpha} 
+      mad r7.w, -r15.w, r14.x, l(1.000000) 				-> 1 - IBL_base_alpha * [距离缩放因子 or 0] 
+      mul r5.w, r5.w, r7.w  			-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {1 - IBL_base_alpha * [距离缩放因子 or 0]} 
     endif 
 
     iadd r6.w, r6.w, l(1)								-> LOOP index i++ 
@@ -663,38 +663,45 @@ if_nz r1.x
 
   lt r1.x, l(0.000000), cb2[0].y 						-> 0 < 0.0992432 ? -> true 
 
+  //以下分支用于采样天空盒颜色，返回值存入 R7.xyz 
   if_nz r1.x 
     add r1.w, -r1.w, cb2[0].x 							-> 1.8154297 - [1 - 1.2 * ln(roughness)]
     add r1.w, r1.w, l(-1.000000)						-> 1.8154297 - [1 - 1.2 * ln(roughness)] - 1 -> 这是计算 LOD 
 
-    //采样 T0 cubemap -> 天空盒; r2=超抬视向 -> 我现在怀疑这货是视方向的反射方向(reflect dir) 
-    sample_l_indexable(texturecube)(float,float,float,float) r14.xyz, r2.yzwy, t0.xyzw, s1, r1.w
-    mul r14.xyz, r14.xyzx, cb1[180].xyzx
-    lt r2.x, l(0.000000), cb2[0].w
+    //采样 T0 cubemap -> 天空盒; r2=超抬视向 -> 我现在怀疑这货是视方向的反射方向(reflect dir) -> TODO: 修正之前的估计 
+    sample_l_indexable(texturecube)(float,float,float,float) r14.xyz, r2.yzwy, t0.xyzw, s1, r1.w 
+    mul r14.xyz, r14.xyzx, cb1[180].xyzx				-> 天空盒采样颜色 * [4.9, 4.19, 3.1]	-> 对3个通道缩放 -> why? 
+    lt r2.x, l(0.000000), cb2[0].w 						-> 0 < -0.00087 -> false 
 
-    if_nz r2.x
-      sample_l_indexable(texturecube)(float,float,float,float) r2.xyz, r2.yzwy, t1.xyzw, s2, r1.w
-      mad r2.xyz, r2.xyzx, cb1[180].xyzx, -r14.xyzx
-      mad r14.xyz, cb2[0].wwww, r2.xyzx, r14.xyzx
+    if_nz r2.x 											-> 这里进不去
+      //采样另一个天空盒 
+      sample_l_indexable(texturecube)(float,float,float,float) r2.xyz, r2.yzwy, t1.xyzw, s2, r1.w 	-> T1 cubemap 无数据 
+      mad r2.xyz, r2.xyzx, cb1[180].xyzx, -r14.xyzx 
+      mad r14.xyz, cb2[0].wwww, r2.xyzx, r14.xyzx  		-> 与第一个天空盒颜色进行混淆 
     endif 
 
-    mad r7.xyz, r14.xyzx, r1.yyyy, r7.xyzx
+    mad r7.xyz, r14.xyzx, r1.yyyy, r7.xyzx 
+    	-> 天空盒放大后颜色 * [|Rn|和Roughness关联 の 强度值] + [0.045, 0.051, 0.029] * (1 - |Rn|关联值) 
   endif 
 
-  mul r2.xyz, r5.wwww, r7.xyzx
-  mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx
-  mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx
-  if_nz r8.z
-    mov r3.y, r3.w 							-> 推测 r3.w = Roughness    r3.x = NdotV 
+  mul r2.xyz, r5.wwww, r7.xyzx 							-> 天空盒返回值 * alpha通道关联值 
+  mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx 			-> IBL_spec&rough_col * 1 + 天空盒最终值 
+  mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx 			-> 1 * (IBL_spec&rough_col * 1 + 天空盒最终值) + T12采样关联值(各颜色spec?) 
+  														-> 可以认为是各种 IBL 采样返回的大集合 -> prefilter_Specular 
+
+  if_nz r8.z 											-> 是否是 4号 材质
+    mov r3.y, r3.w 							-> 据此知 r3.w=Roughness; r3.x=NdotV -> 这里被当做了出射光方向(毕竟当前pass是用来计算GI的) 
     sample_l_indexable(texture2d)(float,float,float,float) r1.yw, r3.xyxx, t5.zxwy, s4, l(0.000000)  -> 采样 LUT 
-    mul_sat r2.w, r9.y, l(50.000000)
-    mul r1.w, r1.w, r2.w 					-> r1.w = LUT.bias 
-    add r2.w, -r5.x, l(1.000000)
-    mul r1.w, r1.w, r2.w
-    mad r7.xyz, r9.xyzx, r1.yyyy, r1.wwww  	-> r1.y = LUT.scale  ->  推测 R9 = Specular 
-    mul r7.xyz, r2.xyzx, r7.xyzx
-    mov r3.z, r5.y 							-> 推测 r5.y = Roughness 	r3.x = NdotV 
-    sample_l_indexable(texture2d)(float,float,float,float) r1.yw, r3.xzxx, t5.zxwy, s4, l(0.000000)
+    mul_sat r2.w, r9.y, l(50.000000) 					-> R9色.Y通道 * 50 -> 待考: R9颜色似乎是一种环境光底色 
+    mul r1.w, r1.w, r2.w 								-> LUT.bias * (50 * R9.y) -> 采样的r1.w = LUT.bias 
+    add r2.w, -r5.x, l(1.000000) 						-> 1 - T11.x -> 控制阀取反 
+    mul r1.w, r1.w, r2.w 								-> [LUT.bias * (50 * R9.y)] * (1 - T11.x) 
+    mad r7.xyz, r9.xyzx, r1.yyyy, r1.wwww  				-> (R9色 * LUT.scale) + [LUT.bias * (50 * R9.y)] * (1 - T11.x)  
+    													-> R9颜色 -> 是不是环境光底色? 或者是 F0?  
+    mul r7.xyz, r2.xyzx, r7.xyzx  						-> {(R9色*LUT.scale) + [LUT.bias*(50*R9.y)]*(1-T11.x)} * prefilter_Specular  
+
+    mov r3.z, r5.y 										-> 推测 r5.y = Roughness 	r3.x = NdotV 
+    sample_l_indexable(texture2d)(float,float,float,float) r1.yw, r3.xzxx, t5.zxwy, s4, l(0.000000) 
     mad r1.y, r1.y, l(0.040000), r1.w
     mul r1.w, r5.x, r1.y
     mad r1.y, -r1.y, r5.x, l(1.000000)
