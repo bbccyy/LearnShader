@@ -565,21 +565,21 @@ if_nz r1.x
         div r5.w, r5.w, r6.w 							-> R5W = dot(Rn, '超抬视向') / max(|Rn|, 0.001) 
 
         //asin_fast(a)
-        add r6.w, -|r5.w|, l(1.000000) 					-> 1 - abs(dot(Rn, '超抬视向') / max(|Rn|, 0.001))
-        sqrt r6.w, r6.w 								-> sqrt(1 - |dot(Rn, '超抬视向') / max(|Rn|, 0.001)|)
-        mad r7.x, |r5.w|, l(-0.018729), l(0.074261) 	-> R7X = -0.018729 * |dot(Rn, '超抬视向') / max(|Rn|, 0.001)| + 0.074261
-        mad r7.x, r7.x, |r5.w|, l(-0.212114) 			-> (a*|R5W|+b) * |R5W| - 0.212114
+        add r6.w, -|r5.w|, l(1.000000) 	 
+        sqrt r6.w, r6.w 	 
+        mad r7.x, |r5.w|, l(-0.018729), l(0.074261)  
+        mad r7.x, r7.x, |r5.w|, l(-0.212114)  
         mad r7.x, r7.x, |r5.w|, l(1.570729)
         mul r7.y, r6.w, r7.x
         mad r7.y, r7.y, l(-2.000000), l(3.141593)
         lt r5.w, r5.w, -r5.w
         and r5.w, r5.w, r7.y
         mad r5.w, r7.x, r6.w, r5.w 
-        mad r6.w, r1.y, l(3.141593), -r5.z
-        add r5.w, r5.w, -|r6.w|
+        mad r6.w, r1.y, l(3.141593), -r5.z 				-> 这一行于asin无关，用于计算:  π * |roughness| - π * |Rn|
+        add r5.w, r5.w, -|r6.w| 						-> asin(dot(Rn, '超抬视向') / |Rn|)  
 
-        mad r1.y, r1.y, l(3.141593), r5.z
-        add r1.y, -|r6.w|, r1.y
+        mad r1.y, r1.y, l(3.141593), r5.z 				-> π * |roughness| + π * |Rn| 
+        add r1.y, -|r6.w|, r1.y 						-> 
         div_sat r1.y, r5.w, r1.y
         add r1.y, -r1.y, l(1.000000)
         mad r5.z, r1.y, l(-2.000000), l(3.000000)

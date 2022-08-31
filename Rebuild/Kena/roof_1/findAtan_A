@@ -27,3 +27,13 @@ inline float DE(float3 z0)
   }
   return -0.5*log(r)*r/dr;
 }
+
+static public float acos (float a) {
+    float a2 = a * a; // a squared
+    float a3 = a * a2; // a cubed
+    if (a >= 0f) {
+      return (float)Math.sqrt(1f - a) * (1.5707288f - 0.2121144f * a + 0.0742610f * a2 - 0.0187293f * a3);
+    }
+    return 3.14159265358979323846f
+      - (float)Math.sqrt(1f + a) * (1.5707288f + 0.2121144f * a + 0.0742610f * a2 + 0.0187293f * a3);
+  }
