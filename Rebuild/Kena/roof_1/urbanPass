@@ -508,7 +508,8 @@ if_nz r1.x
   		-> 这是什么? -> 首先拔高Normal，变为[0,2]区间;其次从入射单位视线的尾，看向Normal的顶;最后用-Norm把视角向下拉一个单位长度 
   mad r2.yzw, r1.yyyy, r2.xxyz, r6.xxyz			-> 某种Scale * (-ViewDirUpLite) + Normal -> 超抬视向 (注:没有归一化) 
 
-  //使用屏幕UV采样 T12 -> 自发光相关纹理 
+  //使用屏幕UV采样 T12 -> 这张纹理看起来对水晶,金属扣环等物体做了处理 -> 疑似 spec 纹理 
+  //输出 r12.xyz 代表采样 T12.xyz 的返回值 -> 各颜色通道 spec 系数?  
   sample_indexable(texture2d)(float,float,float,float) r6.xyzw, r0.xyxx, t12.xyzw, s6 
   add r0.x, -r6.w, l(1.000000) 							-> 1 - T12.a 
   mad r12.xyzw, r6.xyzw, l(1, 1, 1, -1), l(0, 0, 0, 1)	-> [T12.xyz, 1 - T12.w] 
@@ -516,13 +517,15 @@ if_nz r1.x
   mad r14.xyzw, r5.xxxx, r14.xyzw, r12.xyzw 			-> r14 = [-T12.xyz, T12.w] * T11.x(控制阀) + [T12.xyz, 1 - T12.w] 
   movc r12.xyzw, r8.zzzz, r14.xyzw, r12.xyzw 			-> r12 = 4号材质 ? r14 : [T12.xyz, 1 - T12.w] 
   
+  //输出 r1.x = 感觉是 specular 
   mad r0.y, r4.w, r7.z, r3.x 							-> Purple.z * {Tex11.x * [0 or Purple.y]} + NdotV
   log r0.y, r0.y 										-> ln(Purple.z*{Tex11.x*[0 or Purple.y]} + NdotV) -> ln(NoV + noise?)
   mul r0.y, r0.y, r1.x 									-> ln(NoV + noise?) * roughness^2 
   exp r0.y, r0.y 										-> exp2( ln(NoV + noise?) * roughness^2 ) 
   mad r0.y, r4.w, r7.z, r0.y 			-> R0Y = Purple.z * {Tex11.x*[0 or Purple.y]} +  exp2( ln(NoV + noise?) * roughness^2 ) 
   add_sat r0.y, r0.y, l(-1.000000) 						-> saturate(R0Y - 1) 
-  mul r1.x, r0.y, r12.w 								-> 自发光材质透明度 * saturate(R0Y - 1) 
+  mul r1.x, r0.y, r12.w 								-> 高反射率纹理a通道值 * saturate(R0Y - 1) -> 未知用途 
+
   ftou r0.zw, r0.zzzw 									-> 屏幕像素索引(+0.5) to uint 
   mad r1.y, r1.z, cb3[3].x, cb3[3].y  					-> 当前帧深度纹理解码的Depth * 1 + 1 
   log r1.y, r1.y 										-> ln(Depth + 1) 
@@ -551,10 +554,10 @@ if_nz r1.x
   	//R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 -> 记为 Rn 
     dp3 r1.w, r13.xyzx, r13.xyzx 						-> dot(Rn, Rn)
     sqrt r1.w, r1.w 									-> Rn 的模长 -> 记为 |Rn| 
+    //以下分支用于计算新的 r1.w 值 -> 某种扰动强度 
+    //在重新计算过程中使用到了: |Rn|, roughness, asin(dot(Rn,'超抬视向')/|Rn|) -> 推测是经验公式 
     if_nz cb1[189].x 									-> cb1[189].x 用十六进制解码后的 0x00000001 -> true 
-
       if_z r1.y 										-> 是否当前像素属于 6号材质 
-
         max r1.y, r3.w, l(0.100000) 					-> max(roughness, 0.1) 
         mul r4.w, r1.w, cb0[0].y 						-> |Rn| * 1 
         mul r5.z, r4.w, l(3.141593) 					-> π * |Rn| 
@@ -579,38 +582,44 @@ if_nz r1.x
         add r5.w, r5.w, -|r6.w| 						-> asin(dot(Rn, '超抬视向') / |Rn|)  
 
         mad r1.y, r1.y, l(3.141593), r5.z 				-> π * |roughness| + π * |Rn| 
-        add r1.y, -|r6.w|, r1.y 						-> 
-        div_sat r1.y, r5.w, r1.y
-        add r1.y, -r1.y, l(1.000000)
-        mad r5.z, r1.y, l(-2.000000), l(3.000000)
-        mul r1.y, r1.y, r1.y
+        add r1.y, -|r6.w|, r1.y 						-> (π * |roughness| + π * |Rn|) - |π * |roughness| - π * |Rn|| 
+        div_sat r1.y, r5.w, r1.y 						-> asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|) 
+        add r1.y, -r1.y, l(1.000000) 					-> 1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)
+        mad r5.z, r1.y, l(-2.000000), l(3.000000) 		-> -2*[1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)] + 3
+        mul r1.y, r1.y, r1.y 							-> [1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)]^2
         mul r1.y, r1.y, r5.z
-        mad r4.w, r4.w, l(3.141593), l(-0.100000)
-        mul_sat r4.w, r4.w, l(5.000000)
+        	-> [1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)]^2 * {-2*[1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)] + 3}
+        mad r4.w, r4.w, l(3.141593), l(-0.100000)		-> π * |Rn| - 0.1
+        mul_sat r4.w, r4.w, l(5.000000) 				-> saturate((π * |Rn| - 0.1) * 5)
         mul r1.w, r1.y, r4.w
+        	-> saturate((π * |Rn| - 0.1) * 5) * [1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)]^2 * {-2*[1 - asin(dot(Rn,'超抬视向')/|Rn|)  / (A+B-|A-B|)] + 3} 
       endif 
     endif 
-    add r1.y, -r1.w, l(1.000000)
-    mad r1.y, cb0[1].w, r1.y, r1.w
-    add r1.w, -r1.y, l(1.000000)
-    mul r7.xyz, r1.wwww, cb0[1].xyzx
+
+    add r1.y, -r1.w, l(1.000000) 						-> 设 r1.w = 与|Rn|有关的强度值 
+    mad r1.y, cb0[1].w, r1.y, r1.w 						-> lerp(|Rn|关联值, 1, 0.0%) -> 还是本身 
+    add r1.w, -r1.y, l(1.000000) 						-> 1 - |Rn|关联值 
+    mul r7.xyz, r1.wwww, cb0[1].xyzx 					-> [0.045, 0.051, 0.029] * (1 - |Rn|关联值) 
   else 
-    mov r7.xyz, l(0,0,0,0)
+    mov r7.xyz, l(0,0,0,0) 								-> 这里总是不进入 
     mov r1.y, l(1.000000)
   endif 
-  log r1.w, r3.w
-  mad r1.w, -r1.w, l(1.200000), l(1.000000) 
-  add r4.w, cb1[188].z, l(-1.000000)
-  add r5.z, -r1.w, r4.w
-  mov r2.x, l(0)
+
+  log r1.w, r3.w  										-> ln(roughness) 
+  mad r1.w, -r1.w, l(1.200000), l(1.000000) 			-> 1 - 1.2 * ln(roughness) 
+  add r4.w, cb1[188].z, l(-1.000000) 					-> 7 - 1 
+  add r5.z, -r1.w, r4.w 								-> 6 - (1 - 1.2 * ln(roughness))
+  mov r2.x, l(0) 										
   mov r8.xyw, l(0,0,0,0)
-  mov r5.w, r1.x 
-  mov r6.w, l(0) 				-> Loop Index (i) -> 初始为 0 
+  mov r5.w, r1.x  										-> r5.w = 高反射率纹理a通道值 * saturate( R0Y - 1 )
+  mov r6.w, l(0) 										-> Loop Index (i) -> 初始为 0 
+
+  //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 
   loop 
-    uge r7.w, r6.w, r0.w  		-> index >= r0.w ? true : false 
-    breakc_nz r7.w 				-> 如果 index >= buffer_size -> 跳出循环 
-    lt r7.w, r5.w, l(0.001000)	-> r5.w < 0.001 ? true : false 
-    if_nz r7.w 					-> 如果 
+    uge r7.w, r6.w, r0.w  								-> i >= r0.w ? 
+    breakc_nz r7.w 										-> 相当于 while( i < r0.w )
+    lt r7.w, r5.w, l(0.001000)							-> r5.w < 0.001 ? 
+    if_nz r7.w 											-> 相当于 if (r5.w < 0.001) then break 
       break 
     endif 
     iadd r7.w, r0.z, r6.w 
