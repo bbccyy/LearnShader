@@ -852,17 +852,19 @@ if_nz r1.x
     													-> 叠加了2次 IBL 采样和计算结果 -> prefilter_Specular_Final 
   else 
   	//通过开关控制 -> 一般来说总是不进入 
-    sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000) 
-    mul_sat r0.w, r9.y, l(50.000000)
-    mul r0.w, r1.y, r0.w
-    mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww
-    mul r0.xyz, r1.xyzx, r2.xyzx
+    sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000)  -> 采样 LUT 
+    mul_sat r0.w, r9.y, l(50.000000) 					-> R9色.Y通道 * 50 -> 待考: R9颜色似乎是一种环境光底色 
+    mul r0.w, r1.y, r0.w 								-> bias * saturate(50 * R9.y) 
+    mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww 				-> R9色 * scale + bias * saturate(50 * R9.y) 
+    mul r0.xyz, r1.xyzx, r2.xyzx 						-> prefilter_Specular * [R9色 * scale + bias * saturate(50 * R9.y)]
+    													-> 合成 GI_spec 
   endif 
-  min r0.xyz, -r0.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
-  add o0.xyz, -r0.xyzx, r10.xyzx
-else 
-  mov o0.xyz, r10.xyzx 		-> 对于 0号 或 7号 材质渲染方案来说，直接使用 R10.xyz的颜色输出值作为 GI 
-endif 
 
+  min r0.xyz, -r0.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)	-> 去除 r0 颜色中小于 0 的部分 
+  add o0.xyz, -r0.xyzx, r10.xyzx  									-> 最终输出颜色由: prefilter_Specular_Final + Diffuse 构成 
+  																	-> R10颜色 据此推断为 Diffuse 
+else 
+  mov o0.xyz, r10.xyzx 		-> 对于 0号 或 7号 材质渲染方案来说，直接使用 R10.xyz的颜色(Diffuse) 输出值作为 GI 
+endif 
 ret 
 // Approximately 0 instruction slots used
