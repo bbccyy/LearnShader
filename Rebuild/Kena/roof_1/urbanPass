@@ -525,8 +525,8 @@ if_nz r1.x
   mul r0.y, r0.y, r1.x 									-> ln(NoV + noise?) * roughness^2 
   exp r0.y, r0.y 										-> exp2( ln(NoV + noise?) * roughness^2 ) 
   mad r0.y, r4.w, r7.z, r0.y 			-> R0Y = Purple.z * {Tex11.x*[0 or Purple.y]} +  exp2( ln(NoV + noise?) * roughness^2 ) 
-  add_sat r0.y, r0.y, l(-1.000000) 						-> saturate(R0Y - 1) 
-  mul r1.x, r0.y, r12.w 								-> 高反射率纹理a通道值 * saturate(R0Y - 1) -> 未知用途 
+  add_sat r0.y, r0.y, l(-1.000000) 						-> saturate(R0Y - 1) -> 推测为 specular 系数 
+  mul r1.x, r0.y, r12.w 								-> 高反射率纹理a通道值 * saturate(R0Y - 1) -> 被A通道修正过的 specular 系数/强度? 
 
   ftou r0.zw, r0.zzzw 									-> 屏幕像素索引(+0.5) to uint 
   mad r1.y, r1.z, cb3[3].x, cb3[3].y  					-> 当前帧深度纹理解码的Depth * 1 + 1 
@@ -613,7 +613,7 @@ if_nz r1.x
   add r5.z, -r1.w, r4.w 								-> 6 - (1 - 1.2 * ln(roughness))
   mov r2.x, l(0) 										
   mov r8.xyw, l(0,0,0,0)
-  mov r5.w, r1.x  										-> r5.w = 高反射率纹理a通道值 * saturate( R0Y - 1 )
+  mov r5.w, r1.x  										-> r5.w = 高反射率纹理a通道值 * saturate( R0Y - 1 ) -> Spec_Intense_1 
   mov r6.w, l(0) 										-> Loop Index (i) -> 初始为 0 
 
   //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 
@@ -655,10 +655,10 @@ if_nz r1.x
 
       mul r14.yzw, r15.xxyz, cb4[r7.w + 341].xxxx 		-> 探针返回颜色 * 1 
       mul r14.yzw, r14.xxxx, r14.yyzw 					-> 距离缩放因子 * 探针返回颜色 
-      mul r14.yzw, r5.wwww, r14.yyzw					-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {距离缩放因子 * 探针返回颜色} 
+      mul r14.yzw, r5.wwww, r14.yyzw					-> [Spec_Intense_1] * {距离缩放因子 * 探针返回颜色} 
       mad r8.xyw, r14.yzyw, r1.yyyy, r8.xyxw 			-> [spec * IBL_base_col] * [|Rn|和Roughness关联 の 强度值] + 0 
       mad r7.w, -r15.w, r14.x, l(1.000000) 				-> 1 - IBL_base_alpha * 距离缩放因子
-      mul r5.w, r5.w, r7.w  						-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {1 - IBL_base_alpha * 距离缩放因子} 
+      mul r5.w, r5.w, r7.w  							-> [Spec_Intense_1] * {1 - IBL_base_alpha * 距离缩放因子} 
     endif 
 
     iadd r6.w, r6.w, l(1)								-> LOOP index i++ 
@@ -687,9 +687,9 @@ if_nz r1.x
     	-> 天空盒放大后颜色 * [|Rn|和Roughness关联 の 强度值] + [0.045, 0.051, 0.029] * (1 - |Rn|关联值) 
   endif 
 
-  mul r2.xyz, r5.wwww, r7.xyzx 							-> 天空盒返回值 * alpha通道关联值 
-  mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx 			-> IBL_spec&rough_col * 1 + 天空盒最终值 
-  mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx 			-> 1 * (IBL_spec&rough_col * 1 + 天空盒最终值) + T12采样关联值(各颜色spec?) 
+  mul r2.xyz, r5.wwww, r7.xyzx 							-> 天空盒返回值 * Spec_Intense_1 
+  mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx 			-> IBL_spec1&rough1_col * 1 + 天空盒最终值 
+  mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx 			-> 1 * (IBL_spec1&rough1_col * 1 + 天空盒最终值) + T12采样关联值(各颜色spec?) 
   														-> 可以认为是各种 IBL 采样返回的大集合 -> prefilter_Specular 
 
   if_nz r8.z 											-> 是否是 4号 材质
@@ -771,7 +771,8 @@ if_nz r1.x
     add r3.y, -r2.w, r4.w 								-> 6 - ln(T11.y) 
     mov r11.x, l(0) 					
     mov r6.xyz, l(0,0,0,0) 
-    mov r3.z, r0.x  									-> {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1)
+    mov r3.z, r0.x  									-> {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
+    													-> Spec_Intense_2 -> 新计算出来的高光强度 
     mov r4.w, l(0) 										-> Index i = 0  
 
     //以下LOOP的起始形式与上面 IBL LOOP 的起始形式雷同 
@@ -819,29 +820,39 @@ if_nz r1.x
         												-> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
         mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			-> [spec * IBL_base_col] * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + 0 
         mad r5.y, -r8.w, r7.x, l(1.000000)  			-> 1 - IBL_base_alpha * 距离缩放因子 
-        mul r3.z, r3.z, r5.y 							-> [新spec] * {1 - IBL_base_alpha * 距离缩放因子} 
+        mul r3.z, r3.z, r5.y 							-> r3.z * {1 - IBL_base_alpha * 距离缩放因子} -> 对r3.z进行缩放修正(注意Loop条件) 
       endif 
       iadd r4.w, r4.w, l(1) 							-> i++ 
     endloop 
 
+    //和采样天空盒同一个开关，总是true 
     if_nz r1.x
-      add r0.x, -r2.w, cb2[0].x
-      add r0.x, r0.x, l(-1.000000)
+      add r0.x, -r2.w, cb2[0].x 						-> 1.815 - [1 - 1.2 * ln(T11.y)] 
+      add r0.x, r0.x, l(-1.000000) 						-> 1.815 - [1 - 1.2 * ln(T11.y)] - 1 -> 注意,若T11.y=0, ln(0)=-∞ 
+
+      //使用 View_Reflection 采样 天空盒 
       sample_l_indexable(texturecube)(float,float,float,float) r4.xyz, r11.yzwy, t0.xyzw, s1, r0.x
-      mul r4.xyz, r4.xyzx, cb1[180].xyzx
-      lt r0.z, l(0.000000), cb2[0].w
-      if_nz r0.z
-        sample_l_indexable(texturecube)(float,float,float,float) r0.xzw, r11.yzwy, t1.xwyz, s2, r0.x
+      mul r4.xyz, r4.xyzx, cb1[180].xyzx 				-> 天空盒返回值 * [4.9, 4.19, 3.1] 
+      lt r0.z, l(0.000000), cb2[0].w 					-> 0 < -0.00087 -> false 
+
+      if_nz r0.z 
+      	//采样另一个天空盒 
+        sample_l_indexable(texturecube)(float,float,float,float) r0.xzw, r11.yzwy, t1.xwyz, s2, r0.x 
         mad r0.xzw, r0.xxzw, cb1[180].xxyz, -r4.xxyz
         mad r4.xyz, cb2[0].wwww, r0.xzwx, r4.xyzx
       endif 
+
       mad r1.yzw, r4.xxyz, r0.yyyy, r1.yyzw
+      		-> 天空盒放大后颜色 * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + [0.045, 0.051, 0.029] * 某种与|Rn|关联值强度  
     endif 
-    mul r0.xyz, r1.yzwy, r3.zzzz
-    mad r0.xyz, r6.xyzx, cb1[156].xyzx, r0.xyzx
-    mad r0.xyz, cb1[134].yyyy, r0.xyzx, r5.xzwx
+
+    mul r0.xyz, r1.yzwy, r3.zzzz 						-> 天空盒返回值 * Spec_Intense_2 = 天空盒最终值 
+    mad r0.xyz, r6.xyzx, cb1[156].xyzx, r0.xyzx			-> IBL_spec2&rough2_col * 1 + 天空盒最终值 
+    mad r0.xyz, cb1[134].yyyy, r0.xyzx, r5.xzwx			-> 1 * (IBL_spec2&rough2_col + 天空盒最终值) + 第一个IBL计算后输出的 GI_spec 结果 
+    													-> 叠加了2次 IBL 采样和计算结果 -> prefilter_Specular_Final 
   else 
-    sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000)
+  	//通过开关控制 -> 一般来说总是不进入 
+    sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000) 
     mul_sat r0.w, r9.y, l(50.000000)
     mul r0.w, r1.y, r0.w
     mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww
