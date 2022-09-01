@@ -627,7 +627,7 @@ if_nz r1.x
     endif 
     iadd r7.w, r0.z, r6.w 								-> r0.z 也是基于'屏幕像素'和'距离对数' 从T3 buffer直接获取 -> 可为[0,1,...] 
     ld_indexable(buffer)(uint,uint,uint,uint) r7.w, r7.wwww, t4.yzwx 	-> 使用 uint4 查看 T4 buffer 数据，这是张映射表 
-    add r14.xyz, r4.xyzx, -cb4[r7.w + 0].xyzx 		-> 当前点世界空间坐标 - cb4[0-49] -> cb4前50组数据记录的是IBL探针的[posWS, 半径R]
+    add r14.xyz, r4.xyzx, -cb4[r7.w + 0].xyzx 		-> 当前点世界空间坐标 - cb4[0-49] -> cb4前50组数据记录的是IBL探针的[posWS, 半径R] 
     dp3 r9.w, r14.xyzx, r14.xyzx 
     sqrt r10.w, r9.w 
     lt r12.w, r10.w, cb4[r7.w + 0].w 					-> 探针距离是否在范围 R 内 
@@ -684,7 +684,7 @@ if_nz r1.x
     endif 
 
     mad r7.xyz, r14.xyzx, r1.yyyy, r7.xyzx 
-    	-> 天空盒放大后颜色 * [|Rn|和Roughness关联 の 强度值] + [0.045, 0.051, 0.029] * (1 - |Rn|关联值) 
+    	-> 天空盒放大后颜色 * [|Rn|和Roughness关联 の 强度值] + {[0.045, 0.051, 0.029] * (1 - |Rn|关联值)} -> 后面{}里的是 R7颜色 -> 环境光底色? 
   endif 
 
   mul r2.xyz, r5.wwww, r7.xyzx 							-> 天空盒返回值 * Spec_Intense_1 

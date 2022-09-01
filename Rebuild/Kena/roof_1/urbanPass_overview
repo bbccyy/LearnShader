@@ -36,7 +36,7 @@ else 	// For #0 Mat
 	O0.W = 0 
 }
 
-Block_For_#0_Mat
+Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支 
 {
 	...
 
@@ -66,7 +66,35 @@ Block_For_#0_Mat
 
 	While (i < 当前场景启用的IBL纹理个数 && Spec_Intense_1 > 0.001) 
 	{
+		...
 
+		If In_Distance
+		{
+
+			Compute IBL spec color 					-> r8.xyw 
+
+			Update Spec_Intense_1 with multipler	-> r5.w 
+		}
+
+		i++ 
 	}
+
+	If True 		//受到cb2[0].y参数控制，总是可进入
+	{
+		Sample SkyBox_1 using reflectDir_UpLite 
+
+		If False 	//受到cb2[0].w参数控制，总是不可进 
+		{
+			Sample SkyBox_2 		//No Data 
+
+			Mix with SkyBox_1 ... 
+		}
+
+		天空盒返回值: [0.045, 0.051, 0.029] * 天空盒颜色 * 粗糙度因子 + R7颜色 
+	}
+
+	整合IBL和Sky的GI_Spec: 天空盒返回值 * Spec_Intense_1 + IBL_spec1&rough1_col + T12采样关联值(spec相关) 
+
+
 
 }
