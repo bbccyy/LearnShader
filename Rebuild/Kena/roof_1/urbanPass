@@ -41,7 +41,7 @@ dcl_resource_texturecubearray (float,float,float,float) t2 		-> 确认是 IBL �
 dcl_resource_buffer (uint,uint,uint,uint) t3  					-> 似乎是一张映射表 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
-dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] (看起来像) 被模糊过，且分辨率减半 
+dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] 看起来像被模糊过，且分辨率减半 
 																-> 后续可能关联计算: Motion Blur;  Depth of Field; ... 
 dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
@@ -69,11 +69,11 @@ mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
 sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
 sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z 
-sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0  
+sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
 //Decode Depth
-//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100, 既大于1米  
+//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100, 既大于1米 
 //注意: UE4 默认距离单位 = 厘米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								-> 0 
 mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								-> 0.1 * depthRaw 
@@ -311,7 +311,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx 				-> Condition: 选择 (r5^2 + r15颜色) or r15颜色
 
   //以下分支计算用于 新的 R15 颜色 
-  if_nz r16.w 												-> r16.w 分支控制 
+  if_nz r16.w 												-> r16.w 分支控制 -> 7号材质 
   	//求 -ViewDirWS? 
   	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的 
     mul r18.xyz, r1.yyyy, cb1[49].xyzx						-> Matrix_Inv_VP 的前 3X3 区域
@@ -838,11 +838,11 @@ if_nz r1.x
       if_nz r0.z 
       	//采样另一个天空盒 
         sample_l_indexable(texturecube)(float,float,float,float) r0.xzw, r11.yzwy, t1.xwyz, s2, r0.x 
-        mad r0.xzw, r0.xxzw, cb1[180].xxyz, -r4.xxyz
+        mad r0.xzw, r0.xxzw, cb1[180].xxyz, -r4.xxyz 
         mad r4.xyz, cb2[0].wwww, r0.xzwx, r4.xyzx
       endif 
 
-      mad r1.yzw, r4.xxyz, r0.yyyy, r1.yyzw
+      mad r1.yzw, r4.xxyz, r0.yyyy, r1.yyzw 
       		-> 天空盒放大后颜色 * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + [0.045, 0.051, 0.029] * 某种与|Rn|关联值强度  
     endif 
 

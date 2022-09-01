@@ -1,0 +1,72 @@
+
+Block_PreProcessing
+{
+	Sample Tex
+	Decode Depth
+	Decode Normal
+	...
+}
+
+Block_For_#1~#15_Mat	//T9.W通道 -> *255 -> uint -> & 0x0000000F -> 结果'不是' 0  
+{
+	something...
+
+	Block_For_#6_Mat
+	{
+		...
+	}
+	else 	//All but #6 Mat
+	{
+		...
+	}
+
+	...
+
+	Block_For_#7_Mat
+	{
+		...
+		...
+	}
+
+	求取GI_Diffuse -> R10颜色
+}
+else 	// For #0 Mat 
+{
+	R10 = (0,0,0,0)
+	O0.W = 0 
+}
+
+Block_For_#0_Mat
+{
+	...
+
+	If True 		//受到cb0[0].x参数控制，总是可进入 
+	{
+
+		求取某种强度 R1W -> 扰动法线的模长 
+
+		If True 	//受到cb1[189].x参数控制，总是可进入 
+		{
+			Block_For_#6_Mat 
+			{
+				重新求取某种强度 R1W 
+			}
+		}
+
+		[0.045, 0.051, 0.029] * 强度值R1W -> R7颜色  
+		r1.y = 1 - 强度值R1W
+	}
+	else
+	{
+		R7颜色 = (0,0,0,0) 
+		r1.y = 1
+	}
+
+	...
+
+	While (i < 当前场景启用的IBL纹理个数 && Spec_Intense_1 > 0.001) 
+	{
+
+	}
+
+}
