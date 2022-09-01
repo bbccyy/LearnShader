@@ -494,7 +494,7 @@ if_nz r1.x
   mad r1.x, r5.x, r9.w, l(1.000000)  			-> 1 + T11.x(菲涅尔等光照效果的开关?) * {[-1, 0]区间,与roughness和NoV有关}
   mul r1.y, r1.x, l(0.080000)  					-> 0.08 * (1 + T11.x * {[-1, 0]区间,与roughness和NoV有关}) 
   mad r11.xyz, -r1.xxxx, l(0.08, 0.08, 0.08, 0), r12.xyzx	->R11 = R12颜色 - 0.08*(1 + T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
-  mad r11.xyz, r6.wwww, r11.xyzx, r1.yyyy 		-> R11=[0 or Purple.y] * R11色 + 0.08*(1+T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
+  mad r11.xyz, r6.wwww, r11.xyzx, r1.yyyy 		-> R11=[0 or Purple.y] * 上面的颜色 + 0.08*(1+T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
   movc r9.xyz, r8.zzzz, r11.xyzx, r9.xyzx 		-> 依据是否是 4号 材质方案设置 R9颜色 (R11 or R9) 
   add r1.x, r1.w, r1.w  						-> NdotV + NdotV
   mad r11.yzw, r1.xxxx, r6.xxyz, r8.xxyw		-> Normal * 2(NdotV) + (-ViewDirWS) -> View_Reflection 或 VR 
@@ -839,7 +839,7 @@ if_nz r1.x
       	//采样另一个天空盒 
         sample_l_indexable(texturecube)(float,float,float,float) r0.xzw, r11.yzwy, t1.xwyz, s2, r0.x 
         mad r0.xzw, r0.xxzw, cb1[180].xxyz, -r4.xxyz 
-        mad r4.xyz, cb2[0].wwww, r0.xzwx, r4.xyzx
+        mad r4.xyz, cb2[0].wwww, r0.xzwx, r4.xyzx 
       endif 
 
       mad r1.yzw, r4.xxyz, r0.yyyy, r1.yyzw 
@@ -851,13 +851,13 @@ if_nz r1.x
     mad r0.xyz, cb1[134].yyyy, r0.xyzx, r5.xzwx			-> 1 * (IBL_spec2&rough2_col + 天空盒最终值) + 第一个IBL计算后输出的 GI_spec 结果 
     													-> 叠加了2次 IBL 采样和计算结果 -> prefilter_Specular_Final 
   else 
-  	//通过开关控制 -> 一般来说总是不进入 
+  	//不是4号材质的时候进入这个分支 
     sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000)  -> 采样 LUT 
     mul_sat r0.w, r9.y, l(50.000000) 					-> R9色.Y通道 * 50 -> 待考: R9颜色似乎是一种环境光底色 
     mul r0.w, r1.y, r0.w 								-> bias * saturate(50 * R9.y) 
     mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww 				-> R9色 * scale + bias * saturate(50 * R9.y) 
     mul r0.xyz, r1.xyzx, r2.xyzx 						-> prefilter_Specular * [R9色 * scale + bias * saturate(50 * R9.y)]
-    													-> 合成 GI_spec 
+    													-> prefilter_Specular_Final  
   endif 
 
   min r0.xyz, -r0.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)	-> 去除 r0 颜色中小于 0 的部分 

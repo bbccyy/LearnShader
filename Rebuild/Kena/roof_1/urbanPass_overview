@@ -40,6 +40,12 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 {
 	...
 
+	R9颜色 = [0 or Purple.y] * 
+			[(BaseCol * (1 - Fresnel_Term)) - 0.08*(1 + T11.x*{[-1, 0]区间,与roughness和NoV有关})] + 
+			0.08*(1+T11.x*{[-1, 0]区间,与roughness和NoV有关}) 											-> For #4 Mat 
+	R9颜色 = (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  										-> For Rest Mat 
+
+
 	If True 		//受到cb0[0].x参数控制，总是可进入 
 	{
 
@@ -71,6 +77,8 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 		If In_Distance
 		{
 
+			Sample IBL using reflectDir_UpLite 
+
 			Compute IBL spec color 					-> r8.xyw 
 
 			Update Spec_Intense_1 with multipler	-> r5.w 
@@ -90,11 +98,81 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 			Mix with SkyBox_1 ... 
 		}
 
-		天空盒返回值: [0.045, 0.051, 0.029] * 天空盒颜色 * 粗糙度因子 + R7颜色 
+		天空盒返回值1: [0.045, 0.051, 0.029] * 天空盒颜色 * 粗糙度因子1 + R7颜色 
 	}
 
-	整合IBL和Sky的GI_Spec: 天空盒返回值 * Spec_Intense_1 + IBL_spec1&rough1_col + T12采样关联值(spec相关) 
+	prefilter_Specular: 整合IBL和Sky的GI_Spec = 天空盒返回值1 * Spec_Intense_1 + IBL_spec1&rough1_col + T12采样关联值(spec相关) 
+
+	Block_For_#4_Mat
+	{
+		...
+
+		在第一次采样IBL返回的 R7颜色基础上微调获得 -> R5颜色 
+
+		If True  					//受到cb0[0].x参数控制，总是可进入 
+		{
+
+			If True 				//受到cb1[189].x参数控制，总是可进入 
+			{
+				...
+
+				计算某种强度值 r0.y 
+			}
+
+			r1.xzw = [0.045, 0.051, 0.029] * (1 - 强度值R0Y) -> R1颜色 
+			r0.y = 1 - 强度值R0Y 
+		}
+		else
+		{
+			R1颜色 = (0,0,0,0) 
+			强度值 r0.y = 1
+		}
+
+		...
 
 
+		While (i < 当前场景启用的IBL纹理个数 && Spec_Intense_2 > 0.001) 
+		{
+			... 
 
+			If In_Distance 
+			{
+				Sample IBL using reflectDir 
+
+				Compute IBL spec color 					-> r6.xyz  
+
+				Update Spec_Intense_2 with multipler	-> r3.z 
+			}
+
+			i++ 
+		}
+
+		If True  		//受到cb2[0].y参数控制，总是可进入
+		{
+			Sample SkyBox_1 using reflectDir 
+
+			If False 	//受到cb2[0].w参数控制，总是不可进 
+			{
+				Sample SkyBox_2 		//No Data 
+
+				Mix with SkyBox_1 ... 
+			}
+
+			天空盒返回值2: [0.045, 0.051, 0.029] * 天空盒颜色 * 粗糙度因子2 + R1颜色 
+		}
+
+		r0.xyz = 天空盒返回值2 * Spec_Intense_2 + IBL_spec2&rough2_col + R5颜色  -> prefilter_Specular_Final
+	}
+	else 			//For Not #4 Mat 
+	{
+		...
+		r0.xyz = prefilter_Specular * [R9颜色 * scale + bias * saturate(50 * R9颜色.y)] 	-> prefilter_Specular_Final
+	}
+
+	o0.xyz = prefilter_Specular_Final + R10颜色 
+
+}
+else
+{
+	o0.xyz = R10颜色 
 }
