@@ -636,7 +636,7 @@ if_nz r1.x
       dp3 r12.w, r2.yzwy, r14.xyzx  					-> dot(<上抬视反>, <探素向量>) 
       mad r9.w, -cb4[r7.w + 0].w, cb4[r7.w + 0].w, r9.w -> (距离^2 - R^2) < 0 
       mad r9.w, r12.w, r12.w, -r9.w 					-> dot(<上抬视反>, <探素向量>)^2 - (距离^2 - R^2) 
-      ge r13.w, r9.w, l(0.000000) 						-> dot(<上抬视反>, <探素向量>)^2 - (距离^2 - R^2) > 0 ? 
+      ge r13.w, r9.w, l(0.000000) 						-> dot(<上抬视反>, <探素向量>)^2 - (距离^2 - R^2) > 0 -> 总是true:正数-(负数) 
       sqrt r9.w, r9.w 									-> sqrt( dot(<上抬视反>, <探素向量>)^2 - (距离^2 - R^2) ) 
       add r9.w, -r12.w, r9.w 			-> sqrt(dot(<上抬视反>,<探素向量>)^2-(距离^2-R^2)) - dot(<上抬视反>,<探素向量>) -> R9W 
       mad r14.xyz, r9.wwww, r2.yzwy, r14.xyzx 			-> <上抬视反> * R9W + <探素向量> 
@@ -646,7 +646,7 @@ if_nz r1.x
       mul r10.w, r9.w, r9.w 							-> [2.5 * (距离 / 影响半径R) - 1.5]^2 
       mad r9.w, -r9.w, l(2.000000), l(3.000000) 		-> 3 - 2 * [2.5 * (距离 / 影响半径R) - 1.5] 
       mad r14.x, -r10.w, r9.w, l(1.000000) 				-> 1 - {3-2*[2.5*(距离/影响半径R)-1.5]} * [2.5*(距离/影响半径R)-1.5]^2 
-      movc r14.xyzw, r13.wwww, r14.xyzw, r2.xyzw 		-> 若<上抬视反>与<探素向量>的夹角 > 90° 很多时 -> 可能选r2=[0, <上抬视反>] 
+      movc r14.xyzw, r13.wwww, r14.xyzw, r2.xyzw 		-> 总是选择 [r14.x, r14.yzw], 不可能选r2=[0, <上抬视反>] 
       mov r15.xyz, r14.yzwy 							-> 把向量部分放到 r15.xyz 中 
       mov r15.w, cb4[r7.w + 341].y 						-> r15.w = 10 
 
@@ -654,11 +654,11 @@ if_nz r1.x
       sample_l_indexable(texturecubearray)(float,float,float,float) r15.xyzw, r15.xyzw, t2.xyzw, s3, r5.z  -> 采样 IBL 探针纹理 
 
       mul r14.yzw, r15.xxyz, cb4[r7.w + 341].xxxx 		-> 探针返回颜色 * 1 
-      mul r14.yzw, r14.xxxx, r14.yyzw 					-> [距离缩放因子 or 0] * 探针返回颜色 
-      mul r14.yzw, r5.wwww, r14.yyzw			-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {[距离缩放因子 or 0] * 探针返回颜色} 
+      mul r14.yzw, r14.xxxx, r14.yyzw 					-> 距离缩放因子 * 探针返回颜色 
+      mul r14.yzw, r5.wwww, r14.yyzw					-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {距离缩放因子 * 探针返回颜色} 
       mad r8.xyw, r14.yzyw, r1.yyyy, r8.xyxw 			-> [spec * IBL_base_col] * [|Rn|和Roughness关联 の 强度值] + 0 
-      mad r7.w, -r15.w, r14.x, l(1.000000) 				-> 1 - IBL_base_alpha * [距离缩放因子 or 0] 
-      mul r5.w, r5.w, r7.w  			-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {1 - IBL_base_alpha * [距离缩放因子 or 0]} 
+      mad r7.w, -r15.w, r14.x, l(1.000000) 				-> 1 - IBL_base_alpha * 距离缩放因子
+      mul r5.w, r5.w, r7.w  						-> [高光反射率纹理a通道值 * saturate(R0Y-1)] * {1 - IBL_base_alpha * 距离缩放因子} 
     endif 
 
     iadd r6.w, r6.w, l(1)								-> LOOP index i++ 
@@ -754,7 +754,7 @@ if_nz r1.x
         mul r1.y, r1.y, r1.w 							-> (R1Y')^2 * (3 - 2 * R1Y') 
         mad r1.z, r1.z, l(3.141593), l(-0.100000) 		-> π * |Rn| - 0.1
         mul_sat r1.z, r1.z, l(5.000000) 				-> saturate(5 * (π * |Rn| - 0.1)) 
-        mul r0.y, r1.y, r1.z 							-> (R1Y')^2 * (3 - 2 * R1Y') * saturate(5 * (π * |Rn| - 0.1)) 
+        mul r0.y, r1.y, r1.z 							-> (R1Y')^2 * (3 - 2 * R1Y') * saturate(5 * (π * |Rn| - 0.1)) <= 1
       endif 
 
       add r1.y, -r0.y, l(1.000000) 
@@ -766,55 +766,64 @@ if_nz r1.x
       mov r0.y, l(1.000000)
     endif 
 
-    //TODO 
-    log r2.w, r5.y
-    mad r2.w, -r2.w, l(1.200000), l(1.000000)
-    add r3.y, -r2.w, r4.w
-    mov r11.x, l(0)
-    mov r6.xyz, l(0,0,0,0)
-    mov r3.z, r0.x
-    mov r4.w, l(0)
+    log r2.w, r5.y 										-> ln(T11.y) 
+    mad r2.w, -r2.w, l(1.200000), l(1.000000) 			-> 1 - 1.2 * ln(T11.y)
+    add r3.y, -r2.w, r4.w 								-> 6 - ln(T11.y) 
+    mov r11.x, l(0) 					
+    mov r6.xyz, l(0,0,0,0) 
+    mov r3.z, r0.x  									-> {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1)
+    mov r4.w, l(0) 										-> Index i = 0  
+
+    //以下LOOP的起始形式与上面 IBL LOOP 的起始形式雷同 
     loop 
-      uge r5.y, r4.w, r0.w
-      breakc_nz r5.y
-      lt r5.y, r3.z, l(0.001000)
-      if_nz r5.y
+      //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 
+      uge r5.y, r4.w, r0.w 								-> i >= r0.w? 
+      breakc_nz r5.y 									-> while ( i < r0.w ) 
+      lt r5.y, r3.z, l(0.001000) 						-> r3.z < 0.001 -> 推测 r3.z(或r0.x) 是某种待调整强度 
+      if_nz r5.y 										-> if (r3.z < 0.001) then break 
         break 
       endif 
-      iadd r5.y, r0.z, r4.w
-      ld_indexable(buffer)(uint,uint,uint,uint) r5.y, r5.yyyy, t4.yxzw
-      add r7.xyz, r4.xyzx, -cb4[r5.y + 0].xyzx
-      dp3 r6.w, r7.xyzx, r7.xyzx
-      sqrt r7.w, r6.w
-      lt r8.x, r7.w, cb4[r5.y + 0].w
-      if_nz r8.x
-        div_sat r7.w, r7.w, cb4[r5.y + 0].w
-        dp3 r8.x, r11.yzwy, r7.xyzx
-        mad r6.w, -cb4[r5.y + 0].w, cb4[r5.y + 0].w, r6.w
-        mad r6.w, r8.x, r8.x, -r6.w
-        ge r8.y, r6.w, l(0.000000)
-        sqrt r6.w, r6.w
-        add r6.w, -r8.x, r6.w
-        mad r7.xyz, r6.wwww, r11.yzwy, r7.xyzx
-        add r12.yzw, r7.xxyz, -cb4[r5.y + 682].xxyz
-        mad r6.w, r7.w, l(2.500000), l(-1.500000)
-        max r6.w, r6.w, l(0.000000)
-        mul r7.x, r6.w, r6.w
-        mad r6.w, -r6.w, l(2.000000), l(3.000000)
-        mad r12.x, -r7.x, r6.w, l(1.000000)
-        movc r7.xyzw, r8.yyyy, r12.xyzw, r11.xyzw
-        mov r8.xyz, r7.yzwy
-        mov r8.w, cb4[r5.y + 341].y
-        sample_l_indexable(texturecubearray)(float,float,float,float) r8.xyzw, r8.xyzw, t2.xyzw, s3, r3.y
-        mul r7.yzw, r8.xxyz, cb4[r5.y + 341].xxxx
-        mul r7.yzw, r7.xxxx, r7.yyzw
-        mul r7.yzw, r3.zzzz, r7.yyzw
-        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx
-        mad r5.y, -r8.w, r7.x, l(1.000000)
-        mul r3.z, r3.z, r5.y
+
+      iadd r5.y, r0.z, r4.w  							-> r0.z 也是基于'屏幕像素'和'距离对数' 从T3 buffer直接获取 -> 可为[0,1,...] 
+      ld_indexable(buffer)(uint,uint,uint,uint) r5.y, r5.yyyy, t4.yxzw		-> 推测使用 ushort4 查看 T4 buffer 数据，这是张映射表 
+      add r7.xyz, r4.xyzx, -cb4[r5.y + 0].xyzx 			-> 依然是求取 从探针指向 当前视点的向量 -> <探素向量> 
+      dp3 r6.w, r7.xyzx, r7.xyzx 
+      sqrt r7.w, r6.w 									-> 探针到视点的 Length 
+      lt r8.x, r7.w, cb4[r5.y + 0].w 					-> Length < 探针影响的半径 R 
+      if_nz r8.x 										-> 当前视点受探针影响的话 
+      	//以下逻辑主要用于构造 IBL 采样向量 r8.xyz; 采样后
+        div_sat r7.w, r7.w, cb4[r5.y + 0].w 			-> saturate(距离 / 影响半径R) 
+        dp3 r8.x, r11.yzwy, r7.xyzx 					-> dot(View_Reflection, <探素向量>) -> 注:IBL_LOOP在这里使用的是 <上抬视反> 
+        mad r6.w, -cb4[r5.y + 0].w, cb4[r5.y + 0].w, r6.w 	-> (距离^2 - R^2) < 0 
+        mad r6.w, r8.x, r8.x, -r6.w 					-> dot(VR, <探素向量>)^2 - (距离^2 - R^2) 
+        ge r8.y, r6.w, l(0.000000) 						-> dot(VR, <探素向量>)^2 - (距离^2 - R^2) >= 0 -> 总是true 
+        sqrt r6.w, r6.w 								-> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) 
+        add r6.w, -r8.x, r6.w 			-> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) - dot(VR, <探素向量>) -> R6W 
+        mad r7.xyz, r6.wwww, r11.yzwy, r7.xyzx 			-> VR * R6W + <探素向量> 
+        add r12.yzw, r7.xxyz, -cb4[r5.y + 682].xxyz 	-> VR * R6W + <探素向量>  - 0 -> 探针点 指向 VR*R6W 的终点 
+        mad r6.w, r7.w, l(2.500000), l(-1.500000) 		-> 2.5 * saturate(距离/R) - 1.5 
+        max r6.w, r6.w, l(0.000000) 					-> max(2.5 * saturate(距离/R) - 1.5, 0) -> [距离/R] < 0.6 则返回 0 
+        mul r7.x, r6.w, r6.w 							-> [2.5 * saturate(距离/R) - 1.5]^2 
+        mad r6.w, -r6.w, l(2.000000), l(3.000000) 		-> 3 - 2*[2.5 * saturate(距离/R) - 1.5] 
+        mad r12.x, -r7.x, r6.w, l(1.000000) 			-> 1 - [2.5*saturate(距离/R) - 1.5]^2 * {3-2*[2.5*saturate(距离/R)-1.5]} 
+        movc r7.xyzw, r8.yyyy, r12.xyzw, r11.xyzw 		-> 选[r12.x, r12.yzw] 
+        mov r8.xyz, r7.yzwy								-> 把 向量部分 放到 r8.xyz 中 
+        mov r8.w, cb4[r5.y + 341].y  					-> 10 
+
+        //采样 cubemap array, 获取正确的 IBL 返回值 
+        sample_l_indexable(texturecubearray)(float,float,float,float) r8.xyzw, r8.xyzw, t2.xyzw, s3, r3.y 
+
+        mul r7.yzw, r8.xxyz, cb4[r5.y + 341].xxxx    	-> 探针返回颜色 * 1 
+        mul r7.yzw, r7.xxxx, r7.yyzw 					-> 距离缩放因子 * 探针返回颜色 
+        mul r7.yzw, r3.zzzz, r7.yyzw 					-> [新spec] * {距离缩放因子 * 探针返回颜色} 
+        												-> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
+        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			-> [spec * IBL_base_col] * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + 0 
+        mad r5.y, -r8.w, r7.x, l(1.000000)  			-> 1 - IBL_base_alpha * 距离缩放因子 
+        mul r3.z, r3.z, r5.y 							-> [新spec] * {1 - IBL_base_alpha * 距离缩放因子} 
       endif 
-      iadd r4.w, r4.w, l(1)
+      iadd r4.w, r4.w, l(1) 							-> i++ 
     endloop 
+
     if_nz r1.x
       add r0.x, -r2.w, cb2[0].x
       add r0.x, r0.x, l(-1.000000)
