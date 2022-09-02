@@ -300,11 +300,11 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     add r14.xyz, r18.xyzx, r19.xyzx 						-> R18 + R19 
     mad r14.xyz, cb1[187].xyzx, r12.wwww, r14.xyzx 			-> [-0.016, -0.01, -0.003] * (Normal.x^2 - Normal.y^2) + (R18 + R19) -> R14 
     max r14.xyz, r14.xyzx, l(0,0,0,0)						-> 推测 R14是一个基于 Normal 的随机向量，且指向正半球空间 
-    mul r14.xyz, r14.xyzx, cb1[180].xyzx 					-> cb1[180]=[4.9, 4.1, 3.1] 是个老朋友,后面会多次出现,推测是某种全局控制/缩放因子 
+    mul r14.xyz, r14.xyzx, cb1[180].xyzx 					-> cb1[180]=[4.9, 4.1, 3.1] 是个老朋友,后面会多次出现,推测是'阳光'这类全局控制/缩放因子 
     mul r18.xyz, r5.xyzx, r5.xyzx 							-> T11.xyz * T11.xyz 
-    														-> T11纹理的xy通道分别是Flag位和Rough -> 后续作为乘子缩放 R14  
+    														-> T11纹理的xy通道分别是Flag位和Rough -> 后续作为乘子缩放 R14 
     mul r14.xyz, r7.wwww, r14.xyzx  						-> 对 R14 使用环境光遮蔽 AO_final -> 由此推测 R14 是环境光入射光强度 
-    mul r14.xyz, r18.xyzx, r14.xyzx 						-> 对 R14 应用 来自 T11.xyz^2 的乘子(主要三个通道都 >= 0)
+    mul r14.xyz, r18.xyzx, r14.xyzx 						-> 对 R14 应用 来自 T11.xyz^2 的乘子(主要三个通道都 >= 0) 
   else 
     mov r14.xyz, l(0,0,0,0)  								-> 不是 6号材质的话，R14 (环境光入射光强) = 0 
   endif 
@@ -459,27 +459,32 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   //以下似乎用于计算 输出颜色的 Alpha 通道 
   ieq r1.x, r7.x, l(8) 							-> [Purple.y修改值] * 255 的后4个bit <-> [8] -> 是否是 8 号材质 
   mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx 		-> T11.w * [r5^2] + R15颜色 
-  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	-> Condition: 依据 r1.x 选择 {[r5^2] + R15颜色} 或 R15颜色
+  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	-> Condition: 如果是8号材质则 选择 {[r5^2] + R15颜色} 不然就是 R15颜色
+
+  //以下逻辑与之前处理 6号 材质时雷同 
   mov r17.w, l(1.000000) 						-> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <法-视平偏向量> nvpv 
-  dp4 r15.x, cb1[181].xyzw, r17.xyzw 			-> 调整向量朝向 -> R15 
+  dp4 r15.x, cb1[181].xyzw, r17.xyzw 			-> 对上述Point执行矩阵变换 -> R15 
   dp4 r15.y, cb1[182].xyzw, r17.xyzw
   dp4 r15.z, cb1[183].xyzw, r17.xyzw
-  mul r16.xyzw, r17.yzzx, r17.xyzz 				-> 基于R17向量进行一个随机化处理? 
-  dp4 r18.x, cb1[184].xyzw, r16.xyzw 			-> 对处理后向量再进行一次朝向调整 -> R18 
+
+  mul r16.xyzw, r17.yzzx, r17.xyzz 				-> 基于R17向量进行一个随机化处理 
+  dp4 r18.x, cb1[184].xyzw, r16.xyzw 			-> 对上述Point执行新的矩阵变换 -> R18 
   dp4 r18.y, cb1[185].xyzw, r16.xyzw
   dp4 r18.z, cb1[186].xyzw, r16.xyzw
+
   mul r1.x, r17.y, r17.y
-  mad r1.x, r17.x, r17.x, -r1.x 				-> x^2 - y^2 -> R17.xy 
-  add r15.xyz, r15.xyzx, r18.xyzx 				-> 向量叠加 
-  mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx -> [-0.016,-0.01,-0.003] * (x^2 - y^2) + 上面向量叠加结果 
-  max r15.xyz, r15.xyzx, l(0,0,0,0) 
-  mul r15.xyz, r15.xyzx, cb1[180].xyzx 			-> [4.9, 4.19, 3.1] * 上面结果 
-  mul r1.x, r11.w, r7.w 						-> [(1 - NdotRn) * 扰动向量模长 + NdotRn] * 0? 
-  add r1.y, -r7.w, l(1.000000) 					-> 1 - 0? = 1 
-  mul r16.xyz, r1.yyyy, cb0[1].xyzx 			-> [0.045,0.05,0.029] * 1 
-  mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx 		-> 叠加并偏移后的向量 * 全局法线扰动Scale(对静态物体为0) + 基础值(向量?) 
-  mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx 	-> R10 = R15向量 * R10颜色 + R14(全0) 
+  mad r1.x, r17.x, r17.x, -r1.x 				-> x^2 - y^2 
+  add r15.xyz, r15.xyzx, r18.xyzx 				-> R15 + R18 
+  mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx -> [-0.016,-0.01,-0.003] * (x^2 - y^2) + (R15 + R18) 
+  max r15.xyz, r15.xyzx, l(0,0,0,0)  			-> 确保都 >= 0 
+  mul r15.xyz, r15.xyzx, cb1[180].xyzx 			-> 阳光因子?[4.9, 4.19, 3.1] * 上面结果 -> R15 
+  mul r1.x, r11.w, r7.w 						-> [(1 - NdotRn) * 扰动向量模长 + NdotRn] * AO_final  -> 某种入射光强? * AO_final 
+  add r1.y, -r7.w, l(1.000000) 					-> 1 - AO_final 
+  mul r16.xyz, r1.yyyy, cb0[1].xyzx 			-> [0.045,0.05,0.029] * (1 - AO_final) 
+  mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx 		-> R15 * 入射光强 * AO_final + [0.045,0.05,0.029] * (1 - AO_final) 
+  mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx 	-> R10 = R15 * R10颜色 + R14(如果不是6号材质则全0，如果是，R14是有值的，计算方法与这里类似)  
   mul r10.xyz, r10.xyzx, cb1[134].yyyy 			-> R10 *= 1 -> 这是个颜色 
+  
   eq r1.x, cb1[200].z, l(0.000000) 				-> 1 == 0 ? false 
   dp3 r1.y, r10.xyzx, l(0.300000, 0.590000, 0.110000, 0)  -> 取 R10 颜色 强度 
   and r1.y, r1.y, r1.x
