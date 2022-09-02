@@ -47,8 +47,9 @@ dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道)
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
 dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118(roughness)] 
 dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(TexAO)] 
-dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? -> [0,0,0,0] 
-																-> X 通道似乎是控制 Fresnel 效果用 
+dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? 
+																-> [Frsnel_Flag, Rough_2, 0, 0] 
+																-> X 通道似乎是控制 Fresnel 效果用, Y被当做粗糙度来使用, 
 dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值 
 dcl_resource_texture2d (float,float,float,float) t13 			-> AO (R通道) -> TODO 
 
@@ -72,7 +73,7 @@ sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyz
 sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
-//Decode Depth
+//Decode Depth 
 //R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100, 既大于1米 
 //注意: UE4 默认距离单位 = 厘米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								-> 0 
@@ -99,20 +100,20 @@ mul r6.xyz, r2.wwww, r2.xyzx   -> R6
 //利用采样 T9 纹理的 Z 通道，获取当前urbanPass分支逻辑控制符 
 //利用采样 T9 纹理的 Y 通道，计算环境光底色 
 mul r7.xy, r3.zyzz, l(255.000000, 0.080000, 0.000000, 0.000000)  	-> 255用于将8bit通道转换到整数范围，0.08推测是环境光缩放因子 
-round_ne r6.w, r7.x     -> 四舍五入到整数float值 ->  颜色[0~255]
+round_ne r6.w, r7.x     						-> 四舍五入到整数float值 ->  颜色[0~255] 
 ftou r6.w, r6.w 
-and r7.xz, r6.wwww, l(15, 0, 16, 0)   	-> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
-movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  -> T11 纹理采样返回值 
-ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    	-> Condition: r7.x 返回值是否落在给定区间 
-movc r6.w, r8.x, l(0), r3.x    			-> r3.x = Purple.y  -> 若为0，则下面R9写入的环境光底色 = 0.2*0.08 
+and r7.xz, r6.wwww, l(15, 0, 16, 0)   			-> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
+movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  	-> 依据倒数第5个bit符号位, 判断是否要启用 T11 纹理的数据  
+ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    			-> Condition: r7.x 返回值是否落在给定区间 
+movc r6.w, r8.x, l(0), r3.x    					-> r3.x = Purple.y  -> 若为0，则下面R9写入的环境光底色 = 0.2*0.08 
 mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - 0.2*0.08 
-mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   -> (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  -> R9 颜色似乎是环境光底色 
+mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   		-> (BaseCol.rgb - 0.2*0.08) * [0 or Purple.y] + 0.2*0.08  -> R9 颜色似乎是环境光底色 
 
-or r7.y, r8.x, r8.y 					-> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
-lt r7.z, l(0.000000), cb1[155].x 		-> 0 < 1 ? true 
-lt r7.w, l(0.000000), cb1[200].z  		-> 0 < 1 ? true  -> 这2个开关负责什么? TODO 
-and r7.z, r7.w, r7.z 					-> 同时满足上面2个开关 -> 才OK 
-ne r7.w, l(0, 0, 0, 0), cb1[155].x  	-> false 
+or r7.y, r8.x, r8.y 							-> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
+lt r7.z, l(0.000000), cb1[155].x 				-> 0 < 1 ? true 
+lt r7.w, l(0.000000), cb1[200].z  				-> 0 < 1 ? true  -> 这2个开关负责什么? TODO 
+and r7.z, r7.w, r7.z 							-> 同时满足上面2个开关 -> 才OK 
+ne r7.w, l(0, 0, 0, 0), cb1[155].x  			-> false 
 movc r8.xyw, r7.wwww, l(1,1,0,1), r4.xyxz		-> r8.xyw = BaseCol.rgb 
 
 //构建了 R10 颜色/遮罩 -> TODO 
@@ -206,7 +207,7 @@ mul r15.zw, r13.zzzw, r13.xxxy					-> 半分辨率下 UV_delta 占用了(0.25或
 //采样 T6 (疑似NormalWS纹理, 本身分辨率为原始值的一半)  
 //采样了田字四邻域，分布存放在 R16,R17,R18和R14中 
 //注意，降分辨率下的一个田字的每个口，都代表正常分辨率下的一个田 -> 采样覆盖正常分辨率下16邻域 
-sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000)  
+sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000) 
 mov r14.z, l(0)  						-> r14.xyz = ["半"屏幕的长宽の倒数, 0]; r15.xy = [降采样后当前点UV] 
 add r17.xyzw, r14.xzzy, r15.xyxy		-> r17.xyzw = [降采样后U + 1, 降采样后V, 降采样后U, 降采样后V + 1] 
 sample_l_indexable(texture2d)(float,float,float,float) r18.xyzw, r17.xyxx, t6.xyzw, s5, l(0.000000) 
@@ -244,7 +245,7 @@ mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 		-> (田字4方向独自通过(1/D_Dep
 mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		-> R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 
 
 
-if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0  
+if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0 
   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx 				-> R10颜色 - R10颜色 * Purple.y 
   mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx  		-> 上面的颜色 * 1 + 0 
   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				-> R12颜色 - R12颜色 * Purple.y 
@@ -262,7 +263,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   add r12.w, -r11.w, l(1.000000) 							-> 1 - NdotRn -> 扰动越大，值越大 
   mad r11.w, r7.w, r12.w, r11.w  							-> (1 - NdotRn) * 扰动向量模长 + NdotRn 
 
-  //未知 
+  //求取 AO_final -> r7.w
   mad r7.w, r7.w, l(10.000000), l(-5.000000)   				-> 扰动向量模长 * 10 - 5 
   mul r7.w, r7.w, -cb0[8].x 								-> (扰动向量模长 * 10 - 5) * (-0.01) 
   mul r7.w, r7.w, l(1.442695) 								-> -1.442695 * (10*模长 - 5) / 100 -> Log2E = 1.442695 
@@ -281,28 +282,31 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   mul r7.w, r7.w, r13.w 									-> X^0.7 * min(AO) 
   movc r7.w, r12.w, r15.w, r7.w 							-> r7.w 是 AO_final -> 通过开关在两种模式间切换: Min(AO1,AO2) 和 Mul(AO1,AO2) 
 
-  ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						-> [Purple.y修改值] * 255 的后4个bit <-> [6,2,3,7]
-  //未知 
+  ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						-> [Purple.y修改值] * 255 的后4个bit <-> [6,2,3,7] 
+  //未知 TODO r5.xyzw?? 
   if_nz r16.x 												-> 后4-bit == 6的情况 
-    mov r14.w, l(1.000000)
-    dp4 r18.x, cb1[181].xyzw, r14.xyzw 						-> r14 = -Normal
-    dp4 r18.y, cb1[182].xyzw, r14.xyzw 						-> 似乎是某种朝向扰动 
+    mov r14.w, l(1.000000)  								-> 在开始矩阵变换前将w通道设置为1 -> 代表这是对一个点(Point)进行空间变换 
+    dp4 r18.x, cb1[181].xyzw, r14.xyzw 						-> 对 (-Normal) 的顶点进行空间变换 -> R18 
+    dp4 r18.y, cb1[182].xyzw, r14.xyzw 
     dp4 r18.z, cb1[183].xyzw, r14.xyzw
-    mul r14.xyzw, r6.yzzx, r6.xyzz        					-> 无法理解的操作 -> 产生一个新的向量? 
-    dp4 r19.x, cb1[184].xyzw, r14.xyzw 						-> 某种扰动操作 
+
+    mul r14.xyzw, r6.yzzx, r6.xyzz        					-> Normal.yzzx * Normal.xyzz -> 产生一个基于Normal的向量(?) 
+    dp4 r19.x, cb1[184].xyzw, r14.xyzw 						-> 对这个基于Normal的向量顶点进行另一种空间变换 -> R19 
     dp4 r19.y, cb1[185].xyzw, r14.xyzw
     dp4 r19.z, cb1[186].xyzw, r14.xyzw
+
     mul r12.w, r6.y, r6.y
     mad r12.w, r6.x, r6.x, -r12.w  							-> Normal.x^2 - Normal.y^2 
-    add r14.xyz, r18.xyzx, r19.xyzx 						-> 叠加操作过后的2个向量 -> R14 
-    mad r14.xyz, cb1[187].xyzx, r12.wwww, r14.xyzx 			-> [-0.016，-0.01，-0.003] * (Normal.x^2 - Normal.y^2) + R14 -> R14 
-    max r14.xyz, r14.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)
-    mul r14.xyz, r14.xyzx, cb1[180].xyzx 					-> [4.9, 4.1, 3.1] * R14 
-    mul r18.xyz, r5.xyzx, r5.xyzx
-    mul r14.xyz, r7.wwww, r14.xyzx
-    mul r14.xyz, r18.xyzx, r14.xyzx 						-> 基于r7.w = 0, 返回值 R14 = 0 
+    add r14.xyz, r18.xyzx, r19.xyzx 						-> R18 + R19 
+    mad r14.xyz, cb1[187].xyzx, r12.wwww, r14.xyzx 			-> [-0.016, -0.01, -0.003] * (Normal.x^2 - Normal.y^2) + (R18 + R19) -> R14 
+    max r14.xyz, r14.xyzx, l(0,0,0,0)						-> 推测 R14是一个基于 Normal 的随机向量，且指向正半球空间 
+    mul r14.xyz, r14.xyzx, cb1[180].xyzx 					-> cb1[180]=[4.9, 4.1, 3.1] 是个老朋友,后面会多次出现,推测是某种全局控制/缩放因子 
+    mul r18.xyz, r5.xyzx, r5.xyzx 							-> T11.xyz * T11.xyz 
+    														-> T11纹理的xy通道分别是Flag位和Rough -> 后续作为乘子缩放 R14  
+    mul r14.xyz, r7.wwww, r14.xyzx  						-> 对 R14 使用环境光遮蔽 AO_final -> 由此推测 R14 是环境光入射光强度 
+    mul r14.xyz, r18.xyzx, r14.xyzx 						-> 对 R14 应用 来自 T11.xyz^2 的乘子(主要三个通道都 >= 0)
   else 
-    mov r14.xyz, l(0,0,0,0)
+    mov r14.xyz, l(0,0,0,0)  								-> 不是 6号材质的话，R14 (环境光入射光强) = 0 
   endif 
 
   or r12.w, r16.z, r16.y 									-> 2个渲染分支条件满足一个即可，既r12.w用于控制 r16.zy 所对应分支的渲染 

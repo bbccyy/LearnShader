@@ -1,5 +1,5 @@
 
-local data = {1.00000, 0.694118, 0.552941}
+local data = {1.000001, 0.694118, 0.552941, 0.564706, 0.478431}
 
 for key, val in ipairs(data) do
 	local tmp = math.floor(val * 255 + 0.5)

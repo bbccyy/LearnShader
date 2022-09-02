@@ -9,7 +9,8 @@ Block_PreProcessing
 
 Block_For_#1~#15_Mat	//T9.W通道 -> *255 -> uint -> & 0x0000000F -> 结果'不是' 0  
 {
-	something...
+	...
+	求取了 AO 
 
 	Block_For_#6_Mat
 	{
