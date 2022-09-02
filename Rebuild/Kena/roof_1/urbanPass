@@ -734,7 +734,7 @@ if_nz r1.x
         max r1.y, r5.y, l(0.100000) 					-> max(0.1, T11.y) -> 对茅草等来说结果 = 0.1 
         mul r1.z, r0.y, cb0[0].y 						-> |Rn| * 1 
         mul r1.w, r1.z, l(3.141593) 					-> π * |Rn| 
-        dp3 r2.w, r13.xyzx, r11.yzwy 					-> dot(Rn, VReflect)  
+        dp3 r2.w, r13.xyzx, r11.yzwy 					-> dot(Rn, VReflect) 
         max r3.y, r0.y, l(0.001000) 					-> max(|Rn|, 0.001) 
 
         div r2.w, r2.w, r3.y 							-> 准备asin_fast(a)的入参 a = dot(Rn, VReflect) / |Rn| 

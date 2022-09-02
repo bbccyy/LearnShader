@@ -170,15 +170,15 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 			天空盒返回值2: [0.045, 0.051, 0.029] * 天空盒颜色 * 粗糙度因子2 + R1颜色 
 		}
 
-		r0.xyz = 天空盒返回值2 * Spec_Intense_2 + IBL_spec2&rough2_col + R5颜色  -> prefilter_Specular_Final
+		r0.xyz = 天空盒返回值2 * Spec_Intense_2 + IBL_spec2&rough2_col + R5颜色  				-> prefilter_Specular_Final_A 
 	}
 	else 			//For Not #4 Mat 
 	{
 		...
-		r0.xyz = prefilter_Specular * [R9颜色 * scale + bias * saturate(50 * R9颜色.y)] 	-> prefilter_Specular_Final
+		r0.xyz = prefilter_Specular * [R9颜色 * scale + bias * saturate(50 * R9颜色.y)] 		-> prefilter_Specular_Final_B 
 	}
 
-	o0.xyz = prefilter_Specular_Final + R10颜色 
+	o0.xyz = prefilter_Specular_Final_(A/B) + R10颜色 
 
 }
 else
