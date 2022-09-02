@@ -56,7 +56,7 @@ dcl_output o2.xyzw        未知 -> 偏蓝 且 w分量为手K的值             
                           o2 = [Purple.y, cb1[5].w=0.2(环境光底色), Purple.y偏移值(urban一级控制Flag), 0.694118(粗糙度)]   
                               -> [?,0.2,?,0.694118] 
 dcl_output o3.xyzw        可能是 base color -> 存放了 采样base Color 且经过变换后的颜色         T:8222 
-                          o3 = [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z]              -> [rgb, ?] 
+                          o3 = [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(来自纹理的AO)]              -> [rgb, TexAO] 
 dcl_output o4.xyzw        未知 -> 似乎区分了角色衣服布料和树叶 -> 推测用于区分动态和静态物体      T:8223 
                           o4 = [0, Roughness?, 0, 0]  ->  [0,0,0,0]  
 dcl_output oDepthLE

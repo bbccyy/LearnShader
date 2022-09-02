@@ -46,7 +46,7 @@ dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] 
 dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
 dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
 dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118(roughness)] 
-dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z] 
+dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(TexAO)] 
 dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? -> [0,0,0,0] 
 																-> X 通道似乎是控制 Fresnel 效果用 
 dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值 
@@ -67,8 +67,8 @@ mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * v0.w 	-> v0.w = Clip.w
 mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * v0.w -> 上下翻转 -> 预乘"三角面片深度"的半成品 
 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
-sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69 
-sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z 
+sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69(rough)
+sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z(TexAO)
 sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
@@ -273,13 +273,13 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   log r7.w, r7.w 											-> r7.w = LOG(X) -> 小于0的数 
   mul r7.w, r7.w, cb0[8].w 									-> LOG(X) * 0.7 
   exp r7.w, r7.w 											-> exp(LOG(X) * 0.7) -> X^0.7 
-  add r12.w, -r7.w, l(1.000000) 							-> 1 - X^0.7 
+  add r12.w, -r7.w, l(1.000000) 
   mad r7.w, cb0[1].w, r12.w, r7.w 							-> (1 - X^0.7) * 0 + X^0.7 -> lerp 
   eq r12.w, cb0[9].x, l(0.000000) 							-> 1 != 0 -> r12.w = false
-  min r13.w, r4.w, r7.z 									-> min(Purple.z, {Tex11.x * [0 or Purple.y]}) -> Tex11.x = 0
-  min r15.w, r7.w, r13.w 									-> min(X^0.7, 0)
-  mul r7.w, r7.w, r13.w 									-> X^0.7 * 0
-  movc r7.w, r12.w, r15.w, r7.w 							-> 还是 r7.w -> 0
+  min r13.w, r4.w, r7.z 									-> min(Tex_AO, Computered_AO) -> some AO value any way... 
+  min r15.w, r7.w, r13.w 									-> min(X^0.7, min(AO)) 	->  其中的 X^0.7 推测扮演了AO_noise的角色 
+  mul r7.w, r7.w, r13.w 									-> X^0.7 * min(AO) 
+  movc r7.w, r12.w, r15.w, r7.w 							-> r7.w 是 AO_final -> 通过开关在两种模式间切换: Min(AO1,AO2) 和 Mul(AO1,AO2) 
 
   ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						-> [Purple.y修改值] * 255 的后4个bit <-> [6,2,3,7]
   //未知 
