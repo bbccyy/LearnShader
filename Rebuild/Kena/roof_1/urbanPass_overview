@@ -65,7 +65,7 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 			}
 		}
 
-		[0.045, 0.051, 0.029] * 强度值R1W -> R7颜色 -> GI_Spec_Base
+		[0.045, 0.051, 0.029] * 强度值R1W -> R7颜色 -> GI_Spec_Base 
 		r1.y = 1 - 强度值R1W
 	}
 	else
@@ -85,7 +85,7 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 
 			Sample IBL using reflectDir_UpLite 
 
-			Compute IBL spec color 					-> r8.xyw 
+			Compute IBL spec color 					-> r8.xyw  -> TODO 
 
 			Update Spec_Intense_1 with multipler	-> r5.w 
 		}
@@ -115,7 +115,7 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 
 		在第一次采样IBL返回的 R7颜色基础上微调获得 -> R5颜色 
 
-		Spec_Intense_2 = saturate(R0Y - 1) * (1 - T12.a) * [T11.x*(0.04*scale + bias)]
+		Spec_Intense_2 = saturate(R0Y - 1) * (1 - T12.a) * [T11.x*(0.04*scale + bias)] 
 			-> where R0Y = Purple.z * {Tex11.x*[0 or Purple.y]} +  exp2( ln(NoV + noise?) * roughness^2 ) 
 
 		If True  					//受到cb0[0].x参数控制，总是可进入 
@@ -128,7 +128,7 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 				计算某种强度值 r0.y 
 			}
 
-			r1.xzw = [0.045, 0.051, 0.029] * (1 - 强度值R0Y) -> R1颜色 
+			r1.xzw = [0.045, 0.051, 0.029] * (1 - 强度值R0Y) -> R1颜色 -> 对应了之前的 R7 颜色 -> GI_Spec_base2 
 			r0.y = 1 - 强度值R0Y 
 		}
 		else

@@ -35,10 +35,10 @@ dcl_sampler s1, mode_default
 dcl_sampler s2, mode_default
 dcl_sampler s3, mode_default
 dcl_resource_structured t0, 16                          -> Data Buffer 
-dcl_resource_texture2d (float,float,float,float) t1     -> Normal Tex rg
-dcl_resource_texture2d (float,float,float,float) t2     -> Grass RGBA 
-dcl_resource_texture2d (float,float,float,float) t3     -> Purple RGB 
-dcl_resource_texture2d (float,float,float,float) t4     -> Common Noise R 
+dcl_resource_texture2d (float,float,float,float) t1     -> Normal Tex rg      -> Normal.xy 
+dcl_resource_texture2d (float,float,float,float) t2     -> Grass RGBA         -> Diffuse Texture 
+dcl_resource_texture2d (float,float,float,float) t3     -> Purple RGB         -> [H?, Roughness, AO, 1]
+dcl_resource_texture2d (float,float,float,float) t4     -> Common Noise R     -> 64 x 64 High Frequency Noise 
 
 dcl_input_ps linear centroid v0.xyz         -> NormalWS
 dcl_input_ps linear centroid v1.xyzw        -> TangentWS
@@ -192,7 +192,7 @@ movc r5.xyz, r0.wwww, l(0,0,0,0), r5.xyzx                                 -> R5 
 
 //**填充 o3.w**
 //利用 R5 颜色的光强度和两组随机数构建混淆因子，随后作用到 PurpleRGB.z 通道上
-//o3.w = max(随机化处理的PurpleRGB.z, PurpleRGB.z原始值) 
+//o3.w = max(随机化处理的PurpleRGB.z(AO), PurpleRGB.z(AO)原始值) -> AO 
 dp3 r0.w, r5.xyzx, l(0.300000, 0.590000, 0.110000, 0.000000)      -> r0.w = R5 颜色的光强度 Intensity 
 mad r7.xyz, r0.wwww, l(2.040400, -4.795100, 2.755200, 0.000000), l(-0.332400, 0.641700, 0.690300, 0.000000) -> 基于光强度的随机值 
 mad r0.w, r2.z, r7.x, r7.y

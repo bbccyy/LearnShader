@@ -1,4 +1,7 @@
-以下内容来自：DC=2183   ->  关注输出 Tex 8264
+Forward+ -> TODO -> could replace Deffered pass 
+Class based rendering -> Tile based rendering 
+TODO -> 看材质名 
+以下内容来自：DC=2183   ->  关注输出 Tex 8264 
 本DC主要负责 GI 效果 -> 不处理直接光照 
 备注1：对于DC=2181   ->  Tex 8269  ->  可能是上一帧的输出 
 备注2：SSAO 的DC = 2091 -> 输出到 Tex 8232 上 -> 再通过DC=2903 输出到 单通道的 Tex 6681 上
@@ -44,18 +47,20 @@ dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT
 dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] 看起来像被模糊过，且分辨率减半 
 																-> 后续可能关联计算: Motion Blur;  Depth of Field; ... 
 dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
-dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333] 
-dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y, 0.2, PurpleRGB.y偏移值, 0.694118(roughness)] 
-dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(TexAO)] 
+dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333(?)] 
+dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y(Rough1), 0.2(?), P.y偏移值(Component), 0.694118(Rough2)]
+																	-> Rough2用于采样LUT 
+dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(AO)] 
 dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? 
-																-> [Frsnel_Flag, Rough_2, 0, 0] 
-																-> X 通道似乎是控制 Fresnel 效果用, Y被当做粗糙度来使用, 
-dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值 
+																	-> [Frsnel_Flag, Rough_3(用于采样LUT), 0, 0] 
+																	-> 是否与sss有关 
+																	-> X 通道似乎是控制 Fresnel 效果用, Y被当做粗糙度来使用, 
+dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值? 
 dcl_resource_texture2d (float,float,float,float) t13 			-> AO (R通道) -> TODO 
 
 dcl_input_ps_siv linear noperspective v0.xyw, position 			-> 全屏Blit对应的 VertexInputPS 
 dcl_output o0.xyzw 												-> 输出纹理 T:8264 
-dcl_temps 20
+dcl_temps 20 
 
 
 mul r0.xy, v0.xyxx, cb1[131].zwzz  		屏幕像素序号xy * 像素倒数  ->  用于采样贴图的屏幕 UV 
