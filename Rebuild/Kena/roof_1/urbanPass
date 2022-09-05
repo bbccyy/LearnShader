@@ -44,19 +44,19 @@ dcl_resource_texturecubearray (float,float,float,float) t2 		-> 确认是 IBL �
 dcl_resource_buffer (uint,uint,uint,uint) t3  					-> 似乎是一张映射表 
 dcl_resource_buffer (uint,uint,uint,uint) t4 
 dcl_resource_texture2d (float,float,float,float) t5				-> BRDF LUT 
-dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, Depth] 看起来像被模糊过，且分辨率减半 
-																-> 后续可能关联计算: Motion Blur;  Depth of Field; ... 
-dcl_resource_texture2d (float,float,float,float) t7 			-> Depth (R通道) 
-dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333(?)] 
-dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y(Rough1), 0.2(?), P.y偏移值(Component), 0.694118(Rough2)]
+dcl_resource_texture2d (float,float,float,float) t6 			-> [NormalWS.xyz, DepthWS] 看起来像被模糊过，且分辨率减半 
+																	-> 后续可能关联计算: Motion Blur;  Depth of Field; ... 
+dcl_resource_texture2d (float,float,float,float) t7 			-> Depth01 (R通道) 
+dcl_resource_texture2d (float,float,float,float) t8 			-> [NormalWS.xyz, 0.333(?当前pass没有使用)] 
+dcl_resource_texture2d (float,float,float,float) t9 			-> [PurpleRGB.y(Rough1), 0.2(?), P.y偏移值(Flag), 0.694118(Rough2)] 
 																	-> Rough2用于采样LUT 
 dcl_resource_texture2d (float,float,float,float) t10 			-> [去除强度的BaseColor.rgb, 随机化处理的PurpleRGB.z(AO)] 
 dcl_resource_texture2d (float,float,float,float) t11   			-> 似乎区分了角色+衣服+树叶, 其他为黑 -> 动态vs静态? 
-																	-> [Frsnel_Flag, Rough_3(用于采样LUT), 0, 0] 
+																	-> [Frsnel_Flag, Rough_3(用于采样LUT), ?, ? ] 
 																	-> 是否与sss有关 
 																	-> X 通道似乎是控制 Fresnel 效果用, Y被当做粗糙度来使用, 
-dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光物体相关的值? 
-dcl_resource_texture2d (float,float,float,float) t13 			-> AO (R通道) -> TODO 
+dcl_resource_texture2d (float,float,float,float) t12 			-> 似乎是自发光或高光相关的值 -> 4通道 
+dcl_resource_texture2d (float,float,float,float) t13 			-> AO (R通道) -> SSAO Pass 获取 
 
 dcl_input_ps_siv linear noperspective v0.xyw, position 			-> 全屏Blit对应的 VertexInputPS 
 dcl_output o0.xyzw 												-> 输出纹理 T:8264 
@@ -73,8 +73,8 @@ mul r1.xy, r1.xyxx, v0.wwww    	-> [-0.5, +0.5] * v0.w 	-> v0.w = Clip.w
 mul r1.xy, r1.xyxx, l(2.000000, -2.000000, 0.000000, 0.000000)  -> [-1.0, +1.0] * v0.w -> 上下翻转 -> 预乘"三角面片深度"的半成品 
 
 sample_l_indexable(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0.000000) 	-> Normal, 0.33 
-sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> P.y, 0.2, P.y, 0.69(rough)
-sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z(TexAO)
+sample_l_indexable(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0.000000) 	-> rough1, 0.2, Flag, 0.69(rough2) 
+sample_l_indexable(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0.000000) 	-> BaseColor.rgb, P.z(AO) 
 sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0.000000)  -> 0,0,0,0 
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
@@ -87,7 +87,7 @@ div r1.z, l(1.000000, 1.000000, 1.000000, 1.000000), r1.z 			-> 1/(0.1*depthRaw)
 add r1.z, r1.z, r1.w 												-> 1/(0.1*depthRaw) + (depthRaw*a+b) 
 
 mul r6.xy, r0.xyxx, cb1[131].xyxx 									-> 像素坐标索引 
-ftou r6.xy, r6.xyxx
+ftou r6.xy, r6.xyxx 
 
 //Condition: 某种 2x2 块状像素分割逻辑 
 ftou r1.w, cb1[151].x 		-> 1 
@@ -108,7 +108,7 @@ mul r7.xy, r3.zyzz, l(255.000000, 0.080000, 0.000000, 0.000000)  	-> 255用于�
 round_ne r6.w, r7.x     						-> 四舍五入到整数float值 ->  颜色[0~255] 
 ftou r6.w, r6.w 
 and r7.xz, r6.wwww, l(15, 0, 16, 0)   			-> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
-movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  	-> 依据倒数第5个bit符号位, 判断是否要启用 T11 纹理的数据  
+movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  	-> 依据倒数第5个bit符号位, 判断是否要启用 T11 纹理的数据 
 ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    			-> Condition: r7.x 返回值是否落在给定区间 
 movc r6.w, r8.x, l(0), r3.x    					-> r3.x = Purple.y  -> 若为0，则下面R9写入的环境光底色 = 0.2*0.08 
 mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - 0.2*0.08 
