@@ -470,7 +470,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   endif 
 
   //以下似乎用于计算 输出颜色的 Alpha 通道 
-  ieq r1.x, r7.x, l(8) 							-> [Purple.y修改值] * 255 的后4个bit <-> [8] -> 是否是 8 号材质 
+  -----ieq r1.x, r7.x, l(8) 							-> [Purple.y修改值] * 255 的后4个bit <-> [8] -> 是否是 8 号材质 
   mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx 		-> T11.w * [r5^2] + R15颜色 
   movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	-> Condition: 如果是8号材质则 选择 {[r5^2] + R15颜色} 不然就是 R15颜色 
 
