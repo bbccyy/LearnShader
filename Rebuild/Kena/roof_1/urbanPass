@@ -159,7 +159,7 @@ mov_sat r3.x, r1.w   							            -> saturate(NdotV) = NdotV -> 做sat似�
 mad r7.z, r3.x, l(0.500000), l(0.500000)    	-> NdotV * 0.5 + 0.5 
 mad r7.z, r7.z, r3.x, l(-1.000000) 				    -> (NdotV * 0.5 + 0.5) * NdotV - 1  -> 若(V ⊥ N) 得-1，反之得0 
 mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)	-> saturate(1.25 - 1.25*[t9.w=0.69]) -> 不同材质不同缩放比例 
-mul r9.w, r7.w, r7.z 							            -> saturate(1.25 - 1.25*[t9.w=0.69]) * ((NdotV*0.5+0.5)*NdotV-1) -> [-1, 0]区间 
+mul r9.w, r7.w, r7.z 							            -> saturate(1.25 - 1.25*[t9.w=0.69]) * ((NdotV*0.5+0.5)*NdotV-1) -> [-1, 0]区间 ；
 mad r7.z, r7.z, r7.w, l(1.000000) 				    -> 类似 R9.w -> 转换到 [0, 1] 区间，垂直得0，同向得1 
 
 //将 R10 颜色 与 NdotV 以某种形式混淆 
@@ -509,7 +509,7 @@ else
   mov o0.w, l(0) 								                      -> 设置 r10颜色为 全黑(0), a通道=0 
 endif 
 
------ine r1.xy, r7.xxxx, l(0, 7, 0, 0)  				      -> [Purple.y修改值] * 255 的后4个bit <-> [0, 7] 
+ine r1.xy, r7.xxxx, l(0, 7, 0, 0)  				            -> [Purple.y修改值] * 255 的后4个bit <-> [0, 7] 
 and r1.x, r1.y, r1.x 							                    -> 同时满足 -> 不是0号和7号材质渲染方案  
 if_nz r1.x 
   movc r9.xyz, r7.yyyy, r11.xyzx, r9.xyzx 		        -> 是5或9号材质渲染方案 -> 则使用 R11(环境光底色*方块Mask.y) -> 不然就用R9(环境光底色) 
@@ -518,7 +518,7 @@ if_nz r1.x
   mul r1.y, r1.x, l(0.080000)  					              -> 0.08 * (1 + T11.x * {[-1, 0]区间,与roughness和NoV有关}) 
   mad r11.xyz, -r1.xxxx, l(0.08, 0.08, 0.08, 0), r12.xyzx	      ->R11 = R12颜色 - 0.08*(1 + T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
   mad r11.xyz, r6.wwww, r11.xyzx, r1.yyyy 		        -> R11=[0 or Purple.y] * 上面的颜色 + 0.08*(1+T11.x*{[-1, 0]区间,与roughness和NoV有关}) 
-  movc r9.xyz, r8.zzzz, r11.xyzx, r9.xyzx 		        -> 依据是否是 4号 材质方案设置 R9颜色 (R11 or R9) 
+  --movc r9.xyz, r8.zzzz, r11.xyzx, r9.xyzx 		        -> 依据是否是 4号 材质方案设置 R9颜色 (R11 or R9) 
   add r1.x, r1.w, r1.w  						                  -> NdotV + NdotV
   mad r11.yzw, r1.xxxx, r6.xxyz, r8.xxyw		          -> Normal * 2(NdotV) + (-ViewDirWS) -> View_Reflection 或 VR 
   mul r1.x, r3.w, r3.w 							                  -> roughness^2 
