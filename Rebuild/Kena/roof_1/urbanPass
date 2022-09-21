@@ -573,21 +573,21 @@ if_nz r1.x
   lt r1.z, l(0.000000), cb0[0].x 						          -> 0 < 1 ? true -> 总是开启如下逻辑 
   if_nz r1.z 											                    -> 这里总是能进入 
 
-  	//R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 -> 记为 Rn 
-    ----dp3 r1.w, r13.xyzx, r13.xyzx 						-> dot(Rn, Rn)
-    sqrt r1.w, r1.w 									-> Rn 的模长 -> 记为 |Rn| 
+  	//R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 -> 由于相对于RN没有归一化，可记为 Rn_raw  
+    dp3 r1.w, r13.xyzx, r13.xyzx 						          -> dot(Rn_raw, Rn_raw)
+    sqrt r1.w, r1.w 									                -> Rn_raw 的模长 -> 记为 |Rn_raw| 或 |Rn| 
     //以下分支用于计算新的 r1.w 值 -> 某种扰动强度 
     //在重新计算过程中使用到了: |Rn|, roughness, asin(dot(Rn,'上抬视反')/|Rn|) -> 推测是经验公式 
-    if_nz cb1[189].x 									-> cb1[189].x 用十六进制解码后的 0x00000001 -> true 
-      if_z r1.y 										-> 是否当前像素属于 6号材质 
-        max r1.y, r3.w, l(0.100000) 					-> max(roughness, 0.1) 
-        mul r4.w, r1.w, cb0[0].y 						-> |Rn| * 1 
-        mul r5.z, r4.w, l(3.141593) 					-> π * |Rn| 
-        dp3 r5.w, r13.xyzx, r2.yzwy 					-> dot(Rn, '上抬视反') 
-        max r6.w, r1.w, l(0.001000) 					-> max(|Rn|, 0.001) -> 模长不要小于 0.001 
+    if_nz cb1[189].x 									                -> cb1[189].x 用十六进制解码后的 0x00000001 -> true 
+      if_z r1.y 										                  -> 是否当前像素属于 6号材质 
+        max r1.y, r3.w, l(0.100000) 					        -> max(roughness, 0.1) 
+        mul r4.w, r1.w, cb0[0].y 						          -> |Rn| * 1 
+        mul r5.z, r4.w, l(3.141593) 					        -> π * |Rn| 
+        dp3 r5.w, r13.xyzx, r2.yzwy 					        -> dot(Rn, '上抬视反') 
+        max r6.w, r1.w, l(0.001000) 					        -> max(|Rn|, 0.001) -> 模长不要小于 0.001 
         
         //构造传入函数asin_fast的入参 a -> (opposite / hypotenuse) 
-        div r5.w, r5.w, r6.w 							-> R5W = dot(Rn, '上抬视反') / max(|Rn|, 0.001) 
+        --div r5.w, r5.w, r6.w 							-> R5W = dot(Rn, '上抬视反') / max(|Rn|, 0.001) 
 
         //asin_fast(a)
         add r6.w, -|r5.w|, l(1.000000) 	 
