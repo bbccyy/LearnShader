@@ -540,39 +540,38 @@ if_nz r1.x
   mad r14.xyzw, r5.xxxx, r14.xyzw, r12.xyzw 			    -> r14 = [-T12.xyz, T12.w] * T11.x(控制阀) + [T12.xyz, 1 - T12.w] 
   movc r12.xyzw, r8.zzzz, r14.xyzw, r12.xyzw 			    -> r12 = 4号材质 ? r14 : [T12.xyz, 1 - T12.w] 
   
-  //输出 r1.x = 感觉是 specular 
-  --mad r0.y, r4.w, r7.z, r3.x 							            -> TexAO(Purple.z) * Computered_AO(SSAO.r) + saturate(NdotV) -> mixed_AO
+  //输出 r1.x -> 被T12.w通道修正过的'AO噪声'高频部分系数 
+  mad r0.y, r4.w, r7.z, r3.x 							            -> TexAO(Purple.z) * Computered_AO(SSAO.r) + saturate(NdotV) -> mixed_AO
   log r0.y, r0.y 										                  -> ln(mixed_AO) 
   mul r0.y, r0.y, r1.x 									              -> ln(mixed_AO) * roughness^2 
   exp r0.y, r0.y 										                  -> exp2( ln(mixed_AO) * roughness^2 ) 
   mad r0.y, r4.w, r7.z, r0.y 			                    -> TexAO * Computered_AO + exp2(ln(mixed_AO) * roughness^2) -> AOwithRoughNoise 
   add_sat r0.y, r0.y, l(-1.000000) 						        -> saturate(AOwithRoughNoise - 1) -> 只截取超过1的部分，这部分可以看做是AO叠加上Rough后的高频噪声 
-  mul r1.x, r0.y, r12.w 								              -> T12纹理(spec贴图)a通道值 * saturate(AOwithRoughNoise - 1) -> 被A通道修正过的 AO噪声 系数  
+  mul r1.x, r0.y, r12.w 								              -> T12纹理(spec贴图)a通道值 * saturate(AOwithRoughNoise - 1) -> 被A通道修正过的 AO噪声 系数 
 
-  ftou r0.zw, r0.zzzw 									-> 屏幕像素索引(+0.5) to uint 
-  mad r1.y, r1.z, cb3[3].x, cb3[3].y  					-> 当前帧深度纹理解码的Depth * 1 + 1 
-  log r1.y, r1.y 										-> ln(Depth + 1) 
-  mul r1.y, r1.y, cb3[3].z 								-> ln(Depth + 1) + 1 
-  max r1.y, r1.y, l(0.000000) 							-> max(ln(Depth + 1) + 1, 0) -> 返回值不小于 0 
-  ftou r1.y, r1.y 										-> max(ln(Depth + 1) + 1, 0) to uint 
-  iadd r1.z, cb3[1].z, l(-1) 							-> 1 - 1 = 0 
-  umin r1.y, r1.z, r1.y 								-> min(0, max(ln(Depth + 1) + 1, 0)) -> 似乎只能返回 0? -> 距离对数因子? 
-  ushr r0.zw, r0.zzzw, cb3[2].xxxx 						-> 屏幕像素索引(+1) >> 1 -> 相当于半屏幕分辨率 
-  imad r0.w, r1.y, cb3[1].y, r0.w 						-> 距离对数因子 * 1 + 半屏幕像素索引.v 
-  imad r0.z, r0.w, cb3[1].x, r0.z 						-> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u 
-  iadd r0.z, r0.z, cb3[0].w 							-> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1 
-  ishl r0.w, r0.z, l(1) 								-> (距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 0 
+  --ftou r0.zw, r0.zzzw 									            -> 屏幕像素索引(+0.5) to uint 
+  mad r1.y, r1.z, cb3[3].x, cb3[3].y  					      -> 当前帧深度纹理解码的Depth * 1 + 1 
+  log r1.y, r1.y 										                  -> ln(Depth + 1) 
+  mul r1.y, r1.y, cb3[3].z 								            -> ln(Depth + 1) + 1 
+  max r1.y, r1.y, l(0.000000) 							          -> max(ln(Depth + 1) + 1, 0) -> 返回值不小于 0 
+  ftou r1.y, r1.y 										                -> max(ln(Depth + 1) + 1, 0) to uint 
+  iadd r1.z, cb3[1].z, l(-1) 							            -> 1 - 1 = 0 
+  umin r1.y, r1.z, r1.y 								              -> min(0, max(ln(Depth + 1) + 1, 0)) -> 似乎只能返回 0? -> 距离对数因子? 
+  ushr r0.zw, r0.zzzw, cb3[2].xxxx 						        -> 屏幕像素索引(+1) >> 1 -> 相当于半屏幕分辨率 
+  imad r0.w, r1.y, cb3[1].y, r0.w 						        -> 距离对数因子 * 1 + 半屏幕像素索引.v 
+  imad r0.z, r0.w, cb3[1].x, r0.z 						        -> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u 
+  iadd r0.z, r0.z, cb3[0].w 							            -> 距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1 
+  ishl r0.w, r0.z, l(1) 								              -> (距离对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 0 
   
   //访问 T3 表 -> 下标为 r0.w = (深度对数因子 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 0 
   ld_indexable(buffer)(uint,uint,uint,uint) r0.w, r0.wwww, t3.yzwx 		-> 取第一个元素(X) 
-  umin r0.w, r0.w, cb3[0].y 											-> min(r0.w=[0,1,...,4,5,6,7...], 1) -> 不高于1? 
-  bfi r0.z, l(31), l(1), r0.z, l(1) 					-> (深度对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 1 
+  umin r0.w, r0.w, cb3[0].y 											    -> min(r0.w=[0,1,...,4,5,6,7...], 1) -> 不高于1? 
+  bfi r0.z, l(31), l(1), r0.z, l(1) 					        -> (深度对数因子 * 1 + 半屏幕像素索引.v  + 半屏幕像素索引.u + 1) << 1 + 1 
   ld_indexable(buffer)(uint,uint,uint,uint) r0.z, r0.zzzz, t3.yzxw  	-> 取第一个元素(X) 
 
-
-  ieq r1.y, r7.x, l(6) 									-> [Purple.y修改值] * 255 的后4个bit <-> [6] 
-  lt r1.z, l(0.000000), cb0[0].x 						-> 0 < 1 ? true -> 总是开启如下逻辑 
-  if_nz r1.z 											-> 这里总是能进入 
+  ieq r1.y, r7.x, l(6) 									              -> [Purple.y修改值] * 255 的后4个bit <-> [6] 
+  lt r1.z, l(0.000000), cb0[0].x 						          -> 0 < 1 ? true -> 总是开启如下逻辑 
+  if_nz r1.z 											                    -> 这里总是能进入 
 
   	//R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 -> 记为 Rn 
     dp3 r1.w, r13.xyzx, r13.xyzx 						-> dot(Rn, Rn)
