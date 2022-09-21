@@ -190,7 +190,7 @@ mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotV)^5] + (1 - NdotV
 mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - Fresnel_Term * r5.x -> 如果r5.x为控制开启阀门，整体返回值是与1的互补数 
 mul r13.xyz, r7.wwww, r10.xyzx 				  -> R13 = R10颜色 * (1 - Fresnel_Term) -> 如果开启，掠视时R10会被压制 
 mul r12.xyz, r7.zzzz, r12.xyzx 				  -> R12颜色 * [NoV关联项，比原始NoV亮]  
-mul r7.z, r5.x, r6.w 						        -> r7.z = [0] * [0 or Purple.y]  -> 开启条件:开启了F项，同时不是类型9的材质 
+mul r7.z, r5.x, r6.w 						        -> r7.z = T11.x(非0既1的Fresnel关联项) * [0 or Purple.y(rough1)]  -> 开启条件:开启了F项，同时不是类型9的材质 
 mad r12.xyz, r12.xyzx, l(0.90, 0.90, 0.90, 0.0), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R13颜色 -> 用减号形成Fresnel现象 
 mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> 屋顶材质应当使用的是 R13颜色  -> lerp
 
@@ -541,13 +541,13 @@ if_nz r1.x
   movc r12.xyzw, r8.zzzz, r14.xyzw, r12.xyzw 			    -> r12 = 4号材质 ? r14 : [T12.xyz, 1 - T12.w] 
   
   //输出 r1.x = 感觉是 specular 
-  --mad r0.y, r4.w, r7.z, r3.x 							-> Purple.z * {Tex11.x * [0 or Purple.y]} + NdotV
-  log r0.y, r0.y 										-> ln(Purple.z*{Tex11.x*[0 or Purple.y]} + NdotV) -> ln(NoV + noise?)
-  mul r0.y, r0.y, r1.x 									-> ln(NoV + noise?) * roughness^2 
-  exp r0.y, r0.y 										-> exp2( ln(NoV + noise?) * roughness^2 ) 
-  mad r0.y, r4.w, r7.z, r0.y 			-> R0Y = Purple.z * {Tex11.x*[0 or Purple.y]} +  exp2( ln(NoV + noise?) * roughness^2 ) 
-  add_sat r0.y, r0.y, l(-1.000000) 						-> saturate(R0Y - 1) -> 推测为 specular 系数 
-  mul r1.x, r0.y, r12.w 								-> 高反射率纹理a通道值 * saturate(R0Y - 1) -> 被A通道修正过的 specular 系数/强度? 
+  --mad r0.y, r4.w, r7.z, r3.x 							            -> TexAO(Purple.z) * Computered_AO(SSAO.r) + saturate(NdotV) -> mixed_AO
+  log r0.y, r0.y 										                  -> ln(mixed_AO) 
+  mul r0.y, r0.y, r1.x 									              -> ln(mixed_AO) * roughness^2 
+  exp r0.y, r0.y 										                  -> exp2( ln(mixed_AO) * roughness^2 ) 
+  mad r0.y, r4.w, r7.z, r0.y 			                    -> TexAO * Computered_AO + exp2(ln(mixed_AO) * roughness^2) -> AOwithRoughNoise 
+  add_sat r0.y, r0.y, l(-1.000000) 						        -> saturate(AOwithRoughNoise - 1) -> 只截取超过1的部分，这部分可以看做是AO叠加上Rough后的高频噪声 
+  mul r1.x, r0.y, r12.w 								              -> T12纹理(spec贴图)a通道值 * saturate(AOwithRoughNoise - 1) -> 被A通道修正过的 AO噪声 系数  
 
   ftou r0.zw, r0.zzzw 									-> 屏幕像素索引(+0.5) to uint 
   mad r1.y, r1.z, cb3[3].x, cb3[3].y  					-> 当前帧深度纹理解码的Depth * 1 + 1 
