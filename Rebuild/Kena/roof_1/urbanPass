@@ -637,7 +637,7 @@ if_nz r1.x
   mov r5.w, r1.x  										                -> r5.w = 高反射率纹理a通道值 * saturate( R0Y - 1 ) -> Spec_Intense_1 
   mov r6.w, l(0) 										                  -> Loop Index (i) -> 初始为 0 
 
-  //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 
+  //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 -> 重构时默认全为1 
   //挨个判断当前场景'激活'的 IBL 探针，如果当前像素点能被某张IBL影响，则进入内部 if 分支执行逻辑 
   loop 
     uge r7.w, r6.w, r0.w  								            -> i >= r0.w ? 
@@ -736,8 +736,9 @@ if_nz r1.x
     mad r5.xzw, r7.xxyz, r1.yyyy, r5.xxzw 	          -> gi_spec_1 *（1 - gi_spec_brdf_2) + T12.xyz * gi_spec_brdf_2 
                                                       -> 推测为对部分存在第二高光波瓣的材质，进行二次环境光高光渲染 (期间需要扣除一次'曝光'过程中的额外部分) 
     mul r0.x, r0.x, r1.w 								              -> (1 - T12.a) * gi_spec_brdf_2
-    mul r0.x, r0.y, r0.x 						                  -> AOwthRoughNoise * (1 - T12.a) * gi_spec_brdf_2 -> Spec_Intense_2 
+    mul r0.x, r0.y, r0.x 						                  -> AOwthRoughNoise * (1 - T12.a) * gi_spec_brdf_2 -> spec_second_intensity 
 
+    ->下面的分支用于输出属于 #4 号通道专有的 spec_second_base(既第二波瓣颜色) 以及 RN_shift_intensity(基于RN的扰动强度) 
     if_nz r1.z 											                  -> 总是能进入 (通过buffer中的开关控制) 
       dp3 r0.y, r13.xyzx, r13.xyzx						        -> dot(Rn, Rn) 
       sqrt r0.y, r0.y 									              -> |Rn| 模长 
@@ -776,75 +777,76 @@ if_nz r1.x
 
         mad r1.z, r1.z, l(3.141593), l(-0.100000) 		-> π * |Rn| - 0.1
         mul_sat r1.z, r1.z, l(5.000000) 				      -> saturate(5 * (π * |Rn| - 0.1)) 
-        mul r0.y, r1.y, r1.z 							            -> (1 - R1Y)^2 * (3 - 2 * (1 - R1Y)) * saturate(5 * (π * |Rn| - 0.1))  
+        mul r0.y, r1.y, r1.z 							            -> (1 - R1Y)^2 * (3 - 2 * (1 - R1Y)) * saturate(5 * (π * |Rn| - 0.1)) -> RN_shift_intensity
       endif 
 
       --add r1.y, -r0.y, l(1.000000) 
-      mad r0.y, cb0[1].w, r1.y, r0.y 					-> lerp((R1Y')^2 * (3 - 2 * R1Y') * saturate(5 * (π * |Rn| - 0.1)), 1, 0.0%) 
-      add r1.y, -r0.y, l(1.000000) 						-> 1 - (R1Y')^2 * (3 - 2 * R1Y') * saturate(5 * (π * |Rn| - 0.1))
-      mul r1.yzw, r1.yyyy, cb0[1].xxyz 	-> [0.045, 0.051, 0.029] * [1 - (R1Y')^2 * (3 - 2 * R1Y') * saturate(5 * (π * |Rn| - 0.1))] 
+      mad r0.y, cb0[1].w, r1.y, r0.y 					        -> lerp(RN_shift_intensity, 1, 0.0%) -> RN_shift_intensity
+      add r1.y, -r0.y, l(1.000000) 						        -> 1 - lerp(RN_shift_intensity,1,0)
+      mul r1.yzw, r1.yyyy, cb0[1].xxyz 	              -> [0.045, 0.051, 0.029] * [1 - lerp(RN_shift_intensity,1,0)] -> spec_second_base 
     else 
-      mov r1.yzw, l(0,0,0,0) 							-> 总是不进入 
+      mov r1.yzw, l(0,0,0,0) 							            -> 总是不进入 
       mov r0.y, l(1.000000)
     endif 
 
-    log r2.w, r5.y 										-> ln(T11.y) 
-    mad r2.w, -r2.w, l(1.200000), l(1.000000) 			-> 1 - 1.2 * ln(T11.y)
-    add r3.y, -r2.w, r4.w 								-> 6 - ln(T11.y) 
+    log r2.w, r5.y 										                -> ln(T11.y) 
+    mad r2.w, -r2.w, l(1.200000), l(1.000000) 			  -> 1 - 1.2 * ln(T11.y)
+    add r3.y, -r2.w, r4.w 								            -> 6 - ln(T11.y) 
     mov r11.x, l(0) 					
     mov r6.xyz, l(0,0,0,0) 
-    mov r3.z, r0.x  									-> {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
-    													-> Spec_Intense_2 -> 新计算出来的高光强度 
-    mov r4.w, l(0) 										-> Index i = 0  
+    mov r3.z, r0.x  									                -> AOwthRoughNoise * (1 - T12.a) * gi_spec_brdf_2 -> spec_second_intensity 
+    													                        -> spec_second_intensity -> 第二高光波瓣的强度 
+    mov r4.w, l(0) 										                -> Index i = 0  
 
     //以下LOOP的起始形式与上面 IBL LOOP 的起始形式雷同 
     loop 
-      //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 
-      uge r5.y, r4.w, r0.w 								-> i >= r0.w? 
-      breakc_nz r5.y 									-> while ( i < r0.w ) 
-      lt r5.y, r3.z, l(0.001000) 						-> r3.z < 0.001 -> 推测 r3.z(或r0.x) 是某种待调整强度 
-      if_nz r5.y 										-> if (r3.z < 0.001) then break 
+      //注意, r0.w = 使用'屏幕像素'与'距离对数'组合出索引，再从 T3 buffer 中取得的映射值 -> 取值范围要么 0, 要么 1 -> 重构时默认全为1 
+      uge r5.y, r4.w, r0.w 								            -> i >= r0.w? 
+      breakc_nz r5.y 									                -> while ( i < r0.w ) 
+      lt r5.y, r3.z, l(0.001000) 						          -> r3.z < 0.001  
+      if_nz r5.y 										                  -> if (spec_second_intensity < 0.001) then break 
         break 
       endif 
 
-      iadd r5.y, r0.z, r4.w  							-> r0.z 也是基于'屏幕像素'和'距离对数' 从T3 buffer直接获取 -> 可为[0,1,...] 
+      iadd r5.y, r0.z, r4.w  							            -> r0.z 也是基于'屏幕像素'和'距离对数' 从T3 buffer直接获取 -> 可为[0,1,...] 
       ld_indexable(buffer)(uint,uint,uint,uint) r5.y, r5.yyyy, t4.yxzw		-> 推测使用 ushort4 查看 T4 buffer 数据，这是张映射表 
-      add r7.xyz, r4.xyzx, -cb4[r5.y + 0].xyzx 			-> 依然是求取 从探针指向 当前视点的向量 -> <探素向量> 
+      add r7.xyz, r4.xyzx, -cb4[r5.y + 0].xyzx 			  -> 依然是求取 从探针指向 当前视点的向量 -> <探素向量> 
       dp3 r6.w, r7.xyzx, r7.xyzx 
-      sqrt r7.w, r6.w 									-> 探针到视点的 Length 
-      lt r8.x, r7.w, cb4[r5.y + 0].w 					-> Length < 探针影响的半径 R 
-      if_nz r8.x 										-> 当前视点受探针影响的话 
-      	//以下逻辑主要用于构造 IBL 采样向量 r8.xyz; 采样后
-        div_sat r7.w, r7.w, cb4[r5.y + 0].w 			-> saturate(距离 / 影响半径R) 
-        dp3 r8.x, r11.yzwy, r7.xyzx 					-> dot(View_Reflection, <探素向量>) -> 注:IBL_LOOP在这里使用的是 <上抬视反> 
+      sqrt r7.w, r6.w 									              -> 探针到视点的 Length 
+      lt r8.x, r7.w, cb4[r5.y + 0].w 					        -> Length < 探针影响的半径 R 
+      if_nz r8.x 										                  -> 当前视点受探针影响的话 
+      	//以下逻辑主要用于构造 IBL 采样向量 r8.xyz; 采样后 
+        div_sat r7.w, r7.w, cb4[r5.y + 0].w 			    -> saturate(距离 / 影响半径R) 
+        dp3 r8.x, r11.yzwy, r7.xyzx 					        -> dot(View_Reflection, <探素向量>) -> 注:第一次执行IBL_LOOP在这里使用的是 <上抬视反> 
         mad r6.w, -cb4[r5.y + 0].w, cb4[r5.y + 0].w, r6.w 	-> (距离^2 - R^2) < 0 
-        mad r6.w, r8.x, r8.x, -r6.w 					-> dot(VR, <探素向量>)^2 - (距离^2 - R^2) 
-        ge r8.y, r6.w, l(0.000000) 						-> dot(VR, <探素向量>)^2 - (距离^2 - R^2) >= 0 -> 总是true 
-        sqrt r6.w, r6.w 								-> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) 
-        add r6.w, -r8.x, r6.w 			-> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) - dot(VR, <探素向量>) -> R6W 
-        mad r7.xyz, r6.wwww, r11.yzwy, r7.xyzx 			-> VR * R6W + <探素向量> 
+        mad r6.w, r8.x, r8.x, -r6.w 					        -> dot(VR, <探素向量>)^2 - (距离^2 - R^2) 
+        ge r8.y, r6.w, l(0.000000) 						        -> dot(VR, <探素向量>)^2 - (距离^2 - R^2) >= 0 -> 总是true 
+        sqrt r6.w, r6.w 								              -> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) 
+        add r6.w, -r8.x, r6.w 			                  -> sqrt(dot(VR, <探素向量>)^2 - (距离^2 - R^2)) - dot(VR, <探素向量>) -> R6W 
+        mad r7.xyz, r6.wwww, r11.yzwy, r7.xyzx 			  -> VR * R6W + <探素向量> 
         add r12.yzw, r7.xxyz, -cb4[r5.y + 682].xxyz 	-> VR * R6W + <探素向量>  - 0 -> 探针点 指向 VR*R6W 的终点 
+
         mad r6.w, r7.w, l(2.500000), l(-1.500000) 		-> 2.5 * saturate(距离/R) - 1.5 
-        max r6.w, r6.w, l(0.000000) 					-> max(2.5 * saturate(距离/R) - 1.5, 0) -> [距离/R] < 0.6 则返回 0 
-        mul r7.x, r6.w, r6.w 							-> [2.5 * saturate(距离/R) - 1.5]^2 
+        max r6.w, r6.w, l(0.000000) 					        -> max(2.5 * saturate(距离/R) - 1.5, 0) -> [距离/R] < 0.6 则返回 0 
+        mul r7.x, r6.w, r6.w 							            -> [2.5 * saturate(距离/R) - 1.5]^2 
         mad r6.w, -r6.w, l(2.000000), l(3.000000) 		-> 3 - 2*[2.5 * saturate(距离/R) - 1.5] 
-        mad r12.x, -r7.x, r6.w, l(1.000000) 			-> 1 - [2.5*saturate(距离/R) - 1.5]^2 * {3-2*[2.5*saturate(距离/R)-1.5]} 
+        mad r12.x, -r7.x, r6.w, l(1.000000) 			    -> 1 - [2.5*saturate(距离/R) - 1.5]^2 * {3-2*[2.5*saturate(距离/R)-1.5]} -> rate_factor(距离缩放因子) 
         movc r7.xyzw, r8.yyyy, r12.xyzw, r11.xyzw 		-> 选[r12.x, r12.yzw] 
-        mov r8.xyz, r7.yzwy								-> 把 向量部分 放到 r8.xyz 中 
-        mov r8.w, cb4[r5.y + 341].y  					-> 10 
+        mov r8.xyz, r7.yzwy								            -> 把 向量部分 放到 r8.xyz 中 
+        mov r8.w, cb4[r5.y + 341].y  					        -> 10 
 
         //采样 cubemap array, 获取正确的 IBL 返回值 
         sample_l_indexable(texturecubearray)(float,float,float,float) r8.xyzw, r8.xyzw, t2.xyzw, s3, r3.y 
 
         mul r7.yzw, r8.xxyz, cb4[r5.y + 341].xxxx    	-> 探针返回颜色 * 1 
-        mul r7.yzw, r7.xxxx, r7.yyzw 					-> 距离缩放因子 * 探针返回颜色 
-        mul r7.yzw, r3.zzzz, r7.yyzw 					-> [新spec] * {距离缩放因子 * 探针返回颜色} 
-        												-> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
-        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			-> [spec * IBL_base_col] * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + 0 
-        mad r5.y, -r8.w, r7.x, l(1.000000)  			-> 1 - IBL_base_alpha * 距离缩放因子 
-        mul r3.z, r3.z, r5.y 							-> r3.z * {1 - IBL_base_alpha * 距离缩放因子} -> 对r3.z进行缩放修正(注意Loop条件) 
+        mul r7.yzw, r7.xxxx, r7.yyzw 					        -> 距离缩放因子 * 探针返回颜色 
+        mul r7.yzw, r3.zzzz, r7.yyzw 					        -> [新spec] * {距离缩放因子 * 探针返回颜色} 
+        												                      -> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
+        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			  -> [spec * IBL_base_col] * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + 0 
+        mad r5.y, -r8.w, r7.x, l(1.000000)  			    -> 1 - IBL_base_alpha * 距离缩放因子 
+        mul r3.z, r3.z, r5.y 							            -> r3.z * {1 - IBL_base_alpha * 距离缩放因子} -> 对r3.z进行缩放修正(注意Loop条件) 
       endif 
-      iadd r4.w, r4.w, l(1) 							-> i++ 
+      iadd r4.w, r4.w, l(1) 							            -> i++ 
     endloop 
 
     //和采样天空盒同一个开关，总是true 
