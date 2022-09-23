@@ -677,9 +677,9 @@ if_nz r1.x
       mul r14.yzw, r15.xxyz, cb4[r7.w + 341].xxxx     -> 探针返回颜色 * 1 
       mul r14.yzw, r14.xxxx, r14.yyzw 					      -> 距离缩放因子 * 探针返回颜色 
       mul r14.yzw, r5.wwww, r14.yyzw					        -> [Spec_Intense_1] * {距离缩放因子 * 探针返回颜色} 
-      mad r8.xyw, r14.yzyw, r1.yyyy, r8.xyxw 			    -> [spec * IBL_base_col] * [|Rn|和Roughness关联 の 强度值] + 0 
-      mad r7.w, -r15.w, r14.x, l(1.000000) 				    -> 1 - IBL_base_alpha * 距离缩放因子 
-      mul r5.w, r5.w, r7.w  							            -> [Spec_Intense_1] * {1 - IBL_base_alpha * 距离缩放因子} 
+      mad r8.xyw, r14.yzyw, r1.yyyy, r8.xyxw 			    -> [spec * IBL_sample_col] * [|Rn|和Roughness关联 の 强度值] + 0 
+      mad r7.w, -r15.w, r14.x, l(1.000000) 				    -> 1 - IBL_sample_alpha * 距离缩放因子 
+      mul r5.w, r5.w, r7.w  							            -> [Spec_Intense_1] * {1 - IBL_sample_alpha * 距离缩放因子} 
     endif 
 
     iadd r6.w, r6.w, l(1)								              -> LOOP index i++ 
@@ -793,7 +793,7 @@ if_nz r1.x
     mad r2.w, -r2.w, l(1.200000), l(1.000000) 			  -> 1 - 1.2 * ln(T11.y)
     add r3.y, -r2.w, r4.w 								            -> 6 - ln(T11.y) 
     mov r11.x, l(0) 					
-    mov r6.xyz, l(0,0,0,0) 
+    mov r6.xyz, l(0,0,0,0)                            -> ibl_spec2_output -> 这是待求的量 
     mov r3.z, r0.x  									                -> AOwthRoughNoise * (1 - T12.a) * gi_spec_brdf_2 -> spec_second_intensity 
     													                        -> spec_second_intensity -> 第二高光波瓣的强度 
     mov r4.w, l(0) 										                -> Index i = 0  
@@ -840,17 +840,17 @@ if_nz r1.x
 
         mul r7.yzw, r8.xxyz, cb4[r5.y + 341].xxxx    	-> 探针返回颜色 * 1 
         mul r7.yzw, r7.xxxx, r7.yyzw 					        -> 距离缩放因子 * 探针返回颜色 
-        mul r7.yzw, r3.zzzz, r7.yyzw 					        -> [新spec] * {距离缩放因子 * 探针返回颜色} 
-        												                      -> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) 
-        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			  -> [spec * IBL_base_col] * [|Rn|和T11.Y(另一个Rough)关联 の 强度值] + 0 
-        mad r5.y, -r8.w, r7.x, l(1.000000)  			    -> 1 - IBL_base_alpha * 距离缩放因子 
-        mul r3.z, r3.z, r5.y 							            -> r3.z * {1 - IBL_base_alpha * 距离缩放因子} -> 对r3.z进行缩放修正(注意Loop条件) 
+        mul r7.yzw, r3.zzzz, r7.yyzw 					        -> spec_second_intensity * {距离缩放因子 * 探针返回颜色} 
+        												                      -> r3.z = {(1 - T12.a)*[T11.x*(0.04*scale + bias)]} * saturate(R0Y - 1) -> spec_second_intensity 
+        mad r6.xyz, r7.yzwy, r0.yyyy, r6.xyzx  			  -> spec * IBL_sample_col * RN_shift_intensity + ibl_spec2_output 
+        mad r5.y, -r8.w, r7.x, l(1.000000)  			    -> 1 - IBL_sample_alpha * 距离缩放因子 
+        mul r3.z, r3.z, r5.y 							            -> r3.z * {1 - IBL_sample_alpha * 距离缩放因子} -> 对r3.z进行缩放修正(注意Loop条件) 
       endif 
       iadd r4.w, r4.w, l(1) 							            -> i++ 
     endloop 
 
     //和采样天空盒同一个开关，总是true 
-    if_nz r1.x
+    --if_nz r1.x
       add r0.x, -r2.w, cb2[0].x 						-> 1.815 - [1 - 1.2 * ln(T11.y)] 
       add r0.x, r0.x, l(-1.000000) 						-> 1.815 - [1 - 1.2 * ln(T11.y)] - 1 -> 注意,若T11.y=0, ln(0)=-∞ 
 
