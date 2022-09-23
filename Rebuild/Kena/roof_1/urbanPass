@@ -875,7 +875,7 @@ if_nz r1.x
     													                        -> 叠加了2次 IBL 采样和计算结果 -> prefilter_Specular_Final 
   else 
   	//不是4号材质的时候进入这个分支 
-    --sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000)  -> 采样 LUT 
+    sample_l_indexable(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0.000000)  -> 采样 LUT 
     mul_sat r0.w, r9.y, l(50.000000) 					        -> R9色.Y通道 * 50 -> 待考: R9颜色似乎是一种环境光底色 
     mul r0.w, r1.y, r0.w 								              -> bias * saturate(50 * R9.y) 
     mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww 				    -> R9色 * scale + bias * saturate(50 * R9.y) 
