@@ -81,7 +81,7 @@ Block_For_Not#0_Not#7_Mat 	//不是0号和7号的材质可以进入下面分支
 	{
 		...
 
-		If In_Distance
+		If In_Distance 
 		{
 
 			Sample IBL using reflectDir_UpLite 
