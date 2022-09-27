@@ -110,25 +110,26 @@ ftou r6.w, r6.w
 and r7.xz, r6.wwww, l(15, 0, 16, 0)   			        -> (Z= r6.w & 10000) -> 筛选出第五bit位=0或1的值； (X= r6.w & 1111) -> 返回:[0~15] 
 movc r5.xyzw, r7.zzzz, l(0,0,0,0), r5.xyzw  	      -> 依据倒数第5个bit符号位, 判断是否要启用 T11 纹理的数据 
 ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)    			        -> Condition: r7.x 返回值是否落在给定区间 
-movc r6.w, r8.x, l(0), r3.x    					            -> r3.x=rough1 -> 若为9号材质则为0, 除此之外是材质自有 rough1 (roof和腰带,头发,裤有值) 
-mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - T9.y * 0.08 
-mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   		        -> (BaseCol.rgb - T9.y * 0.08) * [0 or rough1] + T9.y * 0.08 
-												                            -> R9 颜色似乎是环境光底色 
+movc r6.w, r8.x, l(0), r3.x    					            -> r3.x=rough1 -> factor_RoughOrZero: 若为9号材质则为0, 其余来自纹理T9.x(既rough1) (T9.x: roof和腰带,头发,裤有值) 
+mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - T9.y * 0.08 -> 不妨定义 base_intensity = 0.08 * T9.y
+mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   		        -> lerp(base_intensity.xxx, BaseColor.xyz, factor_RoughOrZero) 
+												                            -> df_inten_base 颜色 似乎是环境光基础强度分布 
+                                                    -> 推测T9.x(所代表的粗糙度rough1) -> 用于计算GI_Diffuse部分中的基础辐射强度(待考) 
 
-or r7.y, r8.x, r8.y 							      -> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
-lt r7.z, l(0.000000), cb1[155].x 				-> 0 < 1 ? true 
-lt r7.w, l(0.000000), cb1[200].z  			-> 0 < 1 ? true  -> 这2个开关负责什么? TODO 
-and r7.z, r7.w, r7.z 							      -> 同时满足上面2个开关 -> 才OK 
-ne r7.w, l(0, 0, 0, 0), cb1[155].x  	  -> true  
-movc r8.xyw, r7.wwww, l(1,1,0,1), r4.xyxz		-> r8.xyw = BaseCol.rgb 
+or r7.y, r8.x, r8.y 							                  -> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
+lt r7.z, l(0.000000), cb1[155].x 				            -> 0 < cb1[155].x ? 
+lt r7.w, l(0.000000), cb1[200].z  			            -> 0 < cb1[200].z ? 
+and r7.z, r7.w, r7.z  
+ne r7.w, l(0, 0, 0, 0), cb1[155].x  	              -> true 
+movc r8.xyw, r7.wwww, l(1,1,0,1), r4.xyxz		        -> r8.xyw = 1 or BaseCol.rgb 
 
 //构建了 R10 颜色/遮罩 -> TODO 
 movc r10.xy, r1.wwww, l(1,0,0,0), l(0,1,0,0) 	-> 根据间隔的像素进行选择和分割 -> r10.xy = [1,0] or [0,1] -> 间隔Mask 
-mul r11.xyz, r9.xyzx, r10.yyyy 					      -> R11 颜色 -> R9 颜色 * 间隔的Mask.y  -> 可颜色 可0 
-mul r11.w, r3.y, r10.y 		 					          -> T9.y * [1 or 0] -> T9.y * 方块Mask.y 
+mul r11.xyz, r9.xyzx, r10.yyyy 
+mul r11.w, r3.y, r10.y 		 					          -> R11 -> [df_inten_base.xyz, T9.y(rifr.y)] * 方块Mask.y 
 movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx 		  -> R10 颜色 -> 要么是 方块Mask.x 既[0 or 1] (√)，要么 BaseCol.rgb 
 mov r9.w, r3.y 
-movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> R11 颜色 <- [R9颜色*方块Mask.y] (√) 还是 [R9颜色.rgb, 0.2] 
+movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw 		-> R11 -> [df_inten_base*方块Mask.y] (√) 还是 [df_inten_base.rgb, 0.2] 
 mov r10.w, r11.w 								              -> R10 颜色透明通道 = 0.2 * 方块Mask.y -> rgba = [0,0,0,0.2] or [1,1,1,0] 
 mov r12.xyz, r4.xyzx 							            -> R12 颜色 = BaseCol.rgb 
 mov r12.w, r9.w 								              -> R12 颜色.Alpha = R11.w = r3.y = T9.y ~ 0.2 
@@ -138,18 +139,18 @@ movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw 		-> 新 R10 = 概率选 R10 或 R12=
 //先通过 [-1, +1] * Clip.w * View.z 计算出 Clip Space 下当前点xy，随后结合采样深度z重建世界空间坐标 
 //注意1: 矩阵运算的目标向量处在Clip Space中，所以变换矩阵理应是 Inv_VP，且UE4的P矩阵只修改了XY分量(最后一列为[0,0,1,0])，保留Z分量不动 
 //注意2: r1.xy 一直保持在 [-1, +1] * Clip.w 状态 
-mul r4.xy, r1.zzzz, r1.xyxx 				    -> R4.xy -> ClipSpace.xy -> [-1, +1] * (Clip.w * View.z) 
-mul r8.xyw, r4.yyyy, cb1[49].xyxz 			-> cb1[49] ~ cb1[50] -> Matrix_Inv_VP -> 将物体从裁剪空间转回世界空间的矩阵 
+mul r4.xy, r1.zzzz, r1.xyxx 				          -> R4.xy -> ClipSpace.xy -> [-1, +1] * (Clip.w * View.z) 
+mul r8.xyw, r4.yyyy, cb1[49].xyxz 			      -> cb1[49] ~ cb1[50] -> Matrix_Inv_VP -> 将物体从裁剪空间转回世界空间的矩阵 
 mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx 
 mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx 
-add r4.xyz, r4.xyzx, cb1[51].xyzx 			-> 最后一列存有: 'CameraPosWS' 
-											                  -> toCameraVector= (inverse(viewMatrix)*vec4(0,0,0,1.0)).xyz-worldPosition.xyz; 
+add r4.xyz, r4.xyzx, cb1[51].xyzx 			      -> 最后一列存有: 'CameraPosWS' 
+											                        -> toCameraVector= (inverse(viewMatrix)*vec4(0,0,0,1.0)).xyz-worldPosition.xyz; 
 
 //-ViewDirWS -> R8 -> From Camera To ViewPoint 
-add r8.xyw, r4.xyxz, -cb1[67].xyxz    	-> 摄像机的世界空间坐标[-58890, 27509, -6150] 
+add r8.xyw, r4.xyxz, -cb1[67].xyxz    	      -> 摄像机的世界空间坐标[-58890, 27509, -6150] 
 dp3 r1.w, r8.xywx, r8.xywx 
 rsq r1.w, r1.w 
-mul r8.xyw, r1.wwww, r8.xyxw 				    -> 归一化 
+mul r8.xyw, r1.wwww, r8.xyxw 				          -> 归一化 
 
 
 //计算不同材质的参数 R7.Z 和 R9.W：基于NdotV，掠视时值小， 俯视时值大 
@@ -159,8 +160,8 @@ mov_sat r3.x, r1.w   							            -> saturate(NdotV) = NdotV -> 做sat似�
 mad r7.z, r3.x, l(0.500000), l(0.500000)    	-> NdotV * 0.5 + 0.5 
 mad r7.z, r7.z, r3.x, l(-1.000000) 				    -> (NdotV * 0.5 + 0.5) * NdotV - 1  -> 若(V ⊥ N) 得-1，反之得0 
 mad_sat r7.w, -r3.w, l(1.250000), l(1.250000)	-> saturate(1.25 - 1.25*[t9.w=0.69]) -> 不同材质不同缩放比例 
-mul r9.w, r7.w, r7.z 							            -> saturate(1.25 - 1.25*[t9.w=0.69]) * ((NdotV*0.5+0.5)*NdotV-1) -> [-1, 0]区间 ；
-mad r7.z, r7.z, r7.w, l(1.000000) 				    -> 类似 R9.w -> 转换到 [0, 1] 区间，垂直得0，同向得1 
+mul r9.w, r7.w, r7.z 							            -> saturate(1.25 - 1.25*[t9.w=0.69]) * ((NdotV*0.5+0.5)*NdotV-1) -> [-1, 0]区间 
+mad r7.z, r7.z, r7.w, l(1.000000) 				    -> 定义为 NoV_nearOne -> 类似 NoV -> 转换到 [0, 1] 区间，边缘暗中间亮，整体数值靠近1 
 
 //将 R10 颜色 与 NdotV 以某种形式混淆 
 //基于R10颜色生成的 -> R13 属于 [0.15, 1.01]区间; R12 属于 [0, 1.11]区间 
@@ -184,15 +185,15 @@ mul r12.xyz, r12.xyzx, r13.xyzx 												                  -> R12 颜色 = R1
 add r7.w, -r3.x, l(1.000000)  				  -> 1 - sat(NdotV) -> [0, 1] 
 mul r11.w, r7.w, r7.w 						      -> (1 - NdotV)^2 
 mul r11.w, r11.w, r11.w 					      -> (1 - NdotV)^4 
-mul r12.w, r7.w, r11.w 						      -> R12.w = (1 - NdotV)^5 
-mad r7.w, -r11.w, r7.w, l(1.000000)  		-> 1 - (1 - NdotV)^5 
-mad r7.w, r7.w, l(0.040000), r12.w  		-> 0.04 * [1 - (1 - NdotV)^5] + (1 - NdotV)^5 -> Fresnel_Term 
-mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - Fresnel_Term * r5.x -> 如果r5.x为控制开启阀门，整体返回值是与1的互补数 
-mul r13.xyz, r7.wwww, r10.xyzx 				  -> R13 = R10颜色 * (1 - Fresnel_Term) -> 如果开启，掠视时R10会被压制 
-mul r12.xyz, r7.zzzz, r12.xyzx 				  -> R12颜色 * [NoV关联项，比原始NoV亮]  
-mul r7.z, r5.x, r6.w 						        -> r7.z = T11.x(非0既1的Fresnel关联项) * [0 or Purple.y(rough1)]  -> 开启条件:开启了F项，同时不是类型9的材质 
+mul r12.w, r7.w, r11.w 						      -> R12.w = (1 - NdotV)^5 -> Fresnel_Term
+mad r7.w, -r11.w, r7.w, l(1.000000)   
+mad r7.w, r7.w, l(0.040000), r12.w  		-> lerp((1 - NdotV)^5, 1, 0.04) 
+mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - Fresnel_Term * T11.x(frxx.x) -> 取反色(且屏蔽了除人和草叶以外的物件) 
+mul r13.xyz, r7.wwww, r10.xyzx 				  -> R13 = R10颜色 * (1 - Fresnel_Term) -> (R10颜色) * (类似 NoV 效果的乘子) 
+mul r12.xyz, r7.zzzz, r12.xyzx 				  -> R12颜色 * NoV_nearOne -> (NoV_nearOne: NoV关联项，但比原始NoV亮)  
+mul r7.z, r5.x, r6.w 						        -> r7.z = T11.x * factor_RoughOrZero -> 2个遮罩叠加后 -> 突出了人物 
 mad r12.xyz, r12.xyzx, l(0.90, 0.90, 0.90, 0.0), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R13颜色 -> 用减号形成Fresnel现象 
-mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> R12 = r7.z * R12 + R13 -> 屋顶材质应当使用的是 R13颜色  -> lerp
+mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx 	-> lerp(R13, R12, T11.x*factor_RoughOrZero) -> 人物像素使用R13颜色，其余用R12  
 
 //采样 AO -> R7.z  
 sample_l_indexable(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0.000000) 
@@ -214,60 +215,64 @@ mul r15.zw, r13.zzzw, r13.xxxy					                      -> 半分辨率下 UV_d
 //采样了田字四邻域，分布存放在 R16,R17,R18和R14中 
 //注意，降分辨率下的一个田字的每个口，都代表正常分辨率下的一个田 -> 采样覆盖正常分辨率下16邻域 
 sample_l_indexable(texture2d)(float,float,float,float) r16.xyzw, r15.xyxx, t6.xyzw, s5, l(0.000000) 
-mov r14.z, l(0)  						                               -> r14.xyz = ["半"屏幕的长宽の倒数, 0]; r15.xy = [降采样后当前点UV] 
-add r17.xyzw, r14.xzzy, r15.xyxy		                       -> r17.xyzw = [降采样后U + 1, 降采样后V, 降采样后U, 降采样后V + 1] 
+mov r14.z, l(0)  						                                  -> r14.xyz = ["半"屏幕的长宽の倒数, 0]; r15.xy = [降采样后当前点UV] 
+add r17.xyzw, r14.xzzy, r15.xyxy		                          -> r17.xyzw = [降采样后U + 1, 降采样后V, 降采样后U, 降采样后V + 1] 
 sample_l_indexable(texture2d)(float,float,float,float) r18.xyzw, r17.xyxx, t6.xyzw, s5, l(0.000000) 
 sample_l_indexable(texture2d)(float,float,float,float) r17.xyzw, r17.zwzz, t6.xyzw, s5, l(0.000000) 
-add r14.xy, r14.xyxx, r15.xyxx    		                     -> r14.xy = [UV + 一个像素] 
+add r14.xy, r14.xyxx, r15.xyxx    		                        -> r14.xy = [UV + 一个像素] 
 sample_l_indexable(texture2d)(float,float,float,float) r14.xyzw, r14.xyxx, t6.xyzw, s5, l(0.000000) 
 
 //这里从T6纹理(半分辨率) W 通道获取 Depth_1，拿来和(全分辨率下)深度图的 Depth_2 求差异 
 //最后基于当前像素在田字格位置，加权求和 Diff_Depth，存入 R7.w 
 // r13 = [UV_delta, "半"屏幕的长宽] 
-mad r13.xy, -r13.yxyy, r13.wzww, l(1,1,0,0)	  -> (1 - 大像素_delta).yx 
-mul r19.x, r13.y, r13.x  				              -> r19.x = [当前点在田字左下格时: 1], [右上: 0.25], [其他: 0.5]  ? 
-mul r19.yz, r15.zzwz, r13.xxyx 			          -> 大像素_delta.xy * (1 - 大像素_delta).yx  -> 可以区分 ↑，→，↗和本身共4中情况 ? 
-mul r19.w, r15.z, r15.w 				              -> 区分是否是 右上 格子 -> [右上: 0.25], [其他: 0] ? 
-mov r13.x, r16.w 						                  -> R13 = [左下, 上，右, 右上].(看起来像距离参数，数值普遍大于100，天空在65530附近) 
+mad r13.xy, -r13.yxyy, r13.wzww, l(1,1,0,0)	                          -> (1 - 大像素_delta).yx 
+mul r19.x, r13.y, r13.x  				                                      
+mul r19.yz, r15.zzwz, r13.xxyx 			                                  
+mul r19.w, r15.z, r15.w 				                                      -> 从功能上看，r19.xyzw 分别对应田字中左下，右，上和右上4个方位上像素(深度)的衰减值 
+mov r13.x, r16.w 						                                          
 mov r13.y, r18.w
 mov r13.z, r17.w
-mov r13.w, r14.w
-add r13.xyzw, -r1.zzzz, r13.xyzw 		-> R13 = 田字4个位置的: T6纹理存的Depth - 当前帧深度纹理解码的Depth 
+mov r13.w, r14.w                                                      -> R13 = [左下, 上，右, 右上].(看起来像距离参数，数值普遍大于100，天空在65530附近) 
+add r13.xyzw, -r1.zzzz, r13.xyzw 		                                  -> R13 = 田字4个位置的: T6纹理存的Depth - 当前帧深度纹理解码的Depth 
 add r13.xyzw, |r13.xyzw|, l(0.000100, 0.000100, 0.000100, 0.000100) 	-> 给 Diff_Depth 加上一个很小的正数，确保都大于0 
 div r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000), r13.xyzw 		-> Diff_Depth の 倒数 
 mul r13.xyzw, r13.xyzw, r19.xyzw 										                  -> 基于当前像素在田字格中位置，修正4个 (1/D_Depth) 
 dp4 r7.w, r13.xyzw, l(1.000000, 1.000000, 1.000000, 1.000000) 			  -> 求和田字格区域的这 4个 (1/D_Depth) 
-div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w 				    -> 相当于求解了4个 Diff_Depth 的加权平均 -> 与深度值相关 
+div r7.w, l(1.000000, 1.000000, 1.000000, 1.000000), r7.w 				    -> 相当于求解了4个 Diff_Depth 通道之和的倒数 -> 求平均乘子 -> 定义为 g_depth_factor
 
 mul r15.xyz, r18.xyzx, r13.yyyy 			       	-> 对应田字位置的 (1/D_Depth) * 对应位置的采样结果.xyz 
 mad r15.xyz, r13.xxxx, r16.xyzx, r15.xyzx 		-> 4个位置的结果累加起来 -> R13 
 mad r13.xyz, r13.zzzz, r17.xyzx, r15.xyzx 
-mad r13.xyz, r13.wwww, r14.xyzx, r13.xyzx 
+mad r13.xyz, r13.wwww, r14.xyzx, r13.xyzx     -> d_norm -> 田字4方向独自通过(1/D_Depth)累加后 * D_Depth加权平均
 
 add r11.w, -r1.z, cb0[2].w 						        -> 20000 - 当前帧深度纹理解码的Depth 
 mul_sat r11.w, r11.w, cb0[3].x 					      -> saturate((20000-Depth)/6000) -> 用于Scale，距离近:1，距离远:0 
 mov r14.xyz, -r6.xyzx 							          -> R14 = -Normal 
-mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 		  -> (田字4方向独自通过(1/D_Depth)累加后 * D_Depth加权平均).xyz + (-Normal) 
-mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		  -> R13 = Scale * 从原Norm顶点指向新Norm顶点的向量(正向扰动矢量) + 原Normal向量 
+mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx 
+mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx 		  -> R13 = lerp(norm, d_norm * g_depth_factor, scale) 
 
 
-if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit位全是 0 
-  mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx 				      -> R10颜色 - R10颜色 * Purple.y 
-  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx  		-> 上面的颜色 * 1 + 0 
-  mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				      -> R12颜色 - R12颜色 * Purple.y 
+if_nz r7.x  	                                            -> 对于 #1 ~ #15 号渲染通道来说都能进入 
+
+  //GI_Diffuse_Col -> R15 
+  mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx 				      -> R10颜色 - R10颜色 * factor_RoughOrZero 
+  mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx 
+  mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx 				      -> R12颜色 - R12颜色 * factor_RoughOrZero 
   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx 				      -> Condition 如果是 4号 材质方案的话，使用R16颜色，不然就用R15 
 
-  dp3 r7.w, r13.xyzx, r13.xyzx  							            -> 归一化 R13 扰动法线向量 -> R16 -> 定义为RandomNorm 或 (Rn) 
+  dp3 r7.w, r13.xyzx, r13.xyzx 
   sqrt r7.w, r7.w
   max r11.w, r7.w, l(0.000010)
-  div r16.xyz, r13.xyzx, r11.wwww
+  div r16.xyz, r13.xyzx, r11.wwww                         -> 归一化 d_norm 扰动法线向量 -> R16 -> 定义为 RebuiltedNorm 或 (Rn) 
 
-  //计算标量r11.w -> 无扰动时=1, 强扰动时=扰动向量模长 
-  mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx  				-> 法向量 - 扰动法线向量 = 反向扰动矢量 
-  mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx 					-> 按Rn的模长放大 '反向扰动矢量' 
+  //计算 bias_N -> 后续会用到 
+  mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx  
+  mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx 					-> lerp(RN, norm, RN_Len) -> 平坦表面使用norm，边缘以及陡峭表面使用RN
+
+  //计算标量r11.w -> 无扰动时=1, 强扰动时 = RN_Len 既RN向量的模长 
   dp3 r11.w, r16.xyzx, r6.xyzx 								      -> Dot(扰动法线向量, NormalWS) -> NdotRn 
   add r12.w, -r11.w, l(1.000000) 
-  mad r11.w, r7.w, r12.w, r11.w  							      -> lerp(NdotRn, 1, 扰动向量模长)
+  mad r11.w, r7.w, r12.w, r11.w  							      -> lerp(NdotRn, 1, RN_Len)
 
   //求取 AO_final -> r7.w
   mad r7.w, r7.w, l(10.000000), l(-5.000000)   			-> 扰动向量模长 * 10 - 5 
@@ -290,16 +295,15 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
   movc r7.w, r12.w, r15.w, r7.w 							      -> r7.w 是 AO_final -> 通过开关在两种模式间切换: Min(AO1,AO2) 和 Mul(AO1,AO2) 
 
   ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7) 						  -> [Purple.y修改值] * 255 的后4个bit <-> [6,2,3,7] 
-  if_nz r16.x 	-> 后4-bit == 6的情况 
-  	//利用法线的扰动 + AO相关参数 -> 求取该材质独有的 GI_Diffuse 
+  if_nz r16.x 	                                    -> #6 号渲染通路对应的分支 
     mov r14.w, l(1.000000)  								        -> 在开始矩阵变换前将w通道设置为1 -> 代表这是对一个点(Point)进行空间变换 
     dp4 r18.x, cb1[181].xyzw, r14.xyzw 						  -> 对 (-Normal) 的顶点进行空间变换 -> R18 
     dp4 r18.y, cb1[182].xyzw, r14.xyzw 
-    dp4 r18.z, cb1[183].xyzw, r14.xyzw
+    dp4 r18.z, cb1[183].xyzw, r14.xyzw 
 
     mul r14.xyzw, r6.yzzx, r6.xyzz        					-> Normal.yzzx * Normal.xyzz -> 产生一个基于Normal的向量(?) 
     dp4 r19.x, cb1[184].xyzw, r14.xyzw 						  -> 对这个基于Normal的向量顶点进行另一种空间变换 -> R19 
-    dp4 r19.y, cb1[185].xyzw, r14.xyzw
+    dp4 r19.y, cb1[185].xyzw, r14.xyzw 
     dp4 r19.z, cb1[186].xyzw, r14.xyzw 
 
     mul r12.w, r6.y, r6.y
@@ -307,23 +311,23 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     add r14.xyz, r18.xyzx, r19.xyzx 						    -> R18 + R19 
     mad r14.xyz, cb1[187].xyzx, r12.wwww, r14.xyzx 	-> [-0.016, -0.01, -0.003] * (Normal.x^2 - Normal.y^2) + (R18 + R19) -> R14 
     max r14.xyz, r14.xyzx, l(0,0,0,0)						    -> 推测 R14是一个基于 Normal 的随机向量，且指向正半球空间 
-    mul r14.xyz, r14.xyzx, cb1[180].xyzx 	    -> cb1[180]=[4.9, 4.1, 3.1] 是个老朋友,后面会多次出现,推测是'阳光'这类全局控制/缩放因子 
-    mul r18.xyz, r5.xyzx, r5.xyzx 							    -> T11.xyz * T11.xyz 
+    mul r14.xyz, r14.xyzx, cb1[180].xyzx 	          -> cb1[180]=[4.9, 4.1, 3.1] 是个老朋友,后面会多次出现,推测是'阳光'这类全局控制/缩放因子 
+    mul r18.xyz, r5.xyzx, r5.xyzx 							    -> T11.xyz^2 -> 只对人物(还有草叶等)生效的遮罩 
     														                    -> T11纹理的xy通道分别是Flag位和Rough -> 后续作为乘子缩放 R14 
-    mul r14.xyz, r7.wwww, r14.xyzx  		            -> 对 R14 使用环境光遮蔽 AO_final -> 由此推测 R14 是环境光入射光强度(也可以理解为反向AO) 
-    mul r14.xyz, r18.xyzx, r14.xyzx 						    -> 对 R14 应用 来自 T11.xyz^2 的乘子(主要三个通道都 >= 0) 
+    mul r14.xyz, r7.wwww, r14.xyzx  		            -> 对 R14 使用环境光遮蔽 AO_final -> 合成AO  
+    mul r14.xyz, r18.xyzx, r14.xyzx 						    -> 对 R14(合成AO) 应用 来自 T11.xyz^2 遮罩 -> 只对人物(还有草叶等)生效 
   else 
-    mov r14.xyz, l(0,0,0,0)  								        -> 不是 6号材质的话，R14 (环境光入射光强) = 0 
+    mov r14.xyz, l(0,0,0,0)  								        -> 不是 6号渲染通道的话，R14 (合成AO) = 0 
   endif 
 
   or r12.w, r16.z, r16.y 									          -> 2个渲染分支条件满足一个即可，既r12.w用于控制 r16.zy 所对应分支的渲染 
-  mul r16.xyz, r5.xyzx, r5.xyzx 							      -> r5^2: r5 来自 T11 纹理，对除了人物和叶子外的区域，大多是[0,0,0,0] 
-  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx  					-> r5^2 + r15颜色 
+  mul r16.xyz, r5.xyzx, r5.xyzx  
+  mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx  					-> T11.xyz^2 + r15颜色 
   movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx 				-> Condition: 选择 (r5^2 + r15颜色) or r15颜色 
 
   //以下分支计算用于 新的 R15 颜色 
-  if_nz r16.w 												-> r16.w 分支控制 -> 7号材质 
-  	//求 -ViewDirWS? 
+  if_nz r16.w 												              -> r16.w 分支控制 -> 7号材质 
+  	//以下片段代码用于求 -ViewDir -> 既视方向的反方向 -> 从摄像机指向视点的归一化向量  
   	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的 
     mul r18.xyz, r1.yyyy, cb1[49].xyzx						    -> Matrix_Inv_VP 的前 3X3 区域 
     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx			-> 相当于将视空间坐标的 z 分量设置为1 
@@ -332,12 +336,12 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     rsq r1.x, r1.x 
     mul r18.xyz, r1.xxxx, r18.xyzx 							      -> 再归一化 -> 得到 -ViewDirWS -> 疑惑:为何不用 CamWS - PosWS 
 
-    //求 ‘类折射向量’ 
+    //求 ‘视-水平向量’ 
     dp3 r1.x, -r18.xyzx, r6.xyzx 							        -> NdotV 
-    mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx 				-> NdotV * -Normal + ViewDir -> <类折射向量> 
+    mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx 				-> NdotV * -Normal + ViewDir -> <视-水平向量> 
     dp3 r1.y, r19.xyzx, r19.xyzx
     rsq r5.z, r1.y
-    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <类折射向量> 
+    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <视-水平向量> 
 
     //控制粗糙度范围 
     max r5.z, r3.w, l(0.003922) 							        -> max([t9.w=0.69], 0.0039) -> roughness -> 来自rifr纹理的最后一个通道(rough2) 
@@ -368,18 +372,18 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     ge r18.z, r13.w, l(0.000000)
     mad r15.w, -r15.w, r18.x, l(3.141593)
     movc r15.w, r18.z, r18.y, r15.w
-    add r15.w, -r15.w, l(1.570796) 							      -> 角度r15.w -> N与<类折射向量>的夹角 -> 固定 90° 
+    add r15.w, -r15.w, l(1.570796) 							      -> 角度r15.w -> N与<视-水平向量>的夹角 -> 固定 90° 
 
     //ang_NoV - ang_RoN 
-    add r14.w, r14.w, -r15.w 								          -> dif_Angle = N与V的夹角 - N与<-类折射向量>的夹角 
+    add r14.w, r14.w, -r15.w 								          -> dif_Angle = N与V的夹角 - N与<-视-水平向量>的夹角 
     mul r14.w, |r14.w|, l(0.500000)  						      -> 0.5 * |dif_Angle| 
     sincos null, r14.w, r14.w 								        -> cos(0.5 * |dif_Angle|) 
 
     //求这些方向与水平方向的夹角余弦值，并在此基础上调整(cosθ)的取值范围 
     mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 				-> Normal * (-RoN) + RefracDir -> 获得朝向折射方向的 "水平向量" 
-    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <水平向量> dot <类折射向量> 
+    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <水平向量> dot <视-水平向量> 
     dp3 r18.x, r18.xyzx, r18.xyzx 							      -> <水平向量> dot 自己 
-    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <类折射向量>dot自己 * <水平向量>dot自己 + 0.0001 
+    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <视-水平向量>dot自己 * <水平向量>dot自己 + 0.0001 
     rsq r1.y, r1.y 											              -> 1 / sqrt(r1.y) -> 相当于求 |V_hori| * |RefracRaw|的倒数 
     mul r1.y, r1.y, r15.w 									          -> cos(V_hori和Refract的夹角) 
     mad r18.xy, r1.yyyy, l(0.5, 17.0, 0, 0), l(0.5, -16.780001, 0, 0)	-> cosθ*(0.5,17) + (0.5,-16.78) = (0.5cosθ+0.5, 17cosθ-16.78) 
@@ -410,7 +414,7 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
     div r5.z, r5.z, r18.w  					-> exp(-0.5*R5Z^2 / (2*cos_VhoR*(roughness^2+0.2)^2)) / (2sqrt(π)*sqrt(cos_VhoR)*(roughness^2 + 0.2)) 
     mul r1.y, r1.y, r5.z 									            -> r1.y = sqrt(cos_VhroiToRefract_adjust2.x) * (上式) -> 记为 R5Z' 
 
-    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> (ViewDir dot <类折射向量>) * 0.5 + 0.5 
+    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> (ViewDir dot <视-水平向量>) * 0.5 + 0.5 
     sqrt r5.z, r5.z 										              -> sqrt(RoV * 0.5 + 0.5) 
     add r5.z, -r5.z, l(1.000000) 							        -> 1 - sqrt(RoV*0.5+0.5) 
     mul r13.w, r5.z, r5.z  									          -> [1 - sqrt(RoV*0.5+0.5)]^2 
@@ -471,11 +475,11 @@ if_nz r7.x  	-> 大概率能进，除非 [Purple.y修改值] * 255 的后4个bit
 
   //以下似乎用于计算 输出颜色的 Alpha 通道 
   ieq r1.x, r7.x, l(8) 							                  -> [Purple.y修改值] * 255 的后4个bit <-> [8] -> 是否是 8 号材质 
-  mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx 		        -> T11.w * [r5^2] + R15颜色 
-  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	        -> Condition: 如果是8号材质则 选择 {[r5^2] + R15颜色} 不然就是 R15颜色 
+  mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx 		        -> T11.w * [T11.xyz^2] + R15颜色 
+  movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	        -> Condition: 如果是8号材质则 选择 {[T11.xyz^2] + R15颜色} 不然就是 R15颜色 
 
   //以下逻辑与之前处理 6号 材质时雷同 
-  mov r17.w, l(1.000000) 						                  -> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <类折射向量> nvpv 
+  mov r17.w, l(1.000000) 						                  -> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <视-水平向量> nvpv 
   dp4 r15.x, cb1[181].xyzw, r17.xyzw 			            -> 对上述Point执行矩阵变换 -> R15 
   dp4 r15.y, cb1[182].xyzw, r17.xyzw
   dp4 r15.z, cb1[183].xyzw, r17.xyzw
@@ -512,7 +516,7 @@ endif
 ine r1.xy, r7.xxxx, l(0, 7, 0, 0)  				            -> [Purple.y修改值] * 255 的后4个bit <-> [0, 7] 
 and r1.x, r1.y, r1.x 							                    -> 同时满足 -> 不是0号和7号材质渲染方案  
 if_nz r1.x 
-  movc r9.xyz, r7.yyyy, r11.xyzx, r9.xyzx 		        -> 是5或9号材质渲染方案 -> 则使用 R11(环境光底色*方块Mask.y) -> 不然就用R9(环境光底色) 
+  movc r9.xyz, r7.yyyy, r11.xyzx, r9.xyzx 		        -> 是5或9号材质渲染方案 -> 则使用 R11(环境光底色*方块Mask.y) -> 不然就用R9(环境光基础强度df_inten_base) 
   mad r9.xyz, r9.xyzx, cb1[136].wwww, cb1[136].xyzx 	-> R9 * 1 + 0 
   mad r1.x, r5.x, r9.w, l(1.000000)  			            -> 1 + T11.x(菲涅尔等光照效果的开关?) * {[-1, 0]区间,与roughness和NoV有关}
   mul r1.y, r1.x, l(0.080000)  					              -> 0.08 * (1 + T11.x * {[-1, 0]区间,与roughness和NoV有关}) 
@@ -716,7 +720,7 @@ if_nz r1.x
   if_nz r8.z 											                    -> 是否是 4号 材质
     mov r3.y, r3.w 							                      -> 据此知 r3.w=Roughness; r3.x=NdotV -> 这里被当做了出射光方向(毕竟当前pass是用来计算GI的) 
     sample_l_indexable(texture2d)(float,float,float,float) r1.yw, r3.xyxx, t5.zxwy, s4, l(0.000000)  -> 采样 LUT 
-    mul_sat r2.w, r9.y, l(50.000000) 					        -> R9色.Y通道 * 50 -> R9颜色似乎是一种环境光底色 -> df_base 
+    mul_sat r2.w, r9.y, l(50.000000) 					        -> R9色.Y通道 * 50 -> R9颜色似乎是一种环境光基础强度 -> df_inten_base 
     mul r1.w, r1.w, r2.w 								              -> LUT.bias * (50 * R9.y) -> 采样的r1.w = LUT.bias 
     add r2.w, -r5.x, l(1.000000) 						          -> 1 - T11.x -> 控制阀取反 
     mul r1.w, r1.w, r2.w 								              -> [LUT.bias * (50 * R9.y)] * (1 - T11.x) 
@@ -884,10 +888,10 @@ if_nz r1.x
   endif 
 
   min r0.xyz, -r0.xyzx, l(0.000000, 0.000000, 0.000000, 0.000000)	-> 去除 r0 颜色中小于 0 的部分 
-  add o0.xyz, -r0.xyzx, r10.xyzx  									-> 最终输出颜色由: prefilter_Specular_Final + Diffuse 构成 
-  																	-> R10颜色 据此推断为 Diffuse 
+  add o0.xyz, -r0.xyzx, r10.xyzx  									  -> 最终输出颜色由: prefilter_Specular_Final + Diffuse 构成 
+  																	                  -> R10颜色 据此推断为 Diffuse 
 else 
-  mov o0.xyz, r10.xyzx 		-> 对于 0号 或 7号 材质渲染方案来说，直接使用 R10.xyz的颜色(Diffuse) 输出值作为 GI 
+  mov o0.xyz, r10.xyzx 		                            -> 对于 0号 或 7号 材质渲染方案来说，直接使用 R10.xyz的颜色(Diffuse) 输出值作为 GI 
 endif 
 ret 
 // Approximately 0 instruction slots used
