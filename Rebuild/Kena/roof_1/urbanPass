@@ -79,8 +79,9 @@ sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyz
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
 //Decode Depth 
-//R1.z 应该是趋向 Clip.w' 的数值，基本上取值大于 100, 既大于1米 
-//注意: UE4 默认距离单位 = 厘米 
+//原始采样获得的 R1.z 应该是编码后的0-1范围视空间深度，解码后输出R1.Z 推测等于 HClip.w
+//HClip.w 在Unity中等于viewSpace中物体z轴取反，在UE4中直接等于视空间z轴值 
+//注意: UE4 默认距离单位 = 厘米 ，所以解码后的 R1.Z 基本上取值大于 100, 既大于1米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								 -> 0 
 mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								 -> 0.1 * depthRaw 
 div r1.z, l(1,1,1,1), r1.z 			                       -> 1/(0.1*depthRaw) 
@@ -328,7 +329,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
   //以下分支计算用于 新的 R15 颜色 
   if_nz r16.w 												              -> r16.w 分支控制 -> 7号材质 
   	//以下片段代码用于求 -ViewDir -> 既视方向的反方向 -> 从摄像机指向视点的归一化向量  
-  	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的 
+  	//r1.xy 存放了 [-1, +1] * Clip.w -> 没有乘具体Depth -> 全屏Blit使用的三角形片所处的深度切片，xy分量在那个深度上是正确的
     mul r18.xyz, r1.yyyy, cb1[49].xyzx						    -> Matrix_Inv_VP 的前 3X3 区域 
     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx			-> 相当于将视空间坐标的 z 分量设置为1 
     add r18.xyz, r18.xyzx, cb1[50].xyzx    				 	  -> 然后以行向量形式 左乘 逆矩阵中控制旋转和缩放的部分 
@@ -336,21 +337,21 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     rsq r1.x, r1.x 
     mul r18.xyz, r1.xxxx, r18.xyzx 							      -> 再归一化 -> 得到 -ViewDirWS -> 疑惑:为何不用 CamWS - PosWS 
 
-    //求 ‘视-水平向量’ 
-    dp3 r1.x, -r18.xyzx, r6.xyzx 							        -> NdotV 
-    mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx 				-> NdotV * -Normal + ViewDir -> <视-水平向量> 
+    //求 ‘视-切向量’ 
+    dp3 r1.x, -r18.xyzx, r6.xyzx 							        -> NdotV -> 注意，这是没有saturate的NoV 
+    mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx 				-> NdotV * -Normal + ViewDir -> <视-切向量> -> viewTangentRaw 
     dp3 r1.y, r19.xyzx, r19.xyzx
     rsq r5.z, r1.y
-    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <视-水平向量> 
+    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <视-切向量> -> viewTangent 
 
     //控制粗糙度范围 
     max r5.z, r3.w, l(0.003922) 							        -> max([t9.w=0.69], 0.0039) -> roughness -> 来自rifr纹理的最后一个通道(rough2) 
     min r5.z, r5.z, l(1.000000) 							        -> min(0.69, 1.0) -> 粗糙度控制在[0,1]内 
 
-	  //RdotV -> 视线趋向掠射角和垂直时都得0 
+	  //TdotV -> 视线趋向掠射角和垂直时都得0 
     dp3 r12.w, -r18.xyzx, r17.xyzx 	 
 
-    //RdotN -> 掠射视角时得-1，垂直平面时得0 
+    //TdotN -> 掠射视角时得-1，垂直平面时得0 
     dp3 r13.w, r6.xyzx, r17.xyzx 							 
 
     //以下代码为: fast_acos(float v) -> 搜索关键数值'-0.156583'可得相关资料 
@@ -372,18 +373,18 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     ge r18.z, r13.w, l(0.000000)
     mad r15.w, -r15.w, r18.x, l(3.141593)
     movc r15.w, r18.z, r18.y, r15.w
-    add r15.w, -r15.w, l(1.570796) 							      -> 角度r15.w -> N与<视-水平向量>的夹角 -> 固定 90° 
+    add r15.w, -r15.w, l(1.570796) 							      -> 角度r15.w -> N与<视-切向量>的夹角 -> 返回值恒为 π/2 
 
-    //ang_NoV - ang_RoN 
-    add r14.w, r14.w, -r15.w 								          -> dif_Angle = N与V的夹角 - N与<-视-水平向量>的夹角 
+    //ang_NoV - ang_ToN 
+    add r14.w, r14.w, -r15.w 								          -> dif_Angle = N与V的夹角 - N与<视-切向量>的夹角 
     mul r14.w, |r14.w|, l(0.500000)  						      -> 0.5 * |dif_Angle| 
-    sincos null, r14.w, r14.w 								        -> cos(0.5 * |dif_Angle|) 
+    sincos null, r14.w, r14.w 								        -> cos(0.5 * |ang_NoV - ang_ToN|) 
 
     //求这些方向与水平方向的夹角余弦值，并在此基础上调整(cosθ)的取值范围 
     mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 				-> Normal * (-RoN) + RefracDir -> 获得朝向折射方向的 "水平向量" 
-    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <水平向量> dot <视-水平向量> 
+    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <水平向量> dot <视-切向量> 
     dp3 r18.x, r18.xyzx, r18.xyzx 							      -> <水平向量> dot 自己 
-    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <视-水平向量>dot自己 * <水平向量>dot自己 + 0.0001 
+    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <视-切向量>dot自己 * <水平向量>dot自己 + 0.0001 
     rsq r1.y, r1.y 											              -> 1 / sqrt(r1.y) -> 相当于求 |V_hori| * |RefracRaw|的倒数 
     mul r1.y, r1.y, r15.w 									          -> cos(V_hori和Refract的夹角) 
     mad r18.xy, r1.yyyy, l(0.5, 17.0, 0, 0), l(0.5, -16.780001, 0, 0)	-> cosθ*(0.5,17) + (0.5,-16.78) = (0.5cosθ+0.5, 17cosθ-16.78) 
@@ -414,7 +415,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     div r5.z, r5.z, r18.w  					-> exp(-0.5*R5Z^2 / (2*cos_VhoR*(roughness^2+0.2)^2)) / (2sqrt(π)*sqrt(cos_VhoR)*(roughness^2 + 0.2)) 
     mul r1.y, r1.y, r5.z 									            -> r1.y = sqrt(cos_VhroiToRefract_adjust2.x) * (上式) -> 记为 R5Z' 
 
-    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> (ViewDir dot <视-水平向量>) * 0.5 + 0.5 
+    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> (ViewDir dot <视-切向量>) * 0.5 + 0.5 
     sqrt r5.z, r5.z 										              -> sqrt(RoV * 0.5 + 0.5) 
     add r5.z, -r5.z, l(1.000000) 							        -> 1 - sqrt(RoV*0.5+0.5) 
     mul r13.w, r5.z, r5.z  									          -> [1 - sqrt(RoV*0.5+0.5)]^2 
@@ -479,7 +480,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
   movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx 	        -> Condition: 如果是8号材质则 选择 {[T11.xyz^2] + R15颜色} 不然就是 R15颜色 
 
   //以下逻辑与之前处理 6号 材质时雷同 
-  mov r17.w, l(1.000000) 						                  -> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <视-水平向量> nvpv 
+  mov r17.w, l(1.000000) 						                  -> R17.xyz 是关于法线的一种扰动向量，在某些情况下等于 <视-切向量> nvpv 
   dp4 r15.x, cb1[181].xyzw, r17.xyzw 			            -> 对上述Point执行矩阵变换 -> R15 
   dp4 r15.y, cb1[182].xyzw, r17.xyzw
   dp4 r15.z, cb1[183].xyzw, r17.xyzw
