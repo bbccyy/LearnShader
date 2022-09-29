@@ -342,7 +342,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx 				-> NdotV * -Normal + ViewDir -> <视-切向量> -> viewTangentRaw 
     dp3 r1.y, r19.xyzx, r19.xyzx
     rsq r5.z, r1.y
-    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <视-切向量> -> viewTangent 
+    mul r17.xyz, r5.zzzz, r19.xyzx 							      -> 归一化 <视-切向量> -> viewTangent //此处顺便覆写了 r17.xyz -> bias_N -> 后续会用到 
 
     //控制粗糙度范围 
     max r5.z, r3.w, l(0.003922) 							        -> max([t9.w=0.69], 0.0039) -> roughness -> 来自rifr纹理的最后一个通道(rough2) 
@@ -381,72 +381,75 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     sincos null, r14.w, r14.w 								        -> cos(0.5 * |ang_NoV - ang_ToN|) 
 
     //求这些方向与水平方向的夹角余弦值，并在此基础上调整(cosθ)的取值范围 
-    mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 				-> Normal * (-RoN) + RefracDir -> 获得朝向折射方向的 "水平向量" 
-    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <水平向量> dot <视-切向量> 
-    dp3 r18.x, r18.xyzx, r18.xyzx 							      -> <水平向量> dot 自己 
-    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <视-切向量>dot自己 * <水平向量>dot自己 + 0.0001 
-    rsq r1.y, r1.y 											              -> 1 / sqrt(r1.y) -> 相当于求 |V_hori| * |RefracRaw|的倒数 
-    mul r1.y, r1.y, r15.w 									          -> cos(V_hori和Refract的夹角) 
-    mad r18.xy, r1.yyyy, l(0.5, 17.0, 0, 0), l(0.5, -16.780001, 0, 0)	-> cosθ*(0.5,17) + (0.5,-16.78) = (0.5cosθ+0.5, 17cosθ-16.78) 
-    mov_sat r18.x, r18.x                              -> 如上操作可以看做是对cosθ的两种不同range调整 
-    sqrt r1.y, r18.x 										              -> 这里对其中一个维度进行处理 -> sqrt(cos_VhroiToRefract*0.5+0.5) -> 简称为 sqrt(cos_VhoR) 
+    mad r18.xyz, -r13.wwww, r6.xyzx, r17.xyzx 				-> Normal * (-ToN) + viewTangent -> 还是 viewTangent -> 记为 dir_A
+    dp3 r15.w, r18.xyzx, r19.xyzx 							      -> <viewTangentRaw> dot <dir_A> -> 相当于求viewTangentRaw的模长 
+    dp3 r18.x, r18.xyzx, r18.xyzx 							      -> <dir_A> dot <dir_A> 
+    mad r1.y, r18.x, r1.y, l(0.000100) 						    -> <dir_A>dot自己 * <viewTangentRaw>dot自己 + 0.0001 
+    rsq r1.y, r1.y 											              -> 1 / sqrt(r1.y) 
+    mul r1.y, r1.y, r15.w 									          -> <viewTangentRaw> dot <dir_A> / sqrt(r1.y) -> 相当于求 dir_A和viewTangentRaw夹角的余弦值 = 1 -> cos_AtoT 
+    mad r18.xy, r1.yyyy, l(0.5, 17.0, 0, 0), l(0.5, -16.780001, 0, 0)	-> cosθ*(0.5,17) + (0.5,-16.78) = (0.5cosθ+0.5, 17cosθ-16.78) -> cos_AtoT_ST
+    mov_sat r18.x, r18.x                              -> sat(cos_AtoT_ST.x)
+    sqrt r1.y, r18.x 										              -> 这里对其中一个维度进行处理 -> sqrt(cos_AtoT*0.5+0.5) -> 简称为 sqrt_cosAtoTst -> 值恒为1 
 
     mul r15.w, r5.z, r5.z 									          -> roughness^2 = 0.69^2 = 0.476 
-    mad r5.z, r5.z, r5.z, l(0.200000) 						    -> roughness^2 + 0.2 = 0.676 
-    mad r15.w, r15.w, l(2.000000), l(0.200000)				-> 2*roughness^2+0.2 = 1.152 
+    mad r5.z, r5.z, r5.z, l(0.200000) 						    -> roughness^2 + 0.2 = 0.676 -> rough_factor_1
+    mad r15.w, r15.w, l(2.000000), l(0.200000)				-> 2*roughness^2+0.2 = 1.152 -> rough_factor_2
 
     mad r18.z, -r1.x, r1.x, l(1.000000) 					    -> 1 - NdotV * NdotV = 1 - cosθ^2 = sinθ^2 
     sqrt r18.z, r18.z 										            -> sinθ -> θ:N与V夹角 
-    mul r18.xw, r1.yyyx, l(0.997551, 0, 0, -0.069943) -> [0.997551, -0.069943] * (sqrt(cos_VhroiToRefract), NdotV) 
-    mad r18.x, r18.x, r18.z, r18.w 							      -> r18.x = 0.997*sqrt(cos_VhroiToRefract)*sinθ - 0.069943*cosθ -> twist 
-                                                      -> twist是数值cos_VhoR基于θ对偏移后的结果 
-    mul r5.z, r1.y, r5.z 									            -> (roughness^2 + 0.2) * sqrt(cos_VhroiToRefract) 
-    mul r18.zw, r5.zzzz, l(0, 0, 1.414214, 3.544908)  -> r18.zw = sqrt(cos_VhoR)*(roughness^2 + 0.2) * [1.414214, 3.544908] 
+    mul r18.xw, r1.yyyx, l(0.997551, 0, 0, -0.069943) -> [0.997551, -0.069943] * (sqrt(cos_AtoT_ST.x), NdotV) 
+    mad r18.x, r18.x, r18.z, r18.w 							      -> 0.997 * sqrt(cos_AtoT_ST.x) * sin_NaV - 0.069943*cosNaV -> sin_NaV_ST 
 
-    add r1.x, r1.x, r13.w 									          -> NdotV + RoN 
-    mad r5.z, -r18.x, l(-0.139886), r1.x 					    -> (NdotV + RoN)-(-0.139886)*twist -> 记为 R5Z , 其中θ为N和V夹角 
-    mul r5.z, r5.z, r5.z 									            -> R5Z^2 
-    mul r5.z, r5.z, l(-0.500000) 							        -> -R5Z^2 / 2 
+    mul r5.z, r1.y, r5.z 									            -> rough_factor_1 * sqrt(cos_AtoT_ST.x) 
+    mul r18.zw, r5.zzzz, l(0, 0, 1.414214, 3.544908)  -> rough_factor_1 * sqrt(cos_AtoT_ST.x) * [1.414214, 3.544908] -> (sqrt(2), 2*sqrt(π))   
 
-    mul r13.w, r18.z, r18.z 								          -> 2*cos_VhoR*(roughness^2+0.2)^2 
-    div r5.z, r5.z, r13.w 									          -> -0.5*R5Z^2 / (2*cos_VhoR*(roughness^2+0.2)^2) 
+    add r1.x, r1.x, r13.w 									          -> NdotV + ToN 
+    mad r5.z, -r18.x, l(-0.139886), r1.x 					    -> (NdotV + ToN)-(-0.139886) * sin_NaV_ST 
+    mul r5.z, r5.z, r5.z  
+    mul r5.z, r5.z, l(-0.500000) 							        -> -0.5 * pow2((NoV + ToN) + 0.139886 * sin_NaV_ST)
+
+    mul r13.w, r18.z, r18.z 								          -> 2 * cosAtoTst * (rough_factor_1)^2 
+    div r5.z, r5.z, r13.w 									          -> -0.5 * pow2((NoV + ToN) + 0.139886 * sin_NaV_ST) / (2 * cosAtoTst * (rough_factor_1)^2) 
     mul r5.z, r5.z, l(1.442695) 							        -> 1.442695 * (上式) -> 主要用于将下面的exp2转化为expE 
-    exp r5.z, r5.z 											              -> exp(-0.5*R5Z^2 / (2*cos_VhoR*(roughness^2+0.2)^2))
-    div r5.z, r5.z, r18.w  					-> exp(-0.5*R5Z^2 / (2*cos_VhoR*(roughness^2+0.2)^2)) / (2sqrt(π)*sqrt(cos_VhoR)*(roughness^2 + 0.2)) 
-    mul r1.y, r1.y, r5.z 									            -> r1.y = sqrt(cos_VhroiToRefract_adjust2.x) * (上式) -> 记为 R5Z' 
+    exp r5.z, r5.z 											              -> exp( -0.5 * pow2((NoV + ToN) + 0.139886 * sin_NaV_ST) / (2 * cosAtoTst * (rough_factor_1)^2) ) 
+    div r5.z, r5.z, r18.w  					                  -> exp( ... ) / (2sqrt(π)*sqrt_cosAtoTst*(rough_factor_1))  
+    mul r1.y, r1.y, r5.z 									            -> sqrt_cosAtoTst * exp( ... ) / (2sqrt(π)*sqrt_cosAtoTst*(rough_factor_1))  -> sqrt_cosAtoTst似乎可以约去 
 
-    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> (ViewDir dot <视-切向量>) * 0.5 + 0.5 
-    sqrt r5.z, r5.z 										              -> sqrt(RoV * 0.5 + 0.5) 
-    add r5.z, -r5.z, l(1.000000) 							        -> 1 - sqrt(RoV*0.5+0.5) 
-    mul r13.w, r5.z, r5.z  									          -> [1 - sqrt(RoV*0.5+0.5)]^2 
-    mul r13.w, r13.w, r13.w 								          -> [1 - sqrt(RoV*0.5+0.5)]^4 
-    mul r5.z, r5.z, r13.w 									          -> [1 - sqrt(RoV*0.5+0.5)]^5 
-    mad r5.z, r5.z, l(0.953479), l(0.046521) 				  -> 0.953479 * [1 - sqrt(RoV*0.5+0.5)]^5 + 0.046521 
-    mul r1.y, r1.y, r5.z 									            -> R5Z'/3.544908*1*(roughness^2+0.2) * [a*(1-sqrt(.))^5+b] 
-    mul r1.y, r10.w, r1.y 									          -> [0.2 or 0] * 上面r1.y -> R1Y 
+    mad_sat r5.z, r12.w, l(0.500000), l(0.500000) 		-> ToV * 0.5 + 0.5 
+    sqrt r5.z, r5.z 										              -> sqrt(ToV * 0.5 + 0.5) 
+    add r5.z, -r5.z, l(1.000000) 							        -> 1 - sqrt(ToV*0.5+0.5) 
+    mul r13.w, r5.z, r5.z  									          -> [1 - sqrt(ToV*0.5+0.5)]^2 
+    mul r13.w, r13.w, r13.w 								          -> [1 - sqrt(ToV*0.5+0.5)]^4 
+    mul r5.z, r5.z, r13.w 									          -> [1 - sqrt(ToV*0.5+0.5)]^5 
+    mad r5.z, r5.z, l(0.953479), l(0.046521) 				  -> 0.953479 * [1 - sqrt(ToV*0.5+0.5)]^5 + 0.046521 
+                                                      -> r5.z 计算过程中的 pow5 会导致返回值非常接近0，如果使用pow2则能保留俯视角度的高亮感 
+    mul r1.y, r1.y, r5.z 									            -> 上面的r5.z表达式返回值 * 更上面的r1.y表达式返回值 -> 记为 dark_fresnel_intensity 
+    mul r1.y, r10.w, r1.y 									          -> dark_fresnel_intensity * R10.w(gi_intensity_from_tex_rifr_i) -> gi_fresnel_dark_intensity 
 
-    mov_sat r12.w, -r12.w 									          -> saturate(-RoV) 
-    add r5.z, -r12.w, l(1.000000) 							      -> 1 - saturate(-RoV) 
+    mov_sat r12.w, -r12.w 									          -> saturate(-ToV) 
+    add r5.z, -r12.w, l(1.000000) 							      -> 1 - saturate(-ToV) 
 
-    add r1.x, r1.x, l(-0.140000) 							        -> NdotV - 0.14 
-    mul r1.x, r1.x, r1.x 									            -> (NdotV - 0.14)^2 
-    mul r1.xy, r1.xyxx, l(-0.500000, 0.500000, 0, 0) 	-> [-0.5*(NdotV - 0.14)^2,  0.5*R1Y] 
-    mul r10.w, r15.w, r15.w 								          -> (2*roughness^2+0.2)^2 
-    div r1.x, r1.x, r10.w 									          -> -0.5*(NdotV - 0.14)^2 / (2*roughness^2+0.2)^2 
+    add r1.x, r1.x, l(-0.140000) 							        -> (NdotV + ToN) - 0.14 
+    mul r1.x, r1.x, r1.x 									            -> (NdotV + ToN - 0.14)^2 
+    mul r1.xy, r1.xyxx, l(-0.500000, 0.500000, 0, 0) 	-> [-0.5*(NdotV + ToN - 0.14)^2,  0.5*gi_fresnel_dark_intensity] 
+    mul r10.w, r15.w, r15.w 								          -> (rough_factor_2)^2 
+    div r1.x, r1.x, r10.w 									          -> -0.5*(NdotV + ToN - 0.14)^2 / (rough_factor_2)^2 
     mul r1.x, r1.x, l(1.442695) 
-    exp r1.x, r1.x 											              -> exp(-0.5*(NdotV - 0.14)^2 / (2*roughness^2+0.2)^2) 
-    mul r10.w, r15.w, l(2.506628) 							      -> (2*roughness^2+0.2)*sqrt(2π) 
-    div r1.x, r1.x, r10.w 			                      -> exp(-0.5*(NdotV-0.14)^2/(2*roughness^2+0.2)^2) / (2*roughness^2+0.2)*sqrt(2π) 
+    exp r1.x, r1.x 											              -> exp(-0.5*(NdotV + ToN - 0.14)^2 / (rough_factor_2)^2) 
+    mul r10.w, r15.w, l(2.506628) 							      -> (rough_factor_2)*sqrt(2π) 
+    div r1.x, r1.x, r10.w 			                      -> exp(-0.5*(NdotV + ToN-0.14)^2/(rough_factor_2)^2) / [(rough_factor_2)*sqrt(2π)] 
+                                                      -> 定义为 bright_fresnel_intensity 
     
-    mad r10.w, -r14.w, l(0.500000), l(1.000000) 			-> 1 - 0.5 * cos(0.5 * |dif_Angle|) 
-    mul r12.w, r10.w, r10.w 								          -> (1-cos(|dif_Angle|/2)/2)^2 
-    mul r12.w, r12.w, r12.w 								          -> (1-cos(|dif_Angle|/2)/2)^4
-    mul r10.w, r10.w, r12.w 								          -> (1-cos(|dif_Angle|/2)/2)^5
-    mad r10.w, r10.w, l(0.953479), l(0.046521) 				-> 0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521 	-> 	R10W
-    add r12.w, -r10.w, l(1.000000) 							      -> 1 - [0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521]
-    mul r12.w, r12.w, r12.w 								          -> {1-[0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521]}^2 
-    mul r10.w, r10.w, r12.w 								          -> {1-[0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521]}^2 * R10W 
+    mad r10.w, -r14.w, l(0.500000), l(1.000000) 			-> 1 - 0.5 * cos_half_angle_TtoV 
+    mul r12.w, r10.w, r10.w 								          -> (1-cos(TaV/2)/2)^2 
+    mul r12.w, r12.w, r12.w 								          -> (1-cos(TaV/2)/2)^4
+    mul r10.w, r10.w, r12.w 								          -> (1-cos(TaV/2)/2)^5
+    mad r10.w, r10.w, l(0.953479), l(0.046521) 				-> 0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521 -> R10W
 
+    add r12.w, -r10.w, l(1.000000) 							      -> 1 - R10W
+    mul r12.w, r12.w, r12.w 								          -> (1 - R10W)^2 
+    mul r10.w, r10.w, r12.w 								          -> (1 - R10W)^2 * R10W  ->  定义为 lambert_intensity
+    
     div r12.w, l(0.800000), r14.w 							      -> 0.8 / cos(0.5 * |dif_Angle|) 
     log r18.xzw, r10.xxyz 									          -> ln(R10颜色) 
     mul r18.xzw, r12.wwww, r18.xxzw 						      -> [0.8 / cos(|dif_Angle|/2)] * ln(R10颜色) 
@@ -457,16 +460,16 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     mul r1.x, r1.x, r12.w         -> exp(0.219) * exp(-0.5*(NdotV-0.14)^2/(2*roughness^2+0.2)^2) / (2*roughness^2+0.2)*2*sqrt(π) -> R1X
     mul r1.x, r10.w, r1.x 				                    -> R1X * {1-[0.953479*(1-cos(|dif_Angle|/2)/2)^5 + 0.046521]}^2 * R10W -> R1X'
     mul r18.xyz, r18.xzwx, r1.xxxx 							      -> exp2([0.8 / cos(|dif_Angle|/2)] * ln(R10颜色)) * R1X' 
-    mad r18.xyz, r1.yyyy, r5.zzzz, r18.xyzx  				  -> 0.5*R1Y * [1-saturate(-RoV)] + 上面r18.xyz  -> R18 
+    mad r18.xyz, r1.yyyy, r5.zzzz, r18.xyzx  				  -> 0.5*R1Y * [1-saturate(-ToV)] + 上面r18.xyz  -> R18 
 
     dp3 r1.x, r17.xyzx, r17.xyzx 							        -> dot(RefracDir, RefracDir)
     add r1.x, r1.x, l(1.000000)								        -> 1 + dot(RefracDir, RefracDir)
     mul r1.x, r1.x, l(0.250000) 							        -> 0.25 * [1 + dot(RefracDir, RefracDir)]
     min r1.x, r1.x, l(1.000000) 							        -> min(0.25 * [1 + dot(RefracDir, RefracDir)], 1) -> 不大于1 -> _R1X 
-    add r1.y, -r1.x, r16.w 									          -> (1 - |RoN|) - _R1X 
-    mad r1.x, r1.y, l(0.330000), r1.x 						    -> lerp(_R1X, 1-|RoN|, 0.33) 
-    mul r1.x, r1.x, r6.w 									            -> [0 or Purple.y] * lerp( _R1X, (1 - |RoN|), 0.33 ) 
-    mul r1.x, r1.x, l(0.318310) 							        -> 0.31831 * [0 or Purple.y] * lerp( _R1X, (1 - |RoN|), 0.33 ) 
+    add r1.y, -r1.x, r16.w 									          -> (1 - |ToN|) - _R1X 
+    mad r1.x, r1.y, l(0.330000), r1.x 						    -> lerp(_R1X, 1-|ToN|, 0.33) 
+    mul r1.x, r1.x, r6.w 									            -> [0 or Purple.y] * lerp( _R1X, (1 - |ToN|), 0.33 ) 
+    mul r1.x, r1.x, l(0.318310) 							        -> 0.31831 * [0 or Purple.y] * lerp( _R1X, (1 - |ToN|), 0.33 ) 
     
     sqrt r10.xyz, r10.xyzx  								          -> sqrt(R10颜色) 
     mad r10.xyz, r10.xyzx, r1.xxxx, r18.xyzx          -> R18颜色 + sqrt(R10颜色) * {0.31831*[0 or Purple.y]*lerp(_R1X,1-|dot(n,nvpv)|,0.33)} 
