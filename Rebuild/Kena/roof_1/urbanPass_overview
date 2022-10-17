@@ -1,4 +1,110 @@
 
+half4 frag (v2f IN) : SV_Target
+{
+    //数据准备阶段
+    //（一）涉及深度和法线采样，世界空间坐标重建，计算视方向，采样漫反射纹理等常规操作
+    //（二）从特定纹理的通道中解码控制位“Flag”，参与不同"材质"的独特处理 
+    //（三）4次采样半分辨率的法线+深度贴图，获得当前像素周围16领域中每4个像素的平均法线和深度，通过矩阵运算加总后获得法线 d_norm -> 平滑后的法线 
+    //（四）基于NdotV和Frenel调整出最初的 GI_Diffuse 
+ 
+ 	// Part_1：计算 GI_Diffuse 
+    if(Flag 在 #1 ~ #15 之中) //既除了#0号外
+    {
+        //基于d_norm与normal之间的点积，计算AO_1
+        //基于d_norm的模长，计算AO_2
+        //基于采样SSAO贴图获得AO_3
+        //基于采样艺术家绘制的纹理，获得AO_4
+        //通过调配上述AO的比例获得 AO_Final
+
+        //通过将d_norm朝向norm做lerp，获取bias_norm 
+        //基于bias_norm，常量变换矩阵以及常量系数(推测是直接光源的颜色和强度)，计算出 AO_Scale
+
+        //分支
+        if(Flag == #7)
+        {
+        	//基于折射角和视方向点积的结果，经过复杂的运算覆写了 GI_Diffuse 
+        	//此时 GI_Diffuse 中已经包含了类似 GI_Spec 的成分 
+        }
+
+        //最终通过合并 AO_Final，AO_Scale和GI_Diffuse 获得完整的全局光漫反射 
+        GI_Diffuse *= AO_Final * AO_Scale
+    }
+
+    // Part_2： 计算 GI_Specular 
+    if(Flag 在 #1 ~ #6 以及 #8 ~ #15之中) //既排除了#0和#7
+    {
+
+    	//计算视方向的反射方向： VR
+    	//计算VR到norm中间的一个向量：VR_Lift，由物体材质粗糙控制幅度，既材质越粗糙，VR_Lift越接近norm 
+    	//采样纹理获得 Spec_add：这是对环境光高光的额外附加量，例如金属扣环，法杖宝珠上会有数值 
+
+    	Func{//基于IBL和SkyBox的环境光高光重建函数 
+    		
+    		//基于ao，NdotV，粗糙度以及作为缩放因子的Spec_add.w，计算获得高光强度：spec_intensity 
+    		//基于一些不重要的规则，计算获取环境光贴图阵列的索引序列 idx_table，知道如何获取到正确的IBL纹理 
+    		//基于 d_norm 的模长，计算光滑度 smoothness 
+    		//基于 1-smoothness 和颜色常量，计算环境光高光底色 gi_spec_base
+    		//基于粗糙度计算出 IBL 采样的 Lod 等级 
+
+    		for(uint i = 0; i < idx_table.size && spec_intensity > 0.001; i++)
+    		{
+    			//从CBO中获取当前探针probe的位置和作用半径等参数
+    			if(当前像素到探针的距离小于探针的作用半径)
+    			{
+    				//基于 VR_Lift 和 像素到探针的方向矢量，求解 sampling_vector 
+    				//基于像素到探针的距离，求出距离缩放因子： d_rate_factor
+    				//使用 sampling_vector 采样IBL，获得返回值 ibl_raw
+    				ibl_spec_output += ibl_raw.rgb * d_rate_factor * spec_intensity * smoothness  //更新环境光高光输出 
+    				spec_intensity *= 1 - d_rate_factor * ibl_raw.a  //更新 spec_intensity，刷新循环的退出条件 
+    			}
+
+    		}
+
+    		//直接使用 VR_Lift 采样 SkyBox，返回：sky_raw
+    		gi_spec_base += sky_raw * 阳光的常量颜色 * smoothness //更新环境光高光底色，引入天空盒的颜色 
+    	}
+    	
+    	//整合数据，获取环境光BRDF公式中，入射光线的积分值，既Lc值 
+    	prefilter_Specular = (ibl_spec_output + gi_spec_base * spec_intensity) * 某个常量缩放因子 + spec_add 
+
+    	//使用NdotV和纹理T9中记录的粗糙度作为UV，采样IBL_LUT预计算纹理，获得<scale1, bias1>
+    	//基于<scale1, bias1>和之前求得的Lc(prefilter_Specular)，计算求得环境光高光最终值：gi_spec_final_1 
+
+    	if(Flag == #4)  //推测为环境光中的第二高光波瓣 
+    	{
+    		//使用NdotV和纹理T11中记录的粗糙度作为UV，采样IBL_LUT预计算纹理，获得<scale2, bias2>
+    		//基于常数0.04(替代Lc之用)，<scale2, bias2>，正常求解出 gi_spec_final_2
+    		//通过对gi_spec_final_1和gi_spec_final_2插值更新 gi_spec_final_2
+
+    		Func{ 
+    			//该函数仍然用于基于IBL和SkyBox的环境光高光重建
+    			//但是有以下几点变换
+    			//（一）计算spec_intensity的缩放因子从Spec_add.w替换成了gi_spec_final_2
+    			//（二）计算sampling_vector中用到的VR_Lift被替换成了VR(既纯粹的视方向反射向量) 
+    		}
+
+    		//利用第二套采样和计算的结果，更新 gi_spec_final_2
+    		gi_spec_final_1 += gi_spec_final_2  //融合第一套采样和计算的结果 
+    	}
+    }
+
+    // Part_3： 合并 GI_Diffuse 和 GI_Specular
+    output =  GI_Diffuse + gi_spec_final_1
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Block_PreProcessing
 {
 	Sample Tex
