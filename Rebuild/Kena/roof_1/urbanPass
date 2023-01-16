@@ -116,6 +116,8 @@ mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx  		-> BaseCol.rgb - T9.y *
 mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy   		        -> lerp(base_intensity.xxx, BaseColor.xyz, factor_RoughOrZero) 
 												                            -> df_inten_base 颜色 似乎是环境光基础强度分布 
                                                     -> 推测T9.x(所代表的粗糙度rough1) -> 用于计算GI_Diffuse部分中的基础辐射强度(待考) 
+                                                    ->lerp(kDieletricSpec.rgb, BaseColor.rgb, metallic) //@宁鑫的建议 
+
 
 or r7.y, r8.x, r8.y 							                  -> Condition: 比 r8 单个通道几率更高 -> 是 9号 或 5号 材质渲染方案的话 
 lt r7.z, l(0.000000), cb1[155].x 				            -> 0 < cb1[155].x ? 
