@@ -1,5 +1,4 @@
 
-
 ps_5_0
       dcl_globalFlags refactoringAllowed
       dcl_constantbuffer cb0[220], immediateIndexed
@@ -14,19 +13,21 @@ ps_5_0
       dcl_sampler s6, mode_default
       dcl_sampler s7, mode_default
 
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
-      dcl_resource_texture2d (float,float,float,float) t5
-      dcl_resource_texture2d (float,float,float,float) t6
-      dcl_resource_texture2d (float,float,float,float) t7
-      dcl_resource_texture2d (float,float,float,float) t8
+      dcl_resource_texture2d (float,float,float,float) t0         SSS         R8G8B8A8_SRGB
+      dcl_resource_texture2d (float,float,float,float) t1         Depth       Depth[32] Stencil[8]
+      dcl_resource_texture2d (float,float,float,float) t2         Normal      Normal[R10G10B10] Mask?[A2]
+      dcl_resource_texture2d (float,float,float,float) t3         Comp        Metallic[R8] DieletricSpec[G8] Rough[B8] Flag[A8]
+      dcl_resource_texture2d (float,float,float,float) t4         Albedo      BaseCol[R8G8B8]   AO[A8]
+      dcl_resource_texture2d (float,float,float,float) t5         Comp        Extra_Albedo[R8G8B8]    Spec_Intensity[A8] 
+                                                                              [Note1] 对植被，人物衣着等增补额外的Albedo基础色
+                                                                              [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
+      dcl_resource_texture2d (float,float,float,float) t6         SSAO        AO_Intensity[R8]
+      dcl_resource_texture2d (float,float,float,float) t7         UnknowTex   R8G8B8A8 
+      dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16          
 
       dcl_input_ps linear v0.xy
       dcl_input_ps linear v1.xyz
-      dcl_input_ps_siv linear noperspective v2.xy, position
+      dcl_input_ps_siv linear noperspective v2.xy, position       -> Vertex Input Position 
       dcl_output o0.xyzw
       dcl_temps 18
 
