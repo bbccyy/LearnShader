@@ -1,24 +1,25 @@
 Shader hash b7b0a618-dadf8324-286dd04b-da44a5ff
 
-vs_5_0
-      dcl_globalFlags refactoringAllowed
+vs_5_0                                                -> vertex shader, shader model 5
+      dcl_globalFlags refactoringAllowed              -> 全局标记，允许重排数学运算进行优化 
       dcl_constantbuffer cb0[55], immediateIndexed
       dcl_constantbuffer cb1[3], immediateIndexed
-      dcl_input v0.xy
-      dcl_input v1.xy
-      dcl_output o0.xy
-      dcl_output o1.xyz
-      dcl_output_siv o2.xyzw, position
+      dcl_input v0.xy                                 -> 输入POSITION: Object space vertex pos 
+      dcl_input v1.xy                                 -> 输入Texcoord0: uv 
+      dcl_output o0.xy                                -> 输出Texcoord0: uv (DX12 原点在左上角) 
+      dcl_output o1.xyz                               -> 输出Texcoord1: ? 
+      dcl_output_siv o2.xyzw, position                -> 输出SV_POSITION: HClip空间下的<x,y,0,1> 
       dcl_temps 2
-   0: mad r0.xy, v1.xyxx, cb1[1].xyxx, cb1[1].zwzz
-   1: mul o0.xy, r0.xyxx, cb1[2].zwzz
-   2: mad r0.xy, v0.xyxx, cb1[0].xyxx, cb1[0].zwzz
-   3: mul r0.xy, r0.xyxx, cb1[2].xyxx
-   4: mad r0.xy, r0.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
-   5: mul r0.xy, r0.xyxx, l(1.0000, -1.0000, 0.0000, 0.0000)
-   6: mul r1.xyz, r0.yyyy, cb0[53].xyzx
-   7: mad r1.xyz, r0.xxxx, cb0[52].xyzx, r1.xyzx
-   8: mov o2.xy, r0.xyxx
-   9: add o1.xyz, r1.xyzx, cb0[54].xyzx
-  10: mov o2.zw, l(0.0000, 0.0000, 0.0000, 1.0000)
+   0: mad r0.xy, v1.xyxx, cb1[1].xyxx, cb1[1].zwzz    -> r0 = input.uv * screenPixel.xy + offset(0)
+   1: mul o0.xy, r0.xyxx, cb1[2].zwzz                 -> o0.xy = r0 / screenPixel.xy = input.uv
+   2: mad r0.xy, v0.xyxx, cb1[0].xyxx, cb1[0].zwzz    -> apply scale(screenPixel.xy) and offset(0)
+   3: mul r0.xy, r0.xyxx, cb1[2].xyxx                 -> eventually r0.xy = v0.xy = PosObj.xy
+   4: mad r0.xy, r0.xyxx, l(2,2,0,0), l(-1,-1,0,0)    -> pos.xy * 2 - 1
+   5: mul r0.xy, r0.xyxx, l(1, -1, 0, 0)              -> y轴方向上下颠倒 
+   6: mul r1.xyz, r0.yyyy, cb0[53].xyzx               -> M.2ndCol * pos.y
+   7: mad r1.xyz, r0.xxxx, cb0[52].xyzx, r1.xyzx      -> r1.xyz = M.2ndCol * pos.yyy + M.1stCol * pos.xxx
+   8: mov o2.xy, r0.xyxx                              -> o2.xy = pos.xy * 2 - 1
+   9: add o1.xyz, r1.xyzx, cb0[54].xyzx               -> M.2Col * pos.yyy + M.1Col * pos.xxx + M.4Col * 1 
+                                                      -> o1.xyz = Matrix * posObj.xyz 
+  10: mov o2.zw, l(0.0000, 0.0000, 0.0000, 1.0000)    -> o2 = SV_POSITION = [objPox.xy * 2 - 1, 0, 1]
   11: ret
