@@ -25,10 +25,10 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t7         UnknowTex   R8G8B8A8 
       dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16          
 
-      dcl_input_ps linear v0.xy
-      dcl_input_ps linear v1.xyz
-      dcl_input_ps_siv linear noperspective v2.xy, position       -> Vertex Input Position 
-      dcl_output o0.xyzw
+      dcl_input_ps linear v0.xy                                   -> uv
+      dcl_input_ps linear v1.xyz                                  -> Matrix * posObj 
+      dcl_input_ps_siv linear noperspective v2.xy, position       -> v2.xy 对应uv方向屏幕像素序号 
+      dcl_output o0.xyzw                                          -> 目标输出颜色 
       dcl_temps 18
 
 
