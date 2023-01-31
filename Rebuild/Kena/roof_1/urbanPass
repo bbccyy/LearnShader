@@ -81,8 +81,8 @@ sample_l_indexable(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyz
 sample_l_indexable(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0.000000)    	-> 深度 R1.Z 
 
 //Decode Depth 
-//原始采样获得的 R1.z 应该是编码后的0-1范围视空间深度，解码后输出R1.Z 推测等于 HClip.w 
-//HClip.w 在Unity中等于viewSpace中物体z轴取反，在UE4中直接等于视空间z轴值 
+//原始采样获得的 R1.z 应该是编码后的0-1范围视空间深度，解码后输出R1.Z 推测等于 HClip.w (经过投影变换后输出vector的w分量) 
+//HClip.w 在Unity中等于视空间(ViewSpace)中物体z轴数值的取反值，而在UE4中直接等于视空间z轴值 
 //注意: UE4 默认距离单位 = 厘米 ，所以解码后的 R1.Z 基本上取值大于 100, 既大于1米 
 mad r1.w, r1.z, cb1[65].x, cb1[65].y   								 -> 0 
 mad r1.z, r1.z, cb1[65].z, -cb1[65].w  								 -> 0.1 * depthRaw 

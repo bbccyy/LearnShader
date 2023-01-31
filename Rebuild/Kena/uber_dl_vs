@@ -7,7 +7,7 @@ vs_5_0                                                -> vertex shader, shader m
       dcl_input v0.xy                                 -> 输入POSITION: Object space vertex pos 
       dcl_input v1.xy                                 -> 输入Texcoord0: uv 
       dcl_output o0.xy                                -> 输出Texcoord0: uv (DX12 原点在左上角) 
-      dcl_output o1.xyz                               -> 输出Texcoord1: ? 
+      dcl_output o1.xyz                               -> 输出Texcoord1: viewDir（在ps阶段）
       dcl_output_siv o2.xyzw, position                -> 输出SV_POSITION: HClip空间下的<x,y,0,1> 
       dcl_temps 2
    0: mad r0.xy, v1.xyxx, cb1[1].xyxx, cb1[1].zwzz    -> r0 = input.uv * screenPixel.xy + offset(0)
@@ -19,7 +19,11 @@ vs_5_0                                                -> vertex shader, shader m
    6: mul r1.xyz, r0.yyyy, cb0[53].xyzx               -> M.2ndCol * pos.y
    7: mad r1.xyz, r0.xxxx, cb0[52].xyzx, r1.xyzx      -> r1.xyz = M.2ndCol * pos.yyy + M.1stCol * pos.xxx
    8: mov o2.xy, r0.xyxx                              -> o2.xy = pos.xy * 2 - 1
-   9: add o1.xyz, r1.xyzx, cb0[54].xyzx               -> M.2Col * pos.yyy + M.1Col * pos.xxx + M.4Col * 1 
+   9: add o1.xyz, r1.xyzx, cb0[54].xyzx               -> M.2Col * pos.yyy + M.1Col * pos.xxx + M.4Col * 1 -> 既默认pos.zzz == 1 
                                                       -> o1.xyz = Matrix * posObj.xyz 
+                                                      -> 注意:CB0[51]~CB0[54]是一个完整的矩阵，从CB0[51]数据看这是个ObjToWorld的矩阵
+                                                      -> 推测o1.xyz是世界空间中，全屏Blit三角形顶点的(非单位)朝向向量 
+                                                      -> 在传递到PixelShader时进过插值寄存器插值运算，可以获得每一个像素对应位置的视方向！ 
+                                                      -> 综合而言，ps阶段通过补齐CB0[51]的平移变换，就能获得正确的世界空间像素点坐标！ 
   10: mov o2.zw, l(0.0000, 0.0000, 0.0000, 1.0000)    -> o2 = SV_POSITION = [objPox.xy * 2 - 1, 0, 1]
   11: ret

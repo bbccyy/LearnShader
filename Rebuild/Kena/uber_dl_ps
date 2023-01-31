@@ -26,29 +26,32 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16 
 
       dcl_input_ps linear v0.xy                                   -> uv
-      dcl_input_ps linear v1.xyz                                  -> Matrix * posObj 
+      dcl_input_ps linear v1.xyz                                  -> Matrix * posObj -> 
       dcl_input_ps_siv linear noperspective v2.xy, position       -> v2.xy 对应uv方向屏幕像素序号 
       dcl_output o0.xyzw                                          -> 目标输出颜色 
       dcl_temps 18
 
-
-衣服    0.65882 * 255 = 168,   LastByte = 8,     (~ & 16 == 16) false 
-木墙    0.64912 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
-草叶    0.65098 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
-天空    0 * 255 = 0,           LastByte = 0,     (~ & 16 == 16) false 
+**FLAG**
+      衣服    0.65882 * 255 = 168,   LastByte = 8,     (~ & 16 == 16) false 
+      木墙    0.64912 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
+      草叶    0.65098 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
+      天空    0.00000 * 255 = 0,     LastByte = 0,     (~ & 16 == 16) false 
 
    0: sample_l(texture2d)(float,float,float,float) r0.xyzw, v0.xyxx, t3.xyzw, s3, l(0)    -> 采样 M_D_R_F 
    1: mul r0.w, r0.w, l(255.0000)         -> 解码Flag位 
    2: round_ne r0.w, r0.w
    3: ftou r0.w, r0.w
    4: and r1.x, r0.w, l(15)
-   5: if_nz r1.x
-   6:   sample_l(texture2d)(float,float,float,float) r1.y, v0.xyxx, t1.yxzw, s1, l(0)
-   7:   mad r1.z, r1.y, cb0[65].x, cb0[65].y
-   8:   mad r1.y, r1.y, cb0[65].z, -cb0[65].w
-   9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y
-  10:   add r1.y, r1.y, r1.z
-  11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx
+
+   -> 第一个分支，不是天空的部分能进入 
+   5: if_nz r1.x 
+   6:   sample_l(texture2d)(float,float,float,float) r1.y, v0.xyxx, t1.yxzw, s1, l(0)     -> 采样 Depth 
+   7:   mad r1.z, r1.y, cb0[65].x, cb0[65].y                -> r1z = 0 
+   8:   mad r1.y, r1.y, cb0[65].z, -cb0[65].w               -> depthRaw * 0.1 - (-0.00000001) -> 第二项极小值负责修正深度误差 
+   9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y   -> 1 / (0.1*depthRaw)
+  10:   add r1.y, r1.y, r1.z                                -> 这是解码后的视空间相机原点到物体表面的距离(单位厘米) -> 视椎深度 
+
+  11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx          -> 
   12:   dp3 r1.z, v1.xyzx, v1.xyzx
   13:   rsq r1.z, r1.z
   14:   mul r3.xyz, r1.zzzz, v1.xyzx
