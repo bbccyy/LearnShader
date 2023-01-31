@@ -22,7 +22,7 @@ ps_5_0
                                                                               [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
                                                                               [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
       dcl_resource_texture2d (float,float,float,float) t6         SSAO        AO_Intensity[R8]
-      dcl_resource_texture2d (float,float,float,float) t7         UnknowTex   R8G8B8A8 
+      dcl_resource_texture2d (float,float,float,float) t7         ShadowTex   Shd_Main[R8] Shd_Sub[G8] Msk_Main[B8] Msk_Sub[A8]  
       dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16 
 
       dcl_input_ps linear v0.xy                                   -> uv 
@@ -62,17 +62,23 @@ ps_5_0
   17:   mad r4.xy, r1.wwww, l(32.6650,11.8150,0,0), v2.xyxx -> [32.665, 11.815]*3 + ScreenPixelIndex_XY 
   18:   dp2 r1.w, r4.xyxx, l(0.0671,0.0058,0,0)             -> (32.67*3+Pixel_X)*0.067 + (11.82*3+Pixel_Y)*0.0058 
   19:   frc r1.w, r1.w                                      -> 点积值取小数部分 
-  20:   mul r1.w, r1.w, l(52.9829)                          -> ~ * 52.9
+  20:   mul r1.w, r1.w, l(52.9829)                          -> ~ * 52.9 
   21:   frc r1.w, r1.w                                      -> 再取小数部分 -> 随机数 
 
-  22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0)
+**Tex_7**
+      -> T7.x^2是生成的阴影图;        T7.z^2是总的阴影遮罩;
+      -> T7.y^2是另外一个阴影图;      T7.w^2是T7.y^2的遮罩. 
+
+  22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0) 
   23:   mul r5.xyzw, r4.xyzw, r4.xyzw
-  24:   mul r2.w, r1.y, cb0[37].y
-  25:   if_nz cb1[2].x
+  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth
+
+  -> 总是进入 
+  25:   if_nz cb1[2].x 
   26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)
   27:     movc r3.w, r4.w, l(0), l(1.0000)
   28:     movc r3.w, r4.z, r3.w, l(1.0000)
-  29:     dp4 r4.z, cb1[0].xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
+  29:     dp4 r4.z, cb1[0].xyzw, l(1,1,1,1)
   30:     dp4 r3.w, r3.wwww, cb1[0].xyzw
   31:     add r3.w, r3.w, l(-1.0000)
   32:     mad r3.w, r4.z, r3.w, l(1.0000)
