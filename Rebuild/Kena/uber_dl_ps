@@ -25,8 +25,8 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t7         UnknowTex   R8G8B8A8 
       dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16 
 
-      dcl_input_ps linear v0.xy                                   -> uv
-      dcl_input_ps linear v1.xyz                                  -> Matrix * posObj -> 
+      dcl_input_ps linear v0.xy                                   -> uv 
+      dcl_input_ps linear v1.xyz                                  -> viewDir 
       dcl_input_ps_siv linear noperspective v2.xy, position       -> v2.xy 对应uv方向屏幕像素序号 
       dcl_output o0.xyzw                                          -> 目标输出颜色 
       dcl_temps 18
@@ -51,17 +51,20 @@ ps_5_0
    9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y   -> 1 / (0.1*depthRaw)
   10:   add r1.y, r1.y, r1.z                                -> 这是解码后的视空间相机原点到物体表面的距离(单位厘米) -> 视椎深度 
 
-  11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx          -> 
-  12:   dp3 r1.z, v1.xyzx, v1.xyzx
+  11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx          -> 伪像素世界坐标（注意v1.xyz所表述的viewDir没有归一化，无法准确表述位置)
+  
+  12:   dp3 r1.z, v1.xyzx, v1.xyzx                          -> 归一化 viewDir 存入 r3
   13:   rsq r1.z, r1.z
-  14:   mul r3.xyz, r1.zzzz, v1.xyzx
-  15:   lt r1.z, cb1[1].z, l(0)
-  16:   utof r1.w, cb0[143].y
-  17:   mad r4.xy, r1.wwww, l(32.6650, 11.8150, 0.0000, 0.0000), v2.xyxx
-  18:   dp2 r1.w, r4.xyxx, l(0.0671, 0.0058, 0.0000, 0.0000)
-  19:   frc r1.w, r1.w
-  20:   mul r1.w, r1.w, l(52.9829)
-  21:   frc r1.w, r1.w
+  14:   mul r3.xyz, r1.zzzz, v1.xyzx 
+  15:   lt r1.z, cb1[1].z, l(0)                             -> r1.z = 0 
+
+  16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 （以下代码用于制备随机数）
+  17:   mad r4.xy, r1.wwww, l(32.6650,11.8150,0,0), v2.xyxx -> [32.665, 11.815]*3 + ScreenPixelIndex_XY 
+  18:   dp2 r1.w, r4.xyxx, l(0.0671,0.0058,0,0)             -> (32.67*3+Pixel_X)*0.067 + (11.82*3+Pixel_Y)*0.0058 
+  19:   frc r1.w, r1.w                                      -> 点积值取小数部分 
+  20:   mul r1.w, r1.w, l(52.9829)                          -> ~ * 52.9
+  21:   frc r1.w, r1.w                                      -> 再取小数部分 -> 随机数 
+
   22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0)
   23:   mul r5.xyzw, r4.xyzw, r4.xyzw
   24:   mul r2.w, r1.y, cb0[37].y
