@@ -11,7 +11,9 @@ for key, val in ipairs(data) do
 	local tmp = math.floor(val * 255 + 0.5)
 	local tmp1 = tmp & 15
 	local tmp2 = (tmp & 16) == 16
-	print(names[key] .. "\t\t\t" .. val .. "\t->\t" .. tmp .. "\t" .. tmp1 .. "\t" .. tostring(tmp2))
+	local and32 = tmp & 32
+	local and64 = tmp & 64
+	print(names[key] .. "\t\t\t" .. val .. "\t->\t" .. and32 .. "\t" .. and64 .. "\t" .. tostring(tmp2))
 end
 
 
