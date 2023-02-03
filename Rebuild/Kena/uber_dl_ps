@@ -85,8 +85,8 @@ ps_5_0
   33:     mad_sat r1.y, r1.y, cb1[1].x, cb1[1].y      -> saturate(depth * 0.00003 + (-9.0))
   34:     mul r1.y, r1.y, r1.y                        -> ~^2
   35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww       -> 1 - shadowMap.xy
-  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx
-  37:     min r1.y, r5.w, r4.y
+  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx        -> L34 * (1 - shadowMap.xy) + shadowMap.xy -> Lerp(shadowMap.xy, 1, L34) 
+  37:     min r1.y, r5.w, r4.y                        -> 
   38:     mul r4.x, r5.z, r4.x
   39:     mul r4.y, r5.z, r1.y
   40:     ult r1.y, l(1), cb1[2].x
