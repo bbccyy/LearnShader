@@ -56,7 +56,7 @@ ps_5_0
   12:   dp3 r1.z, v1.xyzx, v1.xyzx                          -> 归一化 viewDir 存入 r3
   13:   rsq r1.z, r1.z
   14:   mul r3.xyz, r1.zzzz, v1.xyzx 
-  15:   lt r1.z, cb1[1].z, l(0)                             -> r1.z = 0 
+  15:   lt r1.z, cb1[1].z, l(0)                             -> cb1[1].z=0.2 < 0 ? false r1.z = 0x0000 
 
   16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 （以下代码用于制备随机数）
   17:   mad r4.xy, r1.wwww, l(32.6650,11.8150,0,0), v2.xyxx -> [32.665, 11.815]*3 + ScreenPixelIndex_XY 
@@ -70,36 +70,41 @@ ps_5_0
       -> T7.y^2是另外一个阴影图;      T7.w^2是T7.y^2的遮罩. 
 
   22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0) 
-  23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> 解码: shadowMap.x 和 shadowMap.y 共两张Shadow_Attenuation
-  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth
+  23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> 解码: shadowMap.x 和 shadowMap.y 共两张Shadow_Attenuation 
+  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth 
 
   -> 总是进入 
   25:   if_nz cb1[2].x 
   26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)         -> 对衣服、木墙、草而言 r4.zw = [32, 0] 
   27:     movc r3.w, r4.w, l(0), l(1.0000)            -> 1 
   28:     movc r3.w, r4.z, r3.w, l(1.0000)            -> 1 只有Flag值的倒数第6第7bit位都是1，r3.w才可能为0 
-  29:     dp4 r4.z, cb1[0].xyzw, l(1,1,1,1)           -> 0 注:cb1[0] == 0
-  30:     dp4 r3.w, r3.wwww, cb1[0].xyzw              -> 0
-  31:     add r3.w, r3.w, l(-1.0000)                  -> -1
-  32:     mad r3.w, r4.z, r3.w, l(1.0000)             -> 1
-  33:     mad_sat r1.y, r1.y, cb1[1].x, cb1[1].y      -> saturate(depth * 0.00003 + (-9.0))
-  34:     mul r1.y, r1.y, r1.y                        -> ~^2
-  35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww       -> 1 - shadowMap.xy
-  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx        -> L34 * (1 - shadowMap.xy) + shadowMap.xy -> Lerp(shadowMap.xy, 1, L34) 
-  37:     min r1.y, r5.w, r4.y                        -> 
-  38:     mul r4.x, r5.z, r4.x
-  39:     mul r4.y, r5.z, r1.y
-  40:     ult r1.y, l(1), cb1[2].x
-  41:     lt r3.w, l(0), abs(cb1[1].z)
-  42:     and r1.y, r1.y, r3.w
-  43:     movc r1.z, r1.z, l(1.0000), r2.w
-  44:     mul r1.z, r1.z, abs(cb1[1].z)
-  45:     and r1.y, r1.z, r1.y
+  29:     dp4 r4.z, cb1[0].xyzw, l(1,1,1,1)           -> 0 注:cb1[0] == 0 
+  30:     dp4 r3.w, r3.wwww, cb1[0].xyzw              -> 0 
+  31:     add r3.w, r3.w, l(-1.0000)                  -> -1 
+  32:     mad r3.w, r4.z, r3.w, l(1.0000)             -> 1 
+  33:     mad_sat r1.y, r1.y, cb1[1].x, cb1[1].y      -> saturate(depth * 0.00003 + (-9.0)) -> depth~300000
+  34:     mul r1.y, r1.y, r1.y                        -> ~^2 -> 一个基于视线深度的调和因子，不足300000时均为0 
+  35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww       -> 1 - shadowMap.xy 
+  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx        -> Lerp(shadowMap.xy, 1, L34) -> shadow_atten 
+  37:     min r1.y, r5.w, r4.y                        -> min(shadow_atten.y, T7.w^2) -> 使用遮罩w，使值不超过T7.w^2 == 1 
+  38:     mul r4.x, r5.z, r4.x                        -> shadow_atten.x * T7.z^2 -> 使用遮罩T7.z^2=1 
+  39:     mul r4.y, r5.z, r1.y                        -> min(shadow_atten.y, T7.w^2) * T7.z^2
+                                                      -> r4.xy = [shadow_atten.x, min(shadow_atten.y, 1)] * T7.z^2 
+  40:     ult r1.y, l(1), cb1[2].x                    -> 1 < cb1[2].x=3   ? true 
+  41:     lt r3.w, l(0), abs(cb1[1].z)                -> 0 < cb1[1].z=0.2 ? true 
+  42:     and r1.y, r1.y, r3.w                        -> 0xFFFFFFFF -> 必须同时满足上面2次条件判断，此Mask才为0xFFFF，否则为0x0000 
+  43:     movc r1.z, r1.z, l(1.0000), r2.w            -> condi=false, 选择后面的r2.w=0.50625 * depth 
+  44:     mul r1.z, r1.z, abs(cb1[1].z)               -> (0.50625 * depth) * 0.2 
+  45:     and r1.y, r1.z, r1.y                        -> ~ and 0xFFFFFFFF == ~ 
   46:   else
-  47:     sample_l(texture2d)(float,float,float,float) r4.x, v0.xyxx, t6.xyzw, s6, l(0)
+  47:     sample_l(texture2d)(float,float,float,float) r4.x, v0.xyxx, t6.xyzw, s6, l(0)   -> 采样SSAO 
   48:     mov r4.y, l(1.0000)
   49:     mov r1.y, l(0)
   50:   endif
+        -> 可见以上逻辑块负责输出
+            r4.xy : shadow_atten 相关 
+            r1.y  : 与depth有关，受到cb控制的一个数，当depth<9.87时，r1.y不足1 
+
   51:   ult r1.z, cb1[2].x, l(2)
   52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)
   53:   and r1.z, r1.z, r5.y
