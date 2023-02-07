@@ -33,11 +33,13 @@ ps_5_0
 
 **FLAG**
       衣服    0.65882 * 255 = 168,   LastByte = 8,     (~ & 16 == 16) false 
+      头发    0.6549  * 255 = 167,   LastByte = 7,     (~ & 16 == 16) false 
+      皮肤    0.64706 * 255 = 165,   LastByte = 5,     (~ & 16 == 16) false 
       木墙    0.64912 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
       草叶    0.65098 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
       天空    0.00000 * 255 = 0,     LastByte = 0,     (~ & 16 == 16) false 
 
-   0: sample_l(texture2d)(float,float,float,float) r0.xyzw, v0.xyxx, t3.xyzw, s3, l(0)    -> 采样 M_D_R_F 
+   0: sample_l(texture2d)(float,float,float,float) r0.xyzw, v0.xyxx, t3.xyzw, s3, l(0)    -> 采样 M_D_R_F z
    1: mul r0.w, r0.w, l(255.0000)         -> 解码Flag位 
    2: round_ne r0.w, r0.w
    3: ftou r0.w, r0.w
@@ -71,10 +73,9 @@ ps_5_0
 
   22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0) 
   23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> 解码: shadowMap.x 和 shadowMap.y 共两张Shadow_Attenuation 
-  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth 
+  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth （注:r1.y此后不再存放depth) 
 
-  -> 总是进入 
-  25:   if_nz cb1[2].x 
+  25:   if_nz cb1[2].x  -> 总是进入 
   26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)         -> 对衣服、木墙、草而言 r4.zw = [32, 0] 
   27:     movc r3.w, r4.w, l(0), l(1.0000)            -> 1 
   28:     movc r3.w, r4.z, r3.w, l(1.0000)            -> 1 只有Flag值的倒数第6第7bit位都是1，r3.w才可能为0 
@@ -96,21 +97,21 @@ ps_5_0
   43:     movc r1.z, r1.z, l(1.0000), r2.w            -> condi=false, 选择后面的r2.w=0.50625 * depth 
   44:     mul r1.z, r1.z, abs(cb1[1].z)               -> (0.50625 * depth) * 0.2 
   45:     and r1.y, r1.z, r1.y                        -> ~ and 0xFFFFFFFF == ~ 
-  46:   else
+  46:   else  -> 不进入 
   47:     sample_l(texture2d)(float,float,float,float) r4.x, v0.xyxx, t6.xyzw, s6, l(0)   -> 采样SSAO 
   48:     mov r4.y, l(1.0000)
   49:     mov r1.y, l(0)
   50:   endif
-        -> 可见以上逻辑块负责输出
+        -> 可见以上逻辑块负责输出 
             r4.xy : shadow_atten 相关 
             r1.y  : 与depth有关，受到cb控制的一个数，当depth<9.87时，r1.y不足1 
 
-  51:   ult r1.z, cb1[2].x, l(2)
-  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)
-  53:   and r1.z, r1.z, r5.y
-  54:   or r1.z, r5.x, r1.z
-  55:   mul r2.w, r2.w, l(0.2000)
-  56:   movc r1.y, r1.z, r2.w, r1.y
+  51:   ult r1.z, cb1[2].x, l(2)                      -> cb1[2].x=3 < 2 ? false -> r1.z=0x0000 
+  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)             -> r5.xy = 0x0000 -> r1.x=false, r1.y=? (头发部分为7) 
+  53:   and r1.z, r1.z, r5.y                          -> r1.z=0x0000 
+  54:   or r1.z, r5.x, r1.z                           -> r1.z=0x0000  -> Flag中有9号，或者Flag有7号(头发)且cb开关打开 
+  55:   mul r2.w, r2.w, l(0.2000)                     -> (0.50625 * depth) * 0.2 
+  56:   movc r1.y, r1.z, r2.w, r1.y                   -> r1.y 保持原样 
   57:   lt r1.z, l(0), r1.y
 
   -----------
@@ -217,6 +218,8 @@ ps_5_0
  158:     movc r1.y, r1.z, r1.y, r4.y
  159:     movc r4.y, r5.y, r4.z, r1.y
  160:   endif
+  -----------
+
  161:   add r1.y, r4.y, r4.x
  162:   lt r1.y, l(0), r1.y
  163:   if_nz r1.y
