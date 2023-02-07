@@ -50,7 +50,7 @@ ps_5_0
    6:   sample_l(texture2d)(float,float,float,float) r1.y, v0.xyxx, t1.yxzw, s1, l(0)     -> 采样 Depth 
    7:   mad r1.z, r1.y, cb0[65].x, cb0[65].y                -> r1z = 0 
    8:   mad r1.y, r1.y, cb0[65].z, -cb0[65].w               -> depthRaw * 0.1 - (-0.00000001) -> 第二项极小值负责修正深度误差 
-   9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y   -> 1 / (0.1*depthRaw)
+   9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y   -> 1 / (0.1*depthRaw) 
   10:   add r1.y, r1.y, r1.z                                -> 这是解码后的视空间相机原点到物体表面的距离(单位厘米) -> 视椎深度 
 
   11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx          -> 伪像素世界坐标（注意v1.xyz所表述的viewDir没有归一化，无法准确表述位置)
@@ -60,7 +60,7 @@ ps_5_0
   14:   mul r3.xyz, r1.zzzz, v1.xyzx 
   15:   lt r1.z, cb1[1].z, l(0)                             -> cb1[1].z=0.2 < 0 ? false r1.z = 0x0000 
 
-  16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 （以下代码用于制备随机数）
+  16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 （以下代码用于制备基于屏幕像素位置的随机数）
   17:   mad r4.xy, r1.wwww, l(32.6650,11.8150,0,0), v2.xyxx -> [32.665, 11.815]*3 + ScreenPixelIndex_XY 
   18:   dp2 r1.w, r4.xyxx, l(0.0671,0.0058,0,0)             -> (32.67*3+Pixel_X)*0.067 + (11.82*3+Pixel_Y)*0.0058 
   19:   frc r1.w, r1.w                                      -> 点积值取小数部分 
@@ -73,7 +73,8 @@ ps_5_0
 
   22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0) 
   23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> 解码: shadowMap.x 和 shadowMap.y 共两张Shadow_Attenuation 
-  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth （注:r1.y此后不再存放depth) 
+
+  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth （注:r1.y此后不再存放原始depth) 
 
   25:   if_nz cb1[2].x  -> 总是进入 
   26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)         -> 对衣服、木墙、草而言 r4.zw = [32, 0] 
@@ -111,22 +112,26 @@ ps_5_0
   53:   and r1.z, r1.z, r5.y                          -> r1.z=0x0000 
   54:   or r1.z, r5.x, r1.z                           -> r1.z=0x0000  -> Flag中有9号，或者Flag有7号(头发)且cb开关打开 
   55:   mul r2.w, r2.w, l(0.2000)                     -> (0.50625 * depth) * 0.2 
-  56:   movc r1.y, r1.z, r2.w, r1.y                   -> r1.y 保持原样 
-  57:   lt r1.z, l(0), r1.y
+  56:   movc r1.y, r1.z, r2.w, r1.y                   -> r1.y 保持原样 = (0.50625 * depth) * 0.2
+  57:   lt r1.z, l(0), r1.y                           -> 0 < [(0.50625 * depth) * 0.2] ? true -> 0xFFFF 
 
   -----------
-  58:   if_nz r1.z
-  59:     add r1.z, r1.w, l(-0.5000)
-  60:     add r2.xyz, r2.xyzx, cb0[70].xyzx
-  61:     mul r6.xyzw, r2.yyyy, cb0[1].xyzw
+  58:   if_nz r1.z      -> 进入 
+  59:     add r1.z, r1.w, l(-0.5000)                  -> [0-1]区间随机数 - 0.5 -> [-0.5, 0.5]区间随机数 
+  60:     add r2.xyz, r2.xyzx, cb0[70].xyzx           -> 把当前点posWS平移到摄像机位置 
+  61:     mul r6.xyzw, r2.yyyy, cb0[1].xyzw           -> cb0[0] ~ cb0[3] 代表变换矩阵的前4列 -> 对向量[r2.xyz, 1]进行变换 
   62:     mad r6.xyzw, r2.xxxx, cb0[0].xyzw, r6.xyzw
   63:     mad r2.xyzw, r2.zzzz, cb0[2].xyzw, r6.xyzw
-  64:     add r2.xyzw, r2.xyzw, cb0[3].xyzw
-  65:     mul r6.xyz, r1.yyyy, cb1[5].xyzx
+  64:     add r2.xyzw, r2.xyzw, cb0[3].xyzw           -> 推测变换后获得 ViewSpace Position? 
+
+  65:     mul r6.xyz, r1.yyyy, cb1[5].xyzx            -> cb1[5].xyz = [0.51555,-0.29836,0.80324] 推测是世界坐标下的 Direct Light Dir 
   66:     mul r7.xyzw, r6.yyyy, cb0[1].xyzw
   67:     mad r7.xyzw, r6.xxxx, cb0[0].xyzw, r7.xyzw
-  68:     mad r6.xyzw, r6.zzzz, cb0[2].xyzw, r7.xyzw
-  69:     add r6.xyzw, r2.xyzw, r6.xyzw
+  68:     mad r6.xyzw, r6.zzzz, cb0[2].xyzw, r7.xyzw  -> 完成向量变换，现在r6处于camera space 
+  69:     add r6.xyzw, r2.xyzw, r6.xyzw               -> 在camera space下当前点经过一个偏移后的新位置
+                                                      -> 偏移的方向是一个固定朝向，受cb1[5].xyz影响
+                                                      -> 偏移的距离受到r1.y=[(0.50625 * depth) * 0.2]影响 
+
   70:     div r7.xyz, r2.xyzx, r2.wwww
   71:     div r6.xyz, r6.xyzx, r6.wwww
   72:     add r6.xyz, -r7.xyzx, r6.xyzx
