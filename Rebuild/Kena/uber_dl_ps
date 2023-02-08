@@ -168,7 +168,7 @@ ps_5_0
   89:     sample_l(texture2d)(float,float,float,float) r3.w, r10.xyxx, t1.yzwx, s1, l(0)   -> 采样获得DeviceZ 
   90:     add r3.w, -r3.w, r10.z
   91:     mad r3.w, abs(r1.y), l(0.2500), r3.w 
-  92:     lt r3.w, abs(r3.w), r1.w                    -> 若(基于随机偏移后NDC像素点_2的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
+  92:     lt r3.w, abs(r3.w), r1.w                    -> 若(基于随机偏移后NDC像素点_2的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF, 反之=0x0000 
   93:     lt r4.w, r2.x, l(0)                         -> r2.x < 0 ? -> r4.w(true/false) 
                                                       -> 判断结果依赖 L87 结果: 偏移点_1两深度之差为“正”时当前行判断返回 True, 既 -1 < 0 成立  
   94:     and r3.w, r3.w, r4.w                        -> 若第一组偏移点深度差为“正”，当前组为“负” -> And后才为True，既:r3.w=0xFFFF 
@@ -181,7 +181,7 @@ ps_5_0
   97:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)   -> 采样获得DeviceZ 
   98:     add r2.y, -r2.y, r10.z 
   99:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 100:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_3的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
+ 100:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_3的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF, 反之=0x0000
  101:     lt r3.w, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True 
  102:     and r2.y, r2.y, r3.w                        -> ~ And 当前组结果 
  103:     movc r2.x, r2.y, r2.z, r2.x                 -> 依据上式条件，更新r2.x -> 注:只有保持一路上所有组偏移点的两深度差为“正”，r2.x才可能一直=-1 
@@ -191,52 +191,54 @@ ps_5_0
  105:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0) 
  106:     add r2.y, -r2.y, r10.z
  107:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 108:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_4的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
- 109:     lt r2.z, r2.x, l(0)                         -> 偏移点_1两深度之差为“正”时当前行判断返回 True 
- 110:     and r2.y, r2.z, r2.y
- 111:     movc r2.x, r2.y, r2.w, r2.x
+ 108:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_4的)两深度之差为“负” -> 比较成功：r2.y=0xFFFF, 反之=0x0000
+ 109:     lt r2.z, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True 
+ 110:     and r2.y, r2.z, r2.y                        -> ~ And 当前组结果 
+ 111:     movc r2.x, r2.y, r2.w, r2.x                 -> 依据上式条件，更新r2.x
 
- 112:     mad r10.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.6250, 0.7500, 0.8750, 1.0000)
- 113:     mad r2.yzw, r9.xxyz, r10.xxxx, r8.xxyz
- 114:     sample_l(texture2d)(float,float,float,float) r1.z, r2.yzyy, t1.yzxw, s1, l(0)
+ 112:     mad r10.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.6250, 0.7500, 0.8750, 1.0000) -> 将[-0.5, 0.5]区间的随机数转化成新4维度 
+ 113:     mad r2.yzw, r9.xxyz, r10.xxxx, r8.xxyz      -> (NDC像素点)r8 + (SceneDepth推导的随机长度)scale_5 * (NDC向量γ)r9 
+                                                      -> 偏移点_5  
+ 114:     sample_l(texture2d)(float,float,float,float) r1.z, r2.yzyy, t1.yzxw, s1, l(0) 
  115:     add r1.z, -r1.z, r2.w
  116:     mad r1.z, abs(r1.y), l(0.2500), r1.z
- 117:     lt r1.z, abs(r1.z), r1.w
- 118:     lt r2.y, r2.x, l(0)
- 119:     and r1.z, r1.z, r2.y
- 120:     movc r1.z, r1.z, r10.x, r2.x
+ 117:     lt r1.z, abs(r1.z), r1.w                    -> 若(基于随机偏移后NDC像素点_5的)两深度之差为“负” -> 比较成功：r2.y=0xFFFF, 反之=0x0000
+ 118:     lt r2.y, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True  
+ 119:     and r1.z, r1.z, r2.y                        -> ~ And 当前组结果 
+ 120:     movc r1.z, r1.z, r10.x, r2.x                -> 依据上式条件，更新到r1.z 
 
- 121:     mad r2.xyz, r9.xyzx, r10.yyyy, r8.xyzx
+ 121:     mad r2.xyz, r9.xyzx, r10.yyyy, r8.xyzx      -> 偏移点_6 
  122:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  123:     add r2.x, -r2.x, r2.z
  124:     mad r2.x, abs(r1.y), l(0.2500), r2.x
  125:     lt r2.x, abs(r2.x), r1.w
  126:     lt r2.y, r1.z, l(0)
  127:     and r2.x, r2.y, r2.x
- 128:     movc r1.z, r2.x, r10.y, r1.z
+ 128:     movc r1.z, r2.x, r10.y, r1.z                -> 更新r1.z 
 
- 129:     mad r2.xyz, r9.xyzx, r10.zzzz, r8.xyzx
+ 129:     mad r2.xyz, r9.xyzx, r10.zzzz, r8.xyzx      -> 偏移点_7 
  130:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  131:     add r2.x, -r2.x, r2.z
  132:     mad r2.x, abs(r1.y), l(0.2500), r2.x
  133:     lt r2.x, abs(r2.x), r1.w
  134:     lt r2.y, r1.z, l(0)
  135:     and r2.x, r2.y, r2.x
- 136:     movc r1.z, r2.x, r10.z, r1.z
+ 136:     movc r1.z, r2.x, r10.z, r1.z                -> 更新r1.z 
 
- 137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx
+ 137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx      -> 偏移点_8
  138:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  139:     add r2.x, -r2.x, r2.z
  140:     mad r1.y, abs(r1.y), l(0.2500), r2.x
  141:     lt r1.y, abs(r1.y), r1.w
  142:     lt r1.w, r1.z, l(0)
  143:     and r1.y, r1.w, r1.y
- 144:     movc r1.y, r1.y, r10.w, r1.z
- 145:     lt r1.z, l(0), r1.y
- 146:     and r1.z, r1.z, l(1.0000)
+ 144:     movc r1.y, r1.y, r10.w, r1.z                -> 更新到r1.y
 
- 147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy
- 148:     mad r1.yw, abs(r1.yyyw), l(0.0000, 6.0000, 0.0000, 6.0000), l(0.0000, -5.0000, 0.0000, -5.0000)
+ 145:     lt r1.z, l(0), r1.y                         -> 全组两深度差值为“正”,则r1.y=-1，本行才可能返回 False，否则返回 True 
+ 146:     and r1.z, r1.z, l(1.0000)                   -> r1.z=True时为1, r1.z=False时为0 
+
+ 147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy        -> NDC向量γ.xy * 正随机数或-1(r1.y) + NDC像素位置.xy 
+ 148:     mad r1.yw, abs(r1.yyyw), l(0, 6, 0, 6), l(0, -5, 0, -5) -> 
  149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)
  150:     dp2 r1.y, r1.ywyy, r1.ywyy
  151:     add r1.y, -r1.y, l(1.0000)
