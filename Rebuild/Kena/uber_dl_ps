@@ -170,26 +170,32 @@ ps_5_0
   91:     mad r3.w, abs(r1.y), l(0.2500), r3.w 
   92:     lt r3.w, abs(r3.w), r1.w                    -> 若(基于随机偏移后NDC像素点_2的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
   93:     lt r4.w, r2.x, l(0)                         -> r2.x < 0 ? -> r4.w(true/false) 
-                                                      -> 判断结果依赖 L87 结果: 偏移点_1两深度之差为“负”时当前行的true 
-  94:     and r3.w, r3.w, r4.w                        -> 若连续2组偏移点深度差为“负” -> And后：r3.w=0xFFFF 
-  95:     movc r2.x, r3.w, r2.y, r2.x                 -> 若连续2组偏移点深度差为“负” -> r2.x=r2.y； 否则r2.x不变 
+                                                      -> 判断结果依赖 L87 结果: 偏移点_1两深度之差为“正”时当前行判断返回 True, 既 -1 < 0 成立  
+  94:     and r3.w, r3.w, r4.w                        -> 若第一组偏移点深度差为“正”，当前组为“负” -> And后才为True，既:r3.w=0xFFFF 
+  95:     movc r2.x, r3.w, r2.y, r2.x                 -> 第一组结果 And 当前组结果 
+                                                      -> 考虑问题: 什么情况下能将 r2.x=-1 可以一直流传下去? 
+                                                      -> 答:当前组偏移点深度差一直都是“正”时，但凡某一组偏移点深度差为“负”，r2.x就不再小于0了 
 
-  96:     mad r10.xyz, r9.xyzx, r2.zzzz, r8.xyzx
-  97:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)
-  98:     add r2.y, -r2.y, r10.z
+  96:     mad r10.xyz, r9.xyzx, r2.zzzz, r8.xyzx      -> (NDC像素点)r8 + (SceneDepth推导的随机长度)scale_3 * (NDC向量γ)r9 
+                                                      -> 偏移点_3 
+  97:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)   -> 采样获得DeviceZ 
+  98:     add r2.y, -r2.y, r10.z 
   99:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 100:     lt r2.y, abs(r2.y), r1.w
- 101:     lt r3.w, r2.x, l(0)
- 102:     and r2.y, r2.y, r3.w
- 103:     movc r2.x, r2.y, r2.z, r2.x
- 104:     mad r10.xyz, r9.xyzx, r2.wwww, r8.xyzx
- 105:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)
+ 100:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_3的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
+ 101:     lt r3.w, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True 
+ 102:     and r2.y, r2.y, r3.w                        -> ~ And 当前组结果 
+ 103:     movc r2.x, r2.y, r2.z, r2.x                 -> 依据上式条件，更新r2.x -> 注:只有保持一路上所有组偏移点的两深度差为“正”，r2.x才可能一直=-1 
+
+ 104:     mad r10.xyz, r9.xyzx, r2.wwww, r8.xyzx      -> (NDC像素点)r8 + (SceneDepth推导的随机长度)scale_4 * (NDC向量γ)r9 
+                                                      -> 偏移点_4 
+ 105:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0) 
  106:     add r2.y, -r2.y, r10.z
  107:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 108:     lt r2.y, abs(r2.y), r1.w
- 109:     lt r2.z, r2.x, l(0)
+ 108:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_4的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF 
+ 109:     lt r2.z, r2.x, l(0)                         -> 偏移点_1两深度之差为“正”时当前行判断返回 True 
  110:     and r2.y, r2.z, r2.y
  111:     movc r2.x, r2.y, r2.w, r2.x
+
  112:     mad r10.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.6250, 0.7500, 0.8750, 1.0000)
  113:     mad r2.yzw, r9.xxyz, r10.xxxx, r8.xxyz
  114:     sample_l(texture2d)(float,float,float,float) r1.z, r2.yzyy, t1.yzxw, s1, l(0)
@@ -199,6 +205,7 @@ ps_5_0
  118:     lt r2.y, r2.x, l(0)
  119:     and r1.z, r1.z, r2.y
  120:     movc r1.z, r1.z, r10.x, r2.x
+
  121:     mad r2.xyz, r9.xyzx, r10.yyyy, r8.xyzx
  122:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  123:     add r2.x, -r2.x, r2.z
@@ -207,6 +214,7 @@ ps_5_0
  126:     lt r2.y, r1.z, l(0)
  127:     and r2.x, r2.y, r2.x
  128:     movc r1.z, r2.x, r10.y, r1.z
+
  129:     mad r2.xyz, r9.xyzx, r10.zzzz, r8.xyzx
  130:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  131:     add r2.x, -r2.x, r2.z
@@ -215,6 +223,7 @@ ps_5_0
  134:     lt r2.y, r1.z, l(0)
  135:     and r2.x, r2.y, r2.x
  136:     movc r1.z, r2.x, r10.z, r1.z
+
  137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx
  138:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
  139:     add r2.x, -r2.x, r2.z
@@ -225,6 +234,7 @@ ps_5_0
  144:     movc r1.y, r1.y, r10.w, r1.z
  145:     lt r1.z, l(0), r1.y
  146:     and r1.z, r1.z, l(1.0000)
+
  147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy
  148:     mad r1.yw, abs(r1.yyyw), l(0.0000, 6.0000, 0.0000, 6.0000), l(0.0000, -5.0000, 0.0000, -5.0000)
  149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)
