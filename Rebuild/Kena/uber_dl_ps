@@ -109,7 +109,7 @@ ps_5_0
             r1.y  : 与depth有关，受到cb控制的一个数，当depth<9.87时，r1.y不足1 
 
   51:   ult r1.z, cb1[2].x, l(2)                      -> cb1[2].x=3 < 2 ? false -> r1.z=0x0000 
-  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)             -> r5.xy = 0x0000 -> r1.x=false, r1.y=? (头发部分为7) 
+  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)             -> r5.xy = 0x0000 -> r5.x=false, r5.y=? (头发部分为7) 
   53:   and r1.z, r1.z, r5.y                          -> r1.z=0x0000 
   54:   or r1.z, r5.x, r1.z                           -> r1.z=0x0000  -> Flag中有9号，或者Flag有7号(头发)且cb开关打开 
   55:   mul r2.w, r2.w, l(0.2000)                     -> (0.50625 * depth) * 0.2 = 0.10125 * detph 
@@ -225,31 +225,32 @@ ps_5_0
  135:     and r2.x, r2.y, r2.x
  136:     movc r1.z, r2.x, r10.z, r1.z                -> 更新r1.z 
 
- 137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx      -> 偏移点_8
- 138:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
+ 137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx      -> 偏移点_8 
+ 138:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0) 
  139:     add r2.x, -r2.x, r2.z
  140:     mad r1.y, abs(r1.y), l(0.2500), r2.x
  141:     lt r1.y, abs(r1.y), r1.w
  142:     lt r1.w, r1.z, l(0)
- 143:     and r1.y, r1.w, r1.y
- 144:     movc r1.y, r1.y, r10.w, r1.z                -> 更新到r1.y
+ 143:     and r1.y, r1.w, r1.y 
+ 144:     movc r1.y, r1.y, r10.w, r1.z                -> 更新到r1.y 
 
  145:     lt r1.z, l(0), r1.y                         -> 全组两深度差值为“正”,则r1.y=-1，本行才可能返回 False，否则返回 True 
  146:     and r1.z, r1.z, l(1.0000)                   -> r1.z=True时为1, r1.z=False时为0 
 
- 147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy        -> NDC向量γ.xy * 正随机数或-1(r1.y) + NDC像素位置.xy 
- 148:     mad r1.yw, abs(r1.yyyw), l(0, 6, 0, 6), l(0, -5, 0, -5) -> 
- 149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)
- 150:     dp2 r1.y, r1.ywyy, r1.ywyy
- 151:     add r1.y, -r1.y, l(1.0000)
- 152:     max r1.y, r1.y, l(0)
- 153:     mad r1.y, -r1.z, r1.y, l(1.0000)
- 154:     mul r4.xz, r1.yyyy, r4.xxyx
- 155:     ine r1.z, r1.x, l(9)
- 156:     mad r1.y, r1.y, l(0.5000), l(0.5000)
- 157:     mul r1.y, r1.y, r4.y
- 158:     movc r1.y, r1.z, r1.y, r4.y
- 159:     movc r4.y, r5.y, r4.z, r1.y
+ 147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy        -> NDC向量γ.xy * 正随机数或-1(r1.y) + NDC像素位置.xy -> 注:此处xy处于[-1,1]区间 
+                                                      -> NDC_XY偏移 -> 偏移可能是正光照方向，也可能是负光照方向，取决于前8组偏移的深度差 
+ 148:     mad r1.yw, abs(r1.yyyw), l(0, 6, 0, 6), l(0, -5, 0, -5) -> abs(NDC_XY偏移) * 6 - 5 
+ 149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)           -> max(0, ~) 
+ 150:     dp2 r1.y, r1.ywyy, r1.ywyy                  -> dot(~,~) 
+ 151:     add r1.y, -r1.y, l(1.0000)                  -> 1 - (~) 
+ 152:     max r1.y, r1.y, l(0)                        -> max(0, ~) -> [0,1]区间 
+ 153:     mad r1.y, -r1.z, r1.y, l(1.0000)            -> 1 - L146 * (~) -> 若全组两深度差值为“正”，本行返回 1，否则返回 1 - (~) 
+ 154:     mul r4.xz, r1.yyyy, r4.xxyx                 -> L38(shadow_atten相关).xy * (~) 
+ 155:     ine r1.z, r1.x, l(9)                        -> Flag != 9 -> r1.z=0xFFFF (当前截帧不含有9号材质，因此必然返回True)   
+ 156:     mad r1.y, r1.y, l(0.5000), l(0.5000)        -> L153 * 0.5 + 0.5 
+ 157:     mul r1.y, r1.y, r4.y                        -> L38(shadow_atten相关).y * (~) 
+ 158:     movc r1.y, r1.z, r1.y, r4.y                 -> L155 ? (~) : L38(shadow_atten相关).y 
+ 159:     movc r4.y, r5.y, r4.z, r1.y                 -> L52(头发) ? L154.z : (~) 
  160:   endif
   -----------
 
