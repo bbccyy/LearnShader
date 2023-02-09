@@ -21,7 +21,7 @@ vs_5_0                                                -> vertex shader, shader m
    8: mov o2.xy, r0.xyxx                              -> o2.xy = pos.xy * 2 - 1
    9: add o1.xyz, r1.xyzx, cb0[54].xyzx               -> M.2Col * pos.yyy + M.1Col * pos.xxx + M.4Col * 1 -> 既默认pos.zzz == 1 
                                                       -> o1.xyz = Matrix * posObj.xyz 
-                                                      -> 注意:CB0[51]~CB0[54]是一个完整的矩阵，从CB0[51]数据看这是个ObjToWorld的矩阵
+                                                      -> 注意:CB0[51]~CB0[54]是一个完整的矩阵，从CB0[51]数据看这是个Matrix_Inv_P的矩阵
                                                       -> 推测o1.xyz是世界空间中，全屏Blit三角形顶点的(非单位)朝向向量 
                                                       -> 在传递到PixelShader时进过插值寄存器插值运算，可以获得每一个像素对应位置的视方向！ 
                                                       -> 综合而言，ps阶段通过补齐CB0[51]的平移变换，就能获得正确的世界空间像素点坐标！ 

@@ -254,9 +254,9 @@ ps_5_0
  160:   endif
   -----------
 
- 161:   add r1.y, r4.y, r4.x
- 162:   lt r1.y, l(0), r1.y
- 163:   if_nz r1.y
+ 161:   add r1.y, r4.y, r4.x                          -> 将shadow_atten相关的x和y通道相加 
+ 162:   lt r1.y, l(0), r1.y                           -> 0 < (~) ? 受到影响 : 不受影响 -> todo:定义“影响” 
+ 163:   if_nz r1.y                                    -> 如果“受到影响”则进入 
  164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)
  165:     sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s4, l(0)
  166:     sample_l(texture2d)(float,float,float,float) r6.xyzw, v0.xyxx, t5.xyzw, s5, l(0)
@@ -266,15 +266,15 @@ ps_5_0
  170:     iadd r4.z, r4.w, r4.z
  171:     iadd r3.w, r3.w, r4.z
  172:     and r3.w, r3.w, l(1)
- 173:     mad r1.yzw, r1.yyzw, l(0.0000, 2.0000, 2.0000, 2.0000), l(0.0000, -1.0000, -1.0000, -1.0000)
+ 173:     mad r1.yzw, r1.yyzw, l(0, 2, 2, 2), l(0, -1, -1, -1)
  174:     dp3 r4.z, r1.yzwy, r1.yzwy
  175:     rsq r4.z, r4.z
  176:     mul r5.yzw, r1.yyzw, r4.zzzz
  177:     and r0.w, r0.w, l(16)
  178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz
  179:     movc r0.w, r5.x, l(0), r0.x
- 180:     mul r4.w, r0.y, l(0.0800)
- 181:     mad r7.xyz, -r0.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r2.xyzx
+ 180:     mul r4.w, r0.y, l(0.08)
+ 181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx
  182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww
  183:     ieq r4.w, r1.x, l(5)
  184:     or r4.w, r5.x, r4.w
@@ -282,8 +282,8 @@ ps_5_0
  186:     lt r8.x, l(0), cb0[200].z
  187:     and r5.x, r5.x, r8.x
  188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x
- 189:     movc r8.xyz, r8.xxxx, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx
- 190:     movc r9.xy, r3.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
+ 189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx
+ 190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)
  191:     mul r10.xyz, r7.xyzx, r9.yyyy
  192:     mul r10.w, r0.y, r9.y
  193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx
@@ -1857,6 +1857,8 @@ ps_5_0
 1761:     mov r0.w, l(0)
 1762:     mov r1.xyz, l(0, 0, 0, 0)
 1763:   endif
+------------------------ 超级大 IF 分支的结尾  
+
 1764:   eq r0.x, cb0[200].z, l(0)
 1765:   and r1.w, r0.w, r0.x
 1766:   mov r2.w, l(0)
