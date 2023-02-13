@@ -375,16 +375,15 @@ ps_5_0
  265:     mul_sat r11.x, r0.y, cb1[7].z               -> saturate(L258 * cb1[7].z=0) 
  266:     switch r1.x
  267:     case l(1)                                   -> 木墙部分 
- 268:     case l(10)                                  -> 未知A
+ 268:     case l(10)                                  -> 未知A 
  269:     case l(11)                                  -> 未知B 
- 270:     dp3 r1.x, r5.yzwy, r10.xyzx
- 271:     dp3 r12.w, r5.yzwy, -r3.xyzx
- 272:     dp3 r13.w, -r3.xyzx, r10.xyzx
- 273:     lt r14.x, l(0), r7.w
+ 270:     dp3 r1.x, r5.yzwy, r10.xyzx                 -> Dot(normalize(Normal), normalize(cb1[5].xyz)) 
+ 271:     dp3 r12.w, r5.yzwy, -r3.xyzx                -> Dot(normalize(Normal), normalize(-ViewDirWS)) 
+ 272:     dp3 r13.w, -r3.xyzx, r10.xyzx               -> Dot(normalize(-ViewDirWS), normalize(cb1[5].xyz)) 
 
-
- 274:     if_nz r14.x
- 275:       mad r14.y, -r7.w, r7.w, l(1.0000)
+ 273:     lt r14.x, l(0), r7.w                        -> 0 < L262(cb1[6].w=0.00467*L258) ? 
+ 274:     if_nz r14.x                                 -> 
+ 275:       mad r14.y, -r7.w, r7.w, l(1) 
  276:       sqrt r14.y, r14.y
  277:       dp2 r14.z, r12.wwww, r1.xxxx
  278:       add r14.w, -r13.w, r14.z
