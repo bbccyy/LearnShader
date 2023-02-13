@@ -16,7 +16,7 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t0         SSS         R8G8B8A8_SRGB
       dcl_resource_texture2d (float,float,float,float) t1         Depth       Depth[32] Stencil[8]
       dcl_resource_texture2d (float,float,float,float) t2         Normal      Normal[R10G10B10] Mask?[A2]
-      dcl_resource_texture2d (float,float,float,float) t3         Comp        Metallic[R8] DieletricSpec[G8] Rough[B8] Flag[A8]
+      dcl_resource_texture2d (float,float,float,float) t3         Comp        Metallic[R8] DieletricSpec[G8] Rough[B8] Flag[A8] 
       dcl_resource_texture2d (float,float,float,float) t4         Albedo      BaseCol[R8G8B8]   AO[A8] 
       dcl_resource_texture2d (float,float,float,float) t5         Comp        Extra_Albedo[R8G8B8]    Spec_Intensity[A8] 
                                                                               [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
@@ -32,10 +32,11 @@ ps_5_0
       dcl_temps 18
 
 **FLAG**
+      眼睛    0.66275 * 255 = 169,   LastByte = 9,     (~ & 16 == 16) false                        
       衣服    0.65882 * 255 = 168,   LastByte = 8,     (~ & 16 == 16) false 
       头发    0.6549  * 255 = 167,   LastByte = 7,     (~ & 16 == 16) false 
       皮肤    0.64706 * 255 = 165,   LastByte = 5,     (~ & 16 == 16) false 
-      木墙    0.64912 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
+      木头    0.64912 * 255 = 177,   LastByte = 1,     (~ & 16 == 16) true  
       草叶    0.65098 * 255 = 166,   LastByte = 6,     (~ & 16 == 16) false 
       天空    0.00000 * 255 = 0,     LastByte = 0,     (~ & 16 == 16) false 
 
@@ -59,6 +60,7 @@ ps_5_0
   12:   dp3 r1.z, v1.xyzx, v1.xyzx                          -> 归一化 viewDir 存入 r3 
   13:   rsq r1.z, r1.z
   14:   mul r3.xyz, r1.zzzz, v1.xyzx 
+
   15:   lt r1.z, cb1[1].z, l(0)                             -> cb1[1].z=0.2 < 0 ? false r1.z = 0x0000 
 
   16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 （以下代码用于制备基于屏幕像素位置的随机数）
@@ -109,9 +111,9 @@ ps_5_0
             r1.y  : 与depth有关，受到cb控制的一个数，当depth<9.87时，r1.y不足1 
 
   51:   ult r1.z, cb1[2].x, l(2)                      -> cb1[2].x=3 < 2 ? false -> r1.z=0x0000 
-  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)             -> r5.xy = 0x0000 -> r5.x=false, r5.y=? (头发部分为7) 
+  52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)             -> r5.xy = 0x0000 -> r5.x=?(眼睛部分为9), r5.y=? (头发部分为7) 
   53:   and r1.z, r1.z, r5.y                          -> r1.z=0x0000 
-  54:   or r1.z, r5.x, r1.z                           -> r1.z=0x0000  -> Flag中有9号，或者Flag有7号(头发)且cb开关打开 
+  54:   or r1.z, r5.x, r1.z                           -> r1.z=0x0000  -> Flag中有9号(眼睛)，或者Flag有7号(头发)且cb开关打开 
   55:   mul r2.w, r2.w, l(0.2000)                     -> (0.50625 * depth) * 0.2 = 0.10125 * detph 
   56:   movc r1.y, r1.z, r2.w, r1.y                   -> r1.y 保持原样 = 0.10125 * detph 
   57:   lt r1.z, l(0), r1.y                           -> 0 < [0.10125 * depth] ? true -> 0xFFFF 
@@ -246,7 +248,7 @@ ps_5_0
  152:     max r1.y, r1.y, l(0)                        -> max(0, ~) -> [0,1]区间 
  153:     mad r1.y, -r1.z, r1.y, l(1.0000)            -> 1 - L146 * (~) -> 若全组两深度差值为“正”，本行返回 1，否则返回 1 - (~) 
  154:     mul r4.xz, r1.yyyy, r4.xxyx                 -> L38(shadow_atten相关).xy * (~) 
- 155:     ine r1.z, r1.x, l(9)                        -> Flag != 9 -> r1.z=0xFFFF (当前截帧不含有9号材质，因此必然返回True)   
+ 155:     ine r1.z, r1.x, l(9)                        -> Flag != 9 -> r1.z=0xFFFF (若不是9号材质(反射材质)则返回True) 
  156:     mad r1.y, r1.y, l(0.5000), l(0.5000)        -> L153 * 0.5 + 0.5 
  157:     mul r1.y, r1.y, r4.y                        -> L38(shadow_atten相关).y * (~) 
  158:     movc r1.y, r1.z, r1.y, r4.y                 -> L155 ? (~) : L38(shadow_atten相关).y 
@@ -257,40 +259,49 @@ ps_5_0
  161:   add r1.y, r4.y, r4.x                          -> 将shadow_atten相关的x和y通道相加 
  162:   lt r1.y, l(0), r1.y                           -> 0 < (~) ? 受到影响 : 不受影响 -> todo:定义“影响” 
  163:   if_nz r1.y                                    -> 如果“受到影响”则进入 
- 164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)
- 165:     sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s4, l(0)
- 166:     sample_l(texture2d)(float,float,float,float) r6.xyzw, v0.xyxx, t5.xyzw, s5, l(0)
- 167:     mul r4.zw, v0.xxxy, cb0[131].xxxy
- 168:     ftou r4.zw, r4.zzzw
- 169:     ftou r3.w, cb0[151].x
- 170:     iadd r4.z, r4.w, r4.z
- 171:     iadd r3.w, r3.w, r4.z
- 172:     and r3.w, r3.w, l(1)
- 173:     mad r1.yzw, r1.yyzw, l(0, 2, 2, 2), l(0, -1, -1, -1)
- 174:     dp3 r4.z, r1.yzwy, r1.yzwy
- 175:     rsq r4.z, r4.z
- 176:     mul r5.yzw, r1.yyzw, r4.zzzz
- 177:     and r0.w, r0.w, l(16)
- 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz
- 179:     movc r0.w, r5.x, l(0), r0.x
- 180:     mul r4.w, r0.y, l(0.08)
- 181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx
- 182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww
- 183:     ieq r4.w, r1.x, l(5)
- 184:     or r4.w, r5.x, r4.w
- 185:     lt r5.x, l(0), cb0[155].x
- 186:     lt r8.x, l(0), cb0[200].z
- 187:     and r5.x, r5.x, r8.x
- 188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x
- 189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx
- 190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)
- 191:     mul r10.xyz, r7.xyzx, r9.yyyy
- 192:     mul r10.w, r0.y, r9.y
- 193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx
- 194:     mov r7.w, r0.y
- 195:     movc r9.xyzw, r5.xxxx, r10.xyzw, r7.xyzw
- 196:     mov r8.w, r9.w
- 197:     mov r10.xyz, r2.xyzx
+
+ 164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)       -> 采样 Normal
+                                                                                                -> Normal[R10G10B10] Mask?[A2]
+ 165:     sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s4, l(0)      -> 采样 Albedo
+                                                                                                -> BaseCol[R8G8B8]   AO[A8]
+ 166:     sample_l(texture2d)(float,float,float,float) r6.xyzw, v0.xyxx, t5.xyzw, s5, l(0)      -> 采样 Comp_? 
+                                                                                                -> Extra_Albedo[R8G8B8]    Spec_Intensity[A8] 
+                                                                                                -> [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
+                                                                                                -> [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
+ 167:     mul r4.zw, v0.xxxy, cb0[131].xxxy           -> uv * screenPixelWH 
+ 168:     ftou r4.zw, r4.zzzw                         -> (uint)(~) 
+ 169:     ftou r3.w, cb0[151].x                       -> (uint)(3.0) 
+ 170:     iadd r4.z, r4.w, r4.z                       -> 当前屏幕像素坐标XY值相加 
+ 171:     iadd r3.w, r3.w, r4.z                       -> 屏幕像素XY之和 + 3 
+ 172:     and r3.w, r3.w, l(1)                        -> 奇偶性判断 -> 形成全屏西洋棋盘状纹理 
+
+ 173:     mad r1.yzw, r1.yyzw, l(0, 2, 2, 2), l(0, -1, -1, -1)  -> Normal.xyz * 2 - 1 
+ 174:     dp3 r4.z, r1.yzwy, r1.yzwy                  -> dot(~) 
+ 175:     rsq r4.z, r4.z                              -> 1/sqrt(~) 
+ 176:     mul r5.yzw, r1.yyzw, r4.zzzz                -> normalize(Normal.xyz * 2 - 1) 
+ 177:     and r0.w, r0.w, l(16)                       -> raw_Flag & uint(16) 
+                                                      -> 木墙 == true，其他 == false 
+ 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否为木墙 ? r6(0) : r6(tex5.wxyz) 
+ 179:     movc r0.w, r5.x, l(0), r0.x                 -> 是否为眼睛 ? r0.w(0) : r0.w(Tex3.x=Metallic) 
+ 180:     mul r4.w, r0.y, l(0.08)                     -> kDieletricSpec * 0.08 
+ 181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx   -> Albedo - 0.08 * kDieletricSpec
+ 182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww       -> Metallic * (~) + kDieletricSpec * 0.08 
+ 183:     ieq r4.w, r1.x, l(5)                        -> Flag == uint(5) ? -> 是否是皮肤 
+ 184:     or r4.w, r5.x, r4.w                         -> 眼睛 or 皮肤 ? 
+ 185:     lt r5.x, l(0), cb0[155].x                   -> 0 < cb0[155].x=1 ? true
+ 186:     lt r8.x, l(0), cb0[200].z                   -> 0 < cb0[200].z=1 ? true
+ 187:     and r5.x, r5.x, r8.x                        -> r5.x = true
+ 188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x          -> 0 != cb0[155].x=1 ? true 
+                                                      -> 以上皆为 控制开关 
+ 189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx            -> 控制开关是否打开(L188) ? r8(1) : r8(Albedo)
+ 190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)       -> 奇偶性判断 ? r9(1,0) : r9(0,1) 
+ 191:     mul r10.xyz, r7.xyzx, r9.yyyy               -> L182 * (~).y -> 对Albedo应用棋盘纹理  
+ 192:     mul r10.w, r0.y, r9.y                       -> kDieletricSpec * L190.y 
+ 193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx      -> 控制开关是否打开(L187) ? L190.xxx : L189.xyz -> 在棋盘/纯色/Albedo之前切换 
+ 194:     mov r7.w, r0.y                              -> 保存 kDieletricSpec 
+ 195:     movc r9.xyzw, r5.xxxx, r10.xyzw, r7.xyzw    -> 控制开关是否打开(L187) ? 棋盘纹理化的(L182)颜色 : (L182)颜色 
+ 196:     mov r8.w, r9.w                              -> 控制开关是否打开(L187) ? 保存"kDieletricSpec * L190.y" : 保存 "kDieletricSpec" 
+ 197:     mov r10.xyz, r2.xyzx                        -> 
  198:     mov r10.w, r7.w
  199:     movc r8.xyzw, r4.wwww, r8.xyzw, r10.xyzw
  200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx
