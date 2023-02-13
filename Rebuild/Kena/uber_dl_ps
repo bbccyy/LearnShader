@@ -293,26 +293,27 @@ ps_5_0
  187:     and r5.x, r5.x, r8.x                        -> r5.x = true
  188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x          -> 0 != cb0[155].x=1 ? true 
                                                       -> 以上皆为 控制开关 
- 189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx            -> 控制开关是否打开(L188) ? r8(1) : r8(Albedo)
- 190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)       -> 奇偶性判断 ? r9(1,0) : r9(0,1) 
+ 189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx      -> 控制开关是否打开(L188) ? r8(1) : r8(Albedo)
+ 190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0) -> 奇偶性判断 ? r9(1,0) : r9(0,1) 
  191:     mul r10.xyz, r7.xyzx, r9.yyyy               -> L182 * (~).y -> 对Albedo应用棋盘纹理  
  192:     mul r10.w, r0.y, r9.y                       -> kDieletricSpec * L190.y 
- 193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx      -> 控制开关是否打开(L187) ? L190.xxx : L189.xyz -> 在棋盘/纯色/Albedo之前切换 
+ 193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx      -> 控制开关是否打开(L187) ? L190.xxx(棋盘) : L189.xyz(纯色/Albedo) -> 3者切换 
  194:     mov r7.w, r0.y                              -> 保存 kDieletricSpec 
  195:     movc r9.xyzw, r5.xxxx, r10.xyzw, r7.xyzw    -> 控制开关是否打开(L187) ? 棋盘纹理化的(L182)颜色 : (L182)颜色 
  196:     mov r8.w, r9.w                              -> 控制开关是否打开(L187) ? 保存"kDieletricSpec * L190.y" : 保存 "kDieletricSpec" 
- 197:     mov r10.xyz, r2.xyzx                        -> 
- 198:     mov r10.w, r7.w
- 199:     movc r8.xyzw, r4.wwww, r8.xyzw, r10.xyzw
- 200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx
- 201:     mad r7.xyz, -r8.xyzx, r0.wwww, r8.xyzx
- 202:     mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx
- 203:     mad r2.xyz, r2.xyzx, cb0[136].wwww, cb0[136].xyzx
- 204:     mul r0.y, cb1[7].w, l(0.5000)
- 205:     mad r9.xyz, -r0.yyyy, cb1[6].xyzx, cb1[5].xyzx
- 206:     mad r10.xyz, r0.yyyy, cb1[6].xyzx, cb1[5].xyzx
- 207:     lt r0.y, l(0), cb1[7].w
- 208:     if_nz r0.y
+ 197:     mov r10.xyz, r2.xyzx                        -> 保存 Albedo
+ 198:     mov r10.w, r7.w                             -> 保存 kDieletricSpec -> r10=[Albedo.rgb, kDieletricSpec] 
+ 199:     movc r8.xyzw, r4.wwww, r8.xyzw, r10.xyzw    -> 是否是眼睛 or 皮肤 ? L193(棋盘/纯色/Albedo之一) : [Albedo.rgb, kDieletricSpec]
+ 200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx      -> 是否是眼睛 or 皮肤 ? L195(棋盘纹理化的L182)颜色 : (L182)颜色 
+ 201:     mad r7.xyz, -r8.xyzx, r0.wwww, r8.xyzx      -> (1 - L179(0 or Metallic)) * L199颜色 
+ 202:     mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx -> (~).xyz * cb0[135].w=1 + cb0[135].xyz=0  -> 缩放 
+ 203:     mad r2.xyz, r2.xyzx, cb0[136].wwww, cb0[136].xyzx -> L200.xyz * cb0[136].w=1 + cb0[136].xyz=0 -> 缩放 
+ 204:     mul r0.y, cb1[7].w, l(0.5000)               -> cb1[7].w=0 * 0.5 
+ 205:     mad r9.xyz, -r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] - (L204) * cb1[6].xyz=[...] 
+ 206:     mad r10.xyz, r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] + (L204) * cb1[6].xyz=[...] 
+
+ 207:     lt r0.y, l(0), cb1[7].w                     -> 0 < cb1[7].w=0 ? false 
+ 208:     if_nz r0.y                                  -> 不进入 
  209:       dp3 r3.w, r9.xyzx, r9.xyzx
  210:       dp3 r5.x, r10.xyzx, r10.xyzx
  211:       rsq r3.w, r3.w
@@ -328,56 +329,60 @@ ps_5_0
  221:       mul r5.x, r5.x, r11.x
  222:       mad r3.w, r10.w, r3.w, r5.x
  223:       mul r3.w, r3.w, l(0.5000)
- 224:     else
- 225:       dp3 r5.x, r9.xyzx, r9.xyzx
- 226:       add r10.w, r5.x, l(1.0000)
- 227:       rcp r7.w, r10.w
- 228:       rsq r5.x, r5.x
- 229:       mul r11.xyz, r5.xxxx, r9.xyzx
- 230:       dp3 r3.w, r5.yzwy, r11.xyzx
- 231:       mov r9.w, l(1.0000)
+ 224:     else                                        -> 进入 
+ 225:       dp3 r5.x, r9.xyzx, r9.xyzx                -> Dot(L205)
+ 226:       add r10.w, r5.x, l(1.0000)                -> 1 + (~)
+ 227:       rcp r7.w, r10.w                           -> 1 / (~) 
+ 228:       rsq r5.x, r5.x                            -> 1 / (L225)
+ 229:       mul r11.xyz, r5.xxxx, r9.xyzx             -> normalize(L205)
+ 230:       dp3 r3.w, r5.yzwy, r11.xyzx               -> Dot(Normal, (~))
+ 231:       mov r9.w, l(1.0000)                       -> Set r9.w=1 
  232:     endif
- 233:     lt r5.x, l(0), cb1[6].w
- 234:     mul r10.w, cb1[6].w, cb1[6].w
- 235:     mul_sat r7.w, r7.w, r10.w
- 236:     sqrt r7.w, r7.w
- 237:     lt r10.w, r3.w, r7.w
- 238:     max r11.x, r3.w, -r7.w
- 239:     add r11.x, r7.w, r11.x
- 240:     mul r11.x, r11.x, r11.x
- 241:     mul r7.w, r7.w, l(4.0000)
- 242:     div r7.w, r11.x, r7.w
- 243:     movc r7.w, r10.w, r7.w, r3.w
- 244:     movc_sat r3.w, r5.x, r7.w, r3.w
- 245:     dp3 r5.x, r3.xyzx, r5.yzwy
- 246:     add r5.x, r5.x, r5.x
- 247:     mad r11.xyz, r5.yzwy, -r5.xxxx, r3.xyzx
- 248:     add r10.xyz, -r9.xyzx, r10.xyzx
- 249:     dp3 r5.x, r11.xyzx, r10.xyzx
- 250:     mad r11.xyz, r5.xxxx, r11.xyzx, -r10.xyzx
- 251:     dp3 r7.w, r9.xyzx, r11.xyzx
- 252:     mul r5.x, r5.x, r5.x
- 253:     mad r5.x, cb1[7].w, cb1[7].w, -r5.x
- 254:     div_sat r5.x, r7.w, r5.x
- 255:     mad r10.xyz, r5.xxxx, r10.xyzx, r9.xyzx
- 256:     movc r9.xyz, r0.yyyy, r10.xyzx, r9.xyzx
- 257:     dp3 r0.y, r9.xyzx, r9.xyzx
- 258:     rsq r0.y, r0.y
- 259:     mul r10.xyz, r0.yyyy, r9.xyzx
- 260:     max r0.z, r0.z, cb0[219].y
- 261:     mul r5.x, r0.z, r0.z
- 262:     mul r7.w, r0.y, cb1[6].w
- 263:     mad r10.w, -r0.z, r0.z, l(1.0000)
- 264:     mul_sat r7.w, r7.w, r10.w
- 265:     mul_sat r11.x, r0.y, cb1[7].z
+
+ 233:     lt r5.x, l(0), cb1[6].w                     -> 0 < cb1[6].w=0.00467 ? true 
+ 234:     mul r10.w, cb1[6].w, cb1[6].w               -> cb1[6].w * cb1[6].w 
+ 235:     mul_sat r7.w, r7.w, r10.w                   -> saturate(L227) * (~) -> L227 = 1/(1+Dot(cb1[5].xyz, cb1[5].xyz)) 
+ 236:     sqrt r7.w, r7.w                             -> sqrt(~) 
+ 237:     lt r10.w, r3.w, r7.w                        -> L230 < (~) ? -> L230 = Dot(Normal, normalize(cb1[5].xyz)) 
+ 238:     max r11.x, r3.w, -r7.w                      -> max(L230, -L236) 
+ 239:     add r11.x, r7.w, r11.x                      -> L236 + (~) 
+ 240:     mul r11.x, r11.x, r11.x                     -> (~) * (~) 
+ 241:     mul r7.w, r7.w, l(4.0000)                   -> L236 * 4
+ 242:     div r7.w, r11.x, r7.w                       -> L240 / (~) 
+ 243:     movc r7.w, r10.w, r7.w, r3.w                -> 条件L230 < L236是否达成 ? (~) : L230 
+ 244:     movc_sat r3.w, r5.x, r7.w, r3.w             -> 条件0 < cb1[6].w=0.00467是否达成 ? saturate(~) : saturate(L230) 
+
+ 245:     dp3 r5.x, r3.xyzx, r5.yzwy                  -> Dot(normalize(ViewDirWS), normalize(Normal))
+ 246:     add r5.x, r5.x, r5.x                        -> (~) + (~) 
+ 247:     mad r11.xyz, r5.yzwy, -r5.xxxx, r3.xyzx     -> normalize(ViewDirWS) - (~) * normalize(Normal) -> ReflectDir 
+ 248:     add r10.xyz, -r9.xyzx, r10.xyzx             -> L206=cb1[5].xyz - L205=cb1[5].xyz = 0
+ 249:     dp3 r5.x, r11.xyzx, r10.xyzx                -> Dot(ReflectDir, (~))
+ 250:     mad r11.xyz, r5.xxxx, r11.xyzx, -r10.xyzx   -> (~) * ReflectDir - L248 -> 大概率为0 
+ 251:     dp3 r7.w, r9.xyzx, r11.xyzx                 -> Dot(L205=cb1[5].xyz, (~)) 
+ 252:     mul r5.x, r5.x, r5.x                        -> L249 * L249 
+ 253:     mad r5.x, cb1[7].w, cb1[7].w, -r5.x         -> cb1[7].w=0 * cb1[7].w=0 - (~) 
+ 254:     div_sat r5.x, r7.w, r5.x                    -> saturate(L251 / (~)) 
+ 255:     mad r10.xyz, r5.xxxx, r10.xyzx, r9.xyzx     -> (~) * L248 + L205 
+ 256:     movc r9.xyz, r0.yyyy, r10.xyzx, r9.xyzx     -> 条件0 < cb1[7].w=0是否达成 ? (~) : L205=cb1[5].xyz 
+ 257:     dp3 r0.y, r9.xyzx, r9.xyzx                  -> Dot((~), (~)) 
+ 258:     rsq r0.y, r0.y                              -> 1 / sqrt(~) 
+ 259:     mul r10.xyz, r0.yyyy, r9.xyzx               -> normalize(L256) -> 此处相当于 normalize(cb1[5].xyz) 
+ 260:     max r0.z, r0.z, cb0[219].y                  -> max(cb0[219].y=0.02, Tex.z=Rough) 
+ 261:     mul r5.x, r0.z, r0.z                        -> (~) * (~) 
+ 262:     mul r7.w, r0.y, cb1[6].w                    -> cb1[6].w=0.00467 * L258 
+ 263:     mad r10.w, -r0.z, r0.z, l(1.0000)           -> 1 - Rough^2 
+ 264:     mul_sat r7.w, r7.w, r10.w                   -> saturate(L262 * (~)) 
+ 265:     mul_sat r11.x, r0.y, cb1[7].z               -> saturate(L258 * cb1[7].z=0) 
  266:     switch r1.x
- 267:     case l(1)
- 268:     case l(10)
- 269:     case l(11)
+ 267:     case l(1)                                   -> 木墙部分 
+ 268:     case l(10)                                  -> 未知A
+ 269:     case l(11)                                  -> 未知B 
  270:     dp3 r1.x, r5.yzwy, r10.xyzx
  271:     dp3 r12.w, r5.yzwy, -r3.xyzx
  272:     dp3 r13.w, -r3.xyzx, r10.xyzx
  273:     lt r14.x, l(0), r7.w
+
+
  274:     if_nz r14.x
  275:       mad r14.y, -r7.w, r7.w, l(1.0000)
  276:       sqrt r14.y, r14.y
