@@ -446,77 +446,77 @@ ps_5_0
  335:         mul_sat r15.x, r14.w, r14.z             -> saturate((~) * L333)             -> 返回值.x
  336:         mad_sat r15.y, r14.w, r14.y, r14.w      -> saturate(L333 * L331 + L333)     -> 返回值.y 
  337:       endif
- 338:     else
- 339:       mad r14.y, r13.w, l(2.0000), l(2.0000)
- 340:       rsq r14.y, r14.y
- 341:       add r1.x, r1.x, r12.w
- 342:       mul_sat r15.x, r14.y, r1.x
- 343:       mad_sat r15.y, r14.y, r13.w, r14.y
+ 338:     else                                        -> 若 0 < L264 不成立 
+ 339:       mad r14.y, r13.w, l(2.0000), l(2.0000)    -> L272 * 2 + 2
+ 340:       rsq r14.y, r14.y                          -> 1 / sqrt(~) 
+ 341:       add r1.x, r1.x, r12.w                     -> L270 + L271  
+ 342:       mul_sat r15.x, r14.y, r1.x                -> saturate(L340 * (~))             -> 返回值.x 
+ 343:       mad_sat r15.y, r14.y, r13.w, r14.y        -> saturate(L340 * L272 + L340)     -> 返回值.y 
  344:     endif
- 345:     add r1.x, abs(r12.w), l(0.0000)
- 346:     min r1.x, r1.x, l(1.0000)
- 347:     mul r14.yzw, r3.wwww, r7.xxyz
- 348:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)
- 349:     mul r12.w, r5.x, r5.x
- 350:     lt r13.w, l(0), r11.x
- 351:     mul r14.y, r11.x, r11.x
- 352:     mad r14.z, r15.y, l(3.6000), l(0.4000)
- 353:     div r14.y, r14.y, r14.z
- 354:     mad r14.y, r5.x, r5.x, r14.y
- 355:     min r14.y, r14.y, l(1.0000)
- 356:     movc r16.x, r13.w, r14.y, r12.w
- 357:     mul r12.w, r7.w, l(0.2500)
- 358:     ishr r13.w, r16.x, l(1)
- 359:     iadd r13.w, r13.w, l(0.0000)
- 360:     mad r13.w, r13.w, l(3.0000), r7.w
- 361:     mul r12.w, r12.w, r13.w
- 362:     add r13.w, r15.y, l(0.0010)
- 363:     div r12.w, r12.w, r13.w
- 364:     add r17.x, r12.w, r16.x
- 365:     div r17.y, r16.x, r17.x
- 366:     mov r16.y, l(1.0000)
- 367:     movc r14.xy, r14.xxxx, r17.xyxx, r16.xyxx
- 368:     lt r12.w, r9.w, l(1.0000)
- 369:     add r14.z, -r9.w, l(1.0001)
- 370:     add r14.w, r9.w, l(1.0000)
- 371:     div r14.z, r14.z, r14.w
- 372:     sqrt r14.z, r14.z
- 373:     mul r14.w, r14.z, l(0.2500)
- 374:     ishr r15.z, r14.x, l(1)
- 375:     iadd r15.z, r15.z, l(0.0000)
- 376:     mad r14.z, r15.z, l(3.0000), r14.z
- 377:     mul r14.z, r14.z, r14.w
- 378:     div r13.w, r14.z, r13.w
- 379:     add r13.w, r13.w, r14.x
- 380:     div r13.w, r14.x, r13.w
- 381:     sqrt r13.w, r13.w
- 382:     mul r13.w, r13.w, r14.y
- 383:     movc r12.w, r12.w, r13.w, r14.y
- 384:     mad r13.w, r15.x, r16.x, -r15.x
- 385:     mad r13.w, r13.w, r15.x, l(1.0000)
- 386:     mul r13.w, r13.w, r13.w
- 387:     mul r13.w, r13.w, l(3.1416)
- 388:     div r13.w, r16.x, r13.w
- 389:     mul r12.w, r12.w, r13.w
- 390:     sqrt r13.w, r16.x
- 391:     add r14.x, -r13.w, l(1.0000)
- 392:     mad r14.y, r1.x, r14.x, r13.w
- 393:     mad r13.w, r3.w, r14.x, r13.w
- 394:     mul r1.x, r1.x, r13.w
- 395:     mad r1.x, r3.w, r14.y, r1.x
- 396:     rcp r1.x, r1.x
- 397:     mul r1.x, r1.x, r12.w
- 398:     add r12.w, -r15.y, l(1.0000)
- 399:     mul r13.w, r12.w, r12.w
- 400:     mul r13.w, r13.w, r13.w
- 401:     mul r14.x, r12.w, r13.w
- 402:     mul_sat r14.y, r2.y, l(50.0000)
- 403:     mad r12.w, -r13.w, r12.w, l(1.0000)
- 404:     mul r15.xyz, r2.xyzx, r12.wwww
- 405:     mad r14.xyz, r14.yyyy, r14.xxxx, r15.xyzx
- 406:     mul r1.x, r1.x, l(0.5000)
- 407:     mul r14.xyz, r14.xyzx, r1.xxxx
- 408:     mul r12.xyz, r3.wwww, r14.xyzx
+ 345:     add r1.x, abs(r12.w), l(0.0000)             -> abs(L271) + 0
+ 346:     min r1.x, r1.x, l(1.0000)                   -> min((~), 1)
+ 347:     mul r14.yzw, r3.wwww, r7.xxyz               -> L244 * L202 
+ 348:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)      -> (~) / PI 
+ 349:     mul r12.w, r5.x, r5.x                       -> L261 * L261 -> Rough^4 
+ 350:     lt r13.w, l(0), r11.x                       -> 0 < L265 ?     -> L265 推测为0 
+ 351:     mul r14.y, r11.x, r11.x                     -> L265 * L265 
+ 352:     mad r14.z, r15.y, l(3.6), l(0.4)            -> 返回值.y * 3.6 + 0.4 
+ 353:     div r14.y, r14.y, r14.z                     -> L351 / L352 
+ 354:     mad r14.y, r5.x, r5.x, r14.y                -> L261 * L261 + (~) 
+ 355:     min r14.y, r14.y, l(1.0000)                 -> min((~), 1) 
+ 356:     movc r16.x, r13.w, r14.y, r12.w             -> 0 < L265 ? (~) : (L261 * L261 = Rough^4) 
+ 357:     mul r12.w, r7.w, l(0.2500)                  -> L264 * 0.25 
+ 358:     ishr r13.w, r16.x, l(1)                     -> L356 >> 1 
+ 359:     iadd r13.w, r13.w, l(0.0000)                -> (int)(~) + 0 
+ 360:     mad r13.w, r13.w, l(3.0000), r7.w           -> (~) * 3 + L264 
+ 361:     mul r12.w, r12.w, r13.w                     -> L357 * (~) 
+ 362:     add r13.w, r15.y, l(0.0010)                 -> 返回值.y + 0.001 
+ 363:     div r12.w, r12.w, r13.w                     -> L361 / (~) 
+ 364:     add r17.x, r12.w, r16.x                     -> (~) + L356 
+ 365:     div r17.y, r16.x, r17.x                     -> L356 / (~) 
+ 366:     mov r16.y, l(1.0000)                        -> Set 1 to r16.y 
+ 367:     movc r14.xy, r14.xxxx, r17.xyxx, r16.xyxx   -> 0 < L264 ? r17.xy : r16.xy 
+ 368:     lt r12.w, r9.w, l(1.0000)                   -> L231=1 < 1 ? 
+ 369:     add r14.z, -r9.w, l(1.0001)                 -> 1.0001 - (L231=1) 
+ 370:     add r14.w, r9.w, l(1.0000)                  -> 1 + L231 
+ 371:     div r14.z, r14.z, r14.w                     -> L369 / (~) 
+ 372:     sqrt r14.z, r14.z                           -> sqrt(~) 
+ 373:     mul r14.w, r14.z, l(0.2500)                 -> 0.25 * (~) 
+ 374:     ishr r15.z, r14.x, l(1)                     -> L367.x >> 1 
+ 375:     iadd r15.z, r15.z, l(0.0000)                -> (~) + 0 
+ 376:     mad r14.z, r15.z, l(3.0000), r14.z          -> (~) * 3 + L372 
+ 377:     mul r14.z, r14.z, r14.w                     -> (~) * L373 
+ 378:     div r13.w, r14.z, r13.w                     -> (~) / L362 
+ 379:     add r13.w, r13.w, r14.x                     -> (~) + L367.x 
+ 380:     div r13.w, r14.x, r13.w                     -> L367.x / (~)
+ 381:     sqrt r13.w, r13.w                           -> sqrt(~) 
+ 382:     mul r13.w, r13.w, r14.y                     -> (~) * L367.y 
+ 383:     movc r12.w, r12.w, r13.w, r14.y             -> L231=1 < 1 ? (~) : L367.y 
+ 384:     mad r13.w, r15.x, r16.x, -r15.x             -> 返回值.x * L356 - 返回值.x 
+ 385:     mad r13.w, r13.w, r15.x, l(1.0000)          -> (~) * 返回值.x + 1 
+ 386:     mul r13.w, r13.w, r13.w                     -> (~) * (~) 
+ 387:     mul r13.w, r13.w, l(3.1416)                 -> (~) * PI 
+ 388:     div r13.w, r16.x, r13.w                     -> L356 / (~) 
+ 389:     mul r12.w, r12.w, r13.w                     -> L383 * (~) 
+ 390:     sqrt r13.w, r16.x                           -> sqrt(L356)
+ 391:     add r14.x, -r13.w, l(1.0000)                -> 1 - (~)
+ 392:     mad r14.y, r1.x, r14.x, r13.w               -> min(abs(L271)+0, 1) * (~) + sqrt(L356)
+ 393:     mad r13.w, r3.w, r14.x, r13.w               -> L244 * (1 - sqrt(L356)) + sqrt(L356) 
+ 394:     mul r1.x, r1.x, r13.w                       -> min(abs(L271)+0, 1) * (~) 
+ 395:     mad r1.x, r3.w, r14.y, r1.x                 -> L244 * L392 + (~) 
+ 396:     rcp r1.x, r1.x                              -> 1 / (~) 
+ 397:     mul r1.x, r1.x, r12.w                       -> (~) * L389 
+ 398:     add r12.w, -r15.y, l(1.0000)                -> 1 - 返回值.y 
+ 399:     mul r13.w, r12.w, r12.w                     -> (~) * (~) 
+ 400:     mul r13.w, r13.w, r13.w                     -> (~) * (~) -> (1 - 返回值.y)^4 
+ 401:     mul r14.x, r12.w, r13.w                     -> (1 - 返回值.y)^5 
+ 402:     mul_sat r14.y, r2.y, l(50.0000)             -> saturate(L203.y * 50.0) 
+ 403:     mad r12.w, -r13.w, r12.w, l(1.0000)         -> 1 - (1 - 返回值.y)^5 
+ 404:     mul r15.xyz, r2.xyzx, r12.wwww              -> L203.xyz * (1 - 返回值.y)^5
+ 405:     mad r14.xyz, r14.yyyy, r14.xxxx, r15.xyzx   -> saturate(L203.y * 50.0) * (1 - 返回值.y)^5 + L203.xyz * (1 - 返回值.y)^5
+ 406:     mul r1.x, r1.x, l(0.5000)                   -> L397 * 0.5 
+ 407:     mul r14.xyz, r14.xyzx, r1.xxxx              -> L405 * (L397 * 0.5) 
+ 408:     mul r12.xyz, r3.wwww, r14.xyzx              -> L244 * (~) 
 
 
  409:     mov r13.xyz, l(0, 0, 0, 0)
