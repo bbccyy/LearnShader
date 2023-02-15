@@ -167,13 +167,15 @@ ps_5_0
                                                       -> float4 RayDepthClip = RayStartClip + mul( float4(0,0,RayLength,0), View.ViewToClip); 
                                                       -> 因为后续只使用了RayDepthClip.zw通道的数据，故此处变换矩阵运算由编译器进行了简化 
                                                       -> 又因为待变换向量特殊(视空间中心线) -> 因此没有任何变换计算发生 
+                                                      -> RayDepthClip 是射线出发点(当前像素NDC位置) + 向屏幕远方偏移向量 之后所得的终点位置 
 
-  76:     div r1.y, r1.y, r1.w                        -> 齐次除法： 得到NDC空间中沿z轴正方向指向远方的一条向量 RayDepthScreen 
-                                                      -> 其xy分量均为0，只有z有值，且和RayLength变换到NDC的长度一致 
+  76:     div r1.y, r1.y, r1.w                        -> 齐次除法  
+                                                      -> 其xy分量后面不会用到，只使用了z 
                                                       -> float RayDepthScreen.z = RayDepthClip.z / RayDepthClip.w; 
+                                                      -> RayDepthScreen本质是NDC空间下当前点朝向屏幕深处(+Z)方向偏移一个RayLength的新位置 
 
   77:     add r1.y, -r7.z, r1.y                       -> 新NDC像素坐标.z - 起始NDC像素坐标.z -> 推测为负值 -> (基于当前NDC像素点的)两深度之差 
-                                                      -> RayDepthScreen.z - RayStartScreen.z
+                                                      -> RayDepthScreen.z - RayStartScreen.z 
 
   78:     mul r1.w, abs(r1.y), l(0.2500)              -> abs(新旧NDC像素坐标.z之差) * 0.125 * 2 
                                                       -> Step = 0.125 = 1 / 8 = 1.0 / NumSteps -> 所有下面会循环8次 
