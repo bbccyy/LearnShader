@@ -22,7 +22,10 @@ ps_5_0
                                                                               [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
                                                                               [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
       dcl_resource_texture2d (float,float,float,float) t6         SSAO        AO_Intensity[R8]
-      dcl_resource_texture2d (float,float,float,float) t7         ShadowTex   Shd_Main[R8] Shd_Sub[G8] Msk_Main[B8] Msk_Sub[A8]  
+      dcl_resource_texture2d (float,float,float,float) t7         LightAtten  Whole scene directional light shadows [R8]
+                                                                              Whole scene directional light SSS shadows [G8]
+                                                                              Light function + per-object shadows [B8]
+                                                                              Per-object SSS shadowing [A8]
       dcl_resource_texture2d (float,float,float,float) t8         UnknowLUT   R16G16B16A16 
 
       dcl_input_ps linear v0.xy                                   -> uv 
@@ -62,6 +65,8 @@ ps_5_0
   14:   mul r3.xyz, r1.zzzz, v1.xyzx 
 
   15:   lt r1.z, cb1[1].z, l(0)                             -> cb1[1].z=0.2 < 0 ? false r1.z = 0x0000 
+                                                            -> LightData.ContactShadowLengthInWS = DeferredLightUniforms.ContactShadowLength < 0.0f;
+                                                            -> 参考方法：SetupLightDataForStandardDeferred 
 
 ---- InterleavedGradientNoise（以下代码用于制备基于屏幕像素位置的随机数）
   16:   utof r1.w, cb0[143].y                               -> r1.w = 3.0 -> 对应函数入参FrameId 
@@ -76,32 +81,54 @@ ps_5_0
       -> T7.y^2是另外一个阴影图;      T7.w^2是T7.y^2的遮罩. 
 
   22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0) 
-  23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> 解码: shadowMap.x 和 shadowMap.y 共两张Shadow_Attenuation 
+                                                      -> GetPerPixelLightAttenuation(InputParams.ScreenUV) 
+  23:   mul r5.xyzw, r4.xyzw, r4.xyzw                 -> LightAtten.xyzw ^ 2
 
-  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth （注:r1.y此后不再存放SceneDepth) 
+  24:   mul r2.w, r1.y, cb0[37].y                     -> 0.50625 * depth （注:r1.y此后不再存放SceneDepth)
+                                                      -> const float ContactShadowLengthScreenScale = View.ClipToView[1][1] * GBuffer.Depth; 
 
   25:   if_nz cb1[2].x  -> 总是进入 
   26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)         -> 对衣服、木墙、草而言 r4.zw = [32, 0] 
   27:     movc r3.w, r4.w, l(0), l(1.0000)            -> 1 
   28:     movc r3.w, r4.z, r3.w, l(1.0000)            -> 1 只有Flag值的倒数第6第7bit位都是1，r3.w才可能为0 
+
   29:     dp4 r4.z, cb1[0].xyzw, l(1,1,1,1)           -> 0 注:cb1[0] == 0 
+                                                      -> float UsesStaticShadowMap = dot(LightData.ShadowMapChannelMask, float4(1, 1, 1, 1));
+
   30:     dp4 r3.w, r3.wwww, cb1[0].xyzw              -> 0 
-  31:     add r3.w, r3.w, l(-1.0000)                  -> -1 
-  32:     mad r3.w, r4.z, r3.w, l(1.0000)             -> 1 
+                                                      -> dot(GBuffer.PrecomputedShadowFactors, LightData.ShadowMapChannelMask)
+  31:     add r3.w, r3.w, l(-1.0000)                  -> (~) - 1
+  32:     mad r3.w, r4.z, r3.w, l(1.0000)             -> (L30 - 1) * UsesStaticShadowMap + 1
+                                                      -> float StaticShadowing = lerp(1, L30, UsesStaticShadowMap)
+
   33:     mad_sat r1.y, r1.y, cb1[1].x, cb1[1].y      -> saturate(depth * 0.00003 + (-9.0)) -> depth~300000
+                                                      -> float Fade = saturate(SceneDepth * LightData.DistanceFadeMAD.x + LightData.DistanceFadeMAD.y);
   34:     mul r1.y, r1.y, r1.y                        -> ~^2 -> 一个基于视线深度的调和因子，不足300000时均为0 
-  35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww       -> 1 - shadowMap.xy 
-  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx        -> Lerp(shadowMap.xy, 1, L34) -> shadow_atten 
-  37:     min r1.y, r5.w, r4.y                        -> min(shadow_atten.y, T7.w^2) -> 使用遮罩w，使值不超过T7.w^2 == 1 
-  38:     mul r4.x, r5.z, r4.x                        -> shadow_atten.x * T7.z^2 -> 使用遮罩T7.z^2=1 
-  39:     mul r4.y, r5.z, r1.y                        -> min(shadow_atten.y, T7.w^2) * T7.z^2
-                                                      -> r4.xy = [shadow_atten.x, min(shadow_atten.y, 1)] * T7.z^2 
+                                                      -> return Fade * Fade;  参考方法 DistanceFromCameraFade 
+                                                      -> DynamicShadowFraction -> 用于衰减远处阴影的强度 
+
+  35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww       -> StaticShadowing - LightAtten.xy^2 
+  36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx        -> Lerp(LightAtten.xy^2, StaticShadowing, DynamicShadowFraction) 
+                                                      -> (*).x = Shadow.SurfaceShadow 
+
+  37:     min r1.y, r5.w, r4.y                        -> min(lerp(LightAtten.y^2, StaticShadowing, DynamicShadowFraction), LightAtten.w); 
+                                                      -> (*) = Shadow.TransmissionShadow 
+
+  38:     mul r4.x, r5.z, r4.x                        -> Shadow.SurfaceShadow *= LightAtten.z^2 
+
+  39:     mul r4.y, r5.z, r1.y                        -> Shadow.TransmissionShadow *= LightAtten.z^2 
+
   40:     ult r1.y, l(1), cb1[2].x                    -> 1 < cb1[2].x=3   ? true 
+                                                      -> LightData.ShadowedBits > 1 
   41:     lt r3.w, l(0), abs(cb1[1].z)                -> 0 < cb1[1].z=0.2 ? true 
-  42:     and r1.y, r1.y, r3.w                        -> 0xFFFFFFFF -> 必须同时满足上面2次条件判断，此Mask才为0xFFFF，否则为0x0000 
-  43:     movc r1.z, r1.z, l(1.0000), r2.w            -> condi=false, 选择后面的r2.w=0.50625 * depth 
+                                                      -> LightData.ContactShadowLength > 0
+  42:     and r1.y, r1.y, r3.w                        -> if (LightData.ShadowedBits > 1 && LightData.ContactShadowLength > 0)
+                                                      -> 此处返回 True 
+
+  43:     movc r1.z, r1.z, l(1.0000), r2.w            -> cb1[1].z=0.2 < 0 ? 1 : r2.w=0.50625 * depth 
   44:     mul r1.z, r1.z, abs(cb1[1].z)               -> (0.50625 * depth) * 0.2 
-  45:     and r1.y, r1.z, r1.y                        -> ~ and 0xFFFFFFFF == ~ 
+                                                      -> ContactShadowLength = LightData.ContactShadowLength * (LightData.ContactShadowLengthInWS ? 1.0f : ContactShadowLengthScreenScale);
+  45:     and r1.y, r1.z, r1.y                        -> 若IF分支没有进入，则返回值=0，若进入了，则返回 (~) = ContactShadowLength 
   46:   else  -> 不进入 
   47:     sample_l(texture2d)(float,float,float,float) r4.x, v0.xyxx, t6.xyzw, s6, l(0)   -> 采样SSAO 
   48:     mov r4.y, l(1.0000)
@@ -221,7 +248,7 @@ ps_5_0
   97:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)   -> 采样获得DeviceZ 
   98:     add r2.y, -r2.y, r10.z 
   99:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 100:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_3的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF, 反之=0x0000
+ 100:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_3的)两深度之差为“负” -> 比较成功：r3.w=0xFFFF, 反之=0x0000 
  101:     lt r3.w, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True 
  102:     and r2.y, r2.y, r3.w                        -> ~ And 当前组结果 
  103:     movc r2.x, r2.y, r2.z, r2.x                 -> 依据上式条件，更新r2.x -> 注:只有保持一路上所有组偏移点的两深度差为“正”，r2.x才可能一直=-1 
@@ -231,14 +258,14 @@ ps_5_0
  105:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0) 
  106:     add r2.y, -r2.y, r10.z
  107:     mad r2.y, abs(r1.y), l(0.2500), r2.y
- 108:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_4的)两深度之差为“负” -> 比较成功：r2.y=0xFFFF, 反之=0x0000
+ 108:     lt r2.y, abs(r2.y), r1.w                    -> 若(基于随机偏移后NDC像素点_4的)两深度之差为“负” -> 比较成功：r2.y=0xFFFF, 反之=0x0000 
  109:     lt r2.z, r2.x, l(0)                         -> 若之前***所有组***偏移点两深度之差均为“正” -> 当前行判断返回 True 
  110:     and r2.y, r2.z, r2.y                        -> ~ And 当前组结果 
- 111:     movc r2.x, r2.y, r2.w, r2.x                 -> 依据上式条件，更新r2.x
+ 111:     movc r2.x, r2.y, r2.w, r2.x                 -> 依据上式条件，更新r2.x 
 
  112:     mad r10.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.6250, 0.7500, 0.8750, 1.0000) -> 将[-0.5, 0.5]区间的随机数转化成新4维度 
  113:     mad r2.yzw, r9.xxyz, r10.xxxx, r8.xxyz      -> (NDC像素点)r8 + (SceneDepth推导的随机长度)scale_5 * (NDC向量γ)r9 
-                                                      -> 偏移点_5  
+                                                      -> 偏移点_5 
  114:     sample_l(texture2d)(float,float,float,float) r1.z, r2.yzyy, t1.yzxw, s1, l(0) 
  115:     add r1.z, -r1.z, r2.w
  116:     mad r1.z, abs(r1.y), l(0.2500), r1.z
@@ -273,18 +300,24 @@ ps_5_0
  142:     lt r1.w, r1.z, l(0)
  143:     and r1.y, r1.w, r1.y 
  144:     movc r1.y, r1.y, r10.w, r1.z                -> 更新到r1.y 
+                                                      -> FirstHitTime
 
- 145:     lt r1.z, l(0), r1.y                         -> 全组两深度差值为“正”,则r1.y=-1，本行才可能返回 False，否则返回 True 
+ 145:     lt r1.z, l(0), r1.y                         -> 全组两深度差值为“正”(没有Hit),则r1.y=-1，本行返回 False(0)，否则返回 True(0xFFFF)
  146:     and r1.z, r1.z, l(1.0000)                   -> r1.z=True时为1, r1.z=False时为0 
+                                                      -> float Shadow = FirstHitTime > 0.0 ? 1.0 : 0.0;
 
  147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy        -> NDC向量γ.xy * 正随机数或-1(r1.y) + NDC像素位置.xy -> 注:此处xy处于[-1,1]区间 
                                                       -> NDC_XY偏移 -> 偏移可能是正光照方向，也可能是负光照方向，取决于前8组偏移的深度差 
  148:     mad r1.yw, abs(r1.yyyw), l(0, 6, 0, 6), l(0, -5, 0, -5) -> abs(NDC_XY偏移) * 6 - 5 
  149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)           -> max(0, ~) 
+                                                      -> float2 Vignette = max(6.0 * abs(RayStartScreen.xy + RayStepScreen.xy * FirstHitTime) - 5.0, 0.0);
  150:     dp2 r1.y, r1.ywyy, r1.ywyy                  -> dot(~,~) 
  151:     add r1.y, -r1.y, l(1.0000)                  -> 1 - (~) 
  152:     max r1.y, r1.y, l(0)                        -> max(0, ~) -> [0,1]区间 
- 153:     mad r1.y, -r1.z, r1.y, l(1.0000)            -> 1 - L146 * (~) -> 若全组两深度差值为“正”，本行返回 1，否则返回 1 - (~) 
+                                                      -> saturate(1.0 - dot(Vignette, Vignette)) 
+ 153:     mad r1.y, -r1.z, r1.y, l(1.0000)            -> 1 - L146 * (~) -> 若全组两深度差值为“正”(没有Hit)，本行返回 1，否则返回 1 - (~) 
+                                                      -> return 1 - Shadow * saturate(1.0 - dot(Vignette, Vignette)) 
+
  154:     mul r4.xz, r1.yyyy, r4.xxyx                 -> L38(shadow_atten相关).xy * (~) 
  155:     ine r1.z, r1.x, l(9)                        -> Flag != 9 -> r1.z=0xFFFF (若不是9号材质(反射材质)则返回True) 
  156:     mad r1.y, r1.y, l(0.5000), l(0.5000)        -> L153 * 0.5 + 0.5 
