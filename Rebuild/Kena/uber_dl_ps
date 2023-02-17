@@ -318,19 +318,22 @@ ps_5_0
  153:     mad r1.y, -r1.z, r1.y, l(1.0000)            -> 1 - L146 * (~) -> 若全组两深度差值为“正”(没有Hit)，本行返回 1，否则返回 1 - (~) 
                                                       -> return 1 - Shadow * saturate(1.0 - dot(Vignette, Vignette)) 
 
- 154:     mul r4.xz, r1.yyyy, r4.xxyx                 -> L38(shadow_atten相关).xy * (~) 
+ 154:     mul r4.xz, r1.yyyy, r4.xxyx                 -> L38(shadow_atten相关).xy * (~) -> X=SurfaceShadow Y=TransmissionShadow
  155:     ine r1.z, r1.x, l(9)                        -> Flag != 9 -> r1.z=0xFFFF (若不是9号材质(反射材质)则返回True) 
  156:     mad r1.y, r1.y, l(0.5000), l(0.5000)        -> L153 * 0.5 + 0.5 
  157:     mul r1.y, r1.y, r4.y                        -> L38(shadow_atten相关).y * (~) 
  158:     movc r1.y, r1.z, r1.y, r4.y                 -> L155 ? (~) : L38(shadow_atten相关).y 
  159:     movc r4.y, r5.y, r4.z, r1.y                 -> L52(头发) ? L154.z : (~) 
+                                                      -> r4.x = SurfaceShadow
+                                                      -> r4.y = TransmissionShadow 
  160:   endif
   -----------
 
  161:   add r1.y, r4.y, r4.x                          -> 将shadow_atten相关的x和y通道相加 
  162:   lt r1.y, l(0), r1.y                           -> 0 < (~) ? 受到影响 : 不受影响 -> todo:定义“影响” 
  163:   if_nz r1.y                                    -> 如果“受到影响”则进入 
-
+                                                      -> if( Shadow.SurfaceShadow + Shadow.TransmissionShadow > 0 ) 
+-------Func:DecodeGBufferData(Start)
  164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)       -> 采样 Normal
                                                                                                 -> Normal[R10G10B10] Mask?[A2]
  165:     sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s4, l(0)      -> 采样 Albedo
@@ -339,6 +342,7 @@ ps_5_0
                                                                                                 -> Extra_Albedo[R8G8B8]    Spec_Intensity[A8] 
                                                                                                 -> [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
                                                                                                 -> [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
+-------|-------Func:CheckerFromSceneColorUV(Start) 
  167:     mul r4.zw, v0.xxxy, cb0[131].xxxy           -> uv * screenPixelWH 
  168:     ftou r4.zw, r4.zzzw                         -> (uint)(~) 
  169:     ftou r3.w, cb0[151].x                       -> (uint)(3.0) 
@@ -355,7 +359,7 @@ ps_5_0
  178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否为木墙 ? r6(0) : r6(tex5.wxyz) 
  179:     movc r0.w, r5.x, l(0), r0.x                 -> 是否为眼睛 ? r0.w(0) : r0.w(Tex3.x=Metallic) 
  180:     mul r4.w, r0.y, l(0.08)                     -> kDieletricSpec * 0.08 
- 181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx   -> Albedo - 0.08 * kDieletricSpec
+ 181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx   -> Albedo - 0.08 * kDieletricSpec 
  182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww       -> Metallic * (~) + kDieletricSpec * 0.08 
  183:     ieq r4.w, r1.x, l(5)                        -> Flag == uint(5) ? -> 是否是皮肤 
  184:     or r4.w, r5.x, r4.w                         -> 眼睛 or 皮肤 ? 

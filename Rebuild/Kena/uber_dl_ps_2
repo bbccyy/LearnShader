@@ -1,0 +1,2575 @@
+
+//这个PASS是Kena的定向光PASS 其他光源应该在另外一个pass
+//shader源码参考UE4.25的shader文件
+//以下内容来自：renderdoc的18157   的VS        
+
+//整个VS里面Kena没有进行特殊处理  UE源码是shaders文件夹内的 DeferredLightVertexShaders.usf 文件内的第16行到29行
+
+vs_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[55], immediateIndexed
+      dcl_constantbuffer cb1[3], immediateIndexed
+      dcl_input v0.xy                    => InPosition
+      dcl_input v1.xy                    => InUV
+      dcl_output o0.xy                   => OutTexCoord =>UV
+      dcl_output o1.xyz                  => OutScreenVector
+      dcl_output_siv o2.xyzw, position   => OutPosition
+      dcl_temps 2
+
+
+   0: mad r0.xy, v1.xyxx, cb1[1].xyxx, cb1[1].zwzz                                =>        DrawRectangle(float4(InPosition.xy, 0, 1), InUV, OutPosition, OutTexCoord);
+   1: mul o0.xy, r0.xyxx, cb1[2].zwzz                                             =>        通过上面这个函数计算出UV和顶点位置
+   2: mad r0.xy, v0.xyxx, cb1[0].xyxx, cb1[0].zwzz
+   3: mul r0.xy, r0.xyxx, cb1[2].xyxx
+   4: mad r0.xy, r0.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
+   5: mul r0.xy, r0.xyxx, l(1.0000, -1.0000, 0.0000, 0.0000)
+
+
+
+   6: mul r1.xyz, r0.yyyy, cb0[53].xyzx                                          =>        OutScreenVector = mul(float4(OutPosition.xy, 1, 0), View.ScreenToTranslatedWorld).xyz;
+   7: mad r1.xyz, r0.xxxx, cb0[52].xyzx, r1.xyzx
+   8: mov o2.xy, r0.xyxx
+   9: add o1.xyz, r1.xyzx, cb0[54].xyzx
+  10: mov o2.zw, l(0.0000, 0.0000, 0.0000, 1.0000)
+  11: ret
+
+
+//以下内容来自：renderdoc的18157   的PS         //PS的UE源码是shaders文件夹内的DeferredLightPixelShaders.usf 的#if USE_HAIR_LIGHTING == 0 内的 DeferredLightPixelMain
+// PS有多处与UE源码不一样的地方     搜关键字 不一样 可以看到不同之处
+Shader hash 1fb8fef2-577abf38-b8729dd4-e35a9c29
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[220], immediateIndexed
+      dcl_constantbuffer cb1[8], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_sampler s2, mode_default
+      dcl_sampler s3, mode_default
+      dcl_sampler s4, mode_default
+      dcl_sampler s5, mode_default
+      dcl_sampler s6, mode_default
+      dcl_sampler s7, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0              => 皮肤的颜色查找图   View.PreIntegratedBRDF
+      dcl_resource_texture2d (float,float,float,float) t1              => 深度图   GBuffer.Depth
+      dcl_resource_texture2d (float,float,float,float) t2              =>   InGBufferA
+                                                                            GBuffer.WorldNormal = DecodeNormal(InGBufferA.xyz); //默认情况下会归一化
+                                                                            GBuffer.PerObjectGBufferData = InGBufferA.a;
+
+      dcl_resource_texture2d (float,float,float,float) t3              =>   InGBufferB
+                                                                            GBuffer.Metallic = InGBufferB.r; 
+                                                                            GBuffer.Specular = InGBufferB.g;  
+                                                                            GBuffer.Roughness = InGBufferB.b;
+                                                                            GBuffer.ShadingModelID = DecodeShadingModelId(InGBufferB.a);
+                                                                            GBuffer.SelectiveOutputMask = DecodeSelectiveOutputMask(InGBufferB.a);
+
+      dcl_resource_texture2d (float,float,float,float) t4              =>   InGBufferC
+                                                                            GBuffer.BaseColor = DecodeBaseColor(InGBufferC.rgb);
+                                                                            #if ALLOW_STATIC_LIGHTING
+                                                                                GBuffer.GBufferAO = 1;
+                                                                                GBuffer.IndirectIrradiance = DecodeIndirectIrradiance(InGBufferC.a);
+                                                                            #else
+                                                                                GBuffer.GBufferAO = InGBufferC.a;
+                                                                                GBuffer.IndirectIrradiance = 1;
+                                                                            #endif
+      dcl_resource_texture2d (float,float,float,float) t5
+      dcl_resource_texture2d (float,float,float,float) t6
+      dcl_resource_texture2d (float,float,float,float) t7
+      dcl_resource_texture2d (float,float,float,float) t8              SSProfilesTexture 表面配置文件   //每行一个配置文件，使用上面的常量编码。请参阅 SubsurfaceProfile.cpp 中的 FSubsurfaceProfileTexture::CreateTexture()。和SubsurfaceProfileCommon.ush
+                                                                          //默认情况下，SSProfilesTexture 是“Texture2D SSProfilesTexture”，但它可以像在 BasePassCommon.usf 中一样重新映射。
+      dcl_input_ps linear v0.xy                                        =>   IntTexCoord =>UV
+      dcl_input_ps linear v1.xyz                                       =>   IntScreenVector
+      dcl_input_ps_siv linear noperspective v2.xy, position            =>   IntPosition 
+      dcl_output o0.xyzw                                               =>   OutColor : SV_Target0
+      dcl_temps 18
+
+
+
+        cb1[0] = PosScaleBias = float4(1707.00, 960.00, 0.00, 0.00);
+        cb1[1] = UVScaleBias = float4(1707.00, 960.00, 0.00, 0.00); 
+        cb1[2] = InvTargetSizeAndTextureSize =float4 (0.00059, 0.00104, 0.00059, 0.00104 );
+
+
+
+        cb1[4].xyz=LightData.Color
+        cb1[5].xyz = 光方向LightData.Direction
+        cb1[6].xyz = LightData.Tangent          cb1[6]=apsule.Radius = LightData.SourceRadius;
+                                        cb1[7].z =    Capsule.SoftRadius = LightData.SoftSourceRadius;  cb1[7].w   =     Capsule.Length = LightData.SourceLength;
+
+
+
+
+
+
+   0: sample_l(texture2d)(float,float,float,float) r0.xyzw, v0.xyxx, t3.xyzw, s3, l(0)        
+   1: mul r0.w, r0.w, l(255.0000)
+   2: round_ne r0.w, r0.w
+   3: ftou r0.w, r0.w
+   4: and r1.x, r0.w, l(15)                                            =>   float4 GBufferB = Texture2DSampleLevel(SceneTexturesStruct.GBufferBTexture, SceneTexturesStruct_GBufferBTextureSampler, UV, 0);
+
+
+
+   5: if_nz r1.x
+   6:   sample_l(texture2d)(float,float,float,float) r1.y, v0.xyxx, t1.yxzw, s1, l(0)
+   7:   mad r1.z, r1.y, cb0[65].x, cb0[65].y
+   8:   mad r1.y, r1.y, cb0[65].z, -cb0[65].w
+   9:   div r1.y, l(1.0000, 1.0000, 1.0000, 1.0000), r1.y
+  10:   add r1.y, r1.y, r1.z                                           =>   float SceneDepth = CalcSceneDepth(UV);
+
+
+
+// 11到14行 用的这个函数得到世界空间位置和摄像机矢量           const FDerivedParams DerivedParams = GetDerivedParams(InputParams, SceneDepth);
+
+  11:   mad r2.xyz, v1.xyzx, r1.yyyy, cb0[67].xyzx                     =>   Out.WorldPosition = Input.ScreenVector * SceneDepth + View.WorldCameraOrigin;
+
+
+  12:   dp3 r1.z, v1.xyzx, v1.xyzx
+  13:   rsq r1.z, r1.z
+  14:   mul r3.xyz, r1.zzzz, v1.xyzx                                   =>   Out.CameraVector = normalize(Input.ScreenVector);
+
+
+
+
+  15:   lt r1.z, cb1[1].z, l(0)                                        =>   生成一个噪波图
+  16:   utof r1.w, cb0[143].y                                          =>   float Dither = InterleavedGradientNoise(InputParams.PixelPos, View.StateFrameIndexMod8);
+  17:   mad r4.xy, r1.wwww, l(32.6650, 11.8150, 0.0000, 0.0000), v2.xyxx
+  18:   dp2 r1.w, r4.xyxx, l(0.0671, 0.0058, 0.0000, 0.0000)
+  19:   frc r1.w, r1.w
+  20:   mul r1.w, r1.w, l(52.9829)
+  21:   frc r1.w, r1.w
+
+
+//从这里开始是用的GetDynamicLighting这个函数             
+         => const float4 Radiance = GetDynamicLighting(DerivedParams.WorldPosition, DerivedParams.CameraVector, ScreenSpaceData.GBuffer, ScreenSpaceData.AmbientOcclusion, ScreenSpaceData.GBuffer.ShadingModelID, LightData, GetPerPixelLightAttenuation(InputParams.ScreenUV), Dither, uint2(InputParams.PixelPos), RectTexture, SurfaceShadow);
+
+  22:   sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t7.xyzw, s7, l(0)          
+  23:   mul r5.xyzw, r4.xyzw, r4.xyzw                                   =>   GetPerPixelLightAttenuation(InputParams.ScreenUV);
+//从这里开始是 GetShadowTerms 这个函数 输出三个值r4.x = Shadow.SurfaceShadow       r4.y = Shadow.TransmissionShadow            源码还输出了一个Shadow.TransmissionThickness 这里没输出
+                =>  GetShadowTerms(GBuffer, LightData, WorldPosition, L, LightAttenuation, Dither, Shadow);
+                        float ContactShadowLength = 0.0f;
+
+        24:   mul r2.w, r1.y, cb0[37].y                                       =>   const float ContactShadowLengthScreenScale = View.ClipToView[1][1] * GBuffer.Depth;
+
+
+        25:   if_nz cb1[2].x
+
+        26:     and r4.zw, r0.wwww, l(0, 0, 32, 64)                         //这三行是判断通道是否是 32 或64 
+        27:     movc r3.w, r4.w, l(0), l(1.0000)
+        28:     movc r3.w, r4.z, r3.w, l(1.0000)
+
+        29:     dp4 r4.z, cb1[0].xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)      =>   float UsesStaticShadowMap = dot(LightData.ShadowMapChannelMask, float4(1, 1, 1, 1));
+
+        30:     dp4 r3.w, r3.wwww, cb1[0].xyzw                                =>   float StaticShadowing = lerp(1, dot(GBuffer.PrecomputedShadowFactors, LightData.ShadowMapChannelMask), UsesStaticShadowMap);
+        31:     add r3.w, r3.w, l(-1.0000)
+        32:     mad r3.w, r4.z, r3.w, l(1.0000)
+
+        33:     mad_sat r1.y, r1.y, cb1[1].x, cb1[1].y                        =>   float DynamicShadowFraction = DistanceFromCameraFade(GBuffer.Depth, LightData, WorldPosition, View.WorldCameraOrigin);
+        34:     mul r1.y, r1.y, r1.y
+
+                                                                                //对于定向光，基于距离 + 每个对象阴影在静态阴影和整个场景动态阴影之间淡入淡出
+        35:     mad r4.xy, -r4.xyxx, r4.xyxx, r3.wwww                         =>   Shadow.SurfaceShadow = lerp(LightAttenuation.x, StaticShadowing, DynamicShadowFraction);
+                                                                                //根据距离在 SSS 动态阴影和静态阴影之间淡入淡出
+        36:     mad r4.xy, r1.yyyy, r4.xyxx, r5.xyxx                          =>   Shadow.TransmissionShadow = min(lerp(LightAttenuation.y, StaticShadowing, DynamicShadowFraction), LightAttenuation.w);
+        37:     min r1.y, r5.w, r4.y     
+
+        38:     mul r4.x, r5.z, r4.x                                          =>   Shadow.SurfaceShadow *= LightAttenuation.z;
+        39:     mul r4.y, r5.z, r1.y                                          =>   Shadow.TransmissionShadow *= LightAttenuation.z;
+
+        40:     ult r1.y, l(1), cb1[2].x                                      
+        41:     lt r3.w, l(0), abs(cb1[1].z)                                  
+        42:     and r1.y, r1.y, r3.w                                          =>   if (LightData.ShadowedBits > 1 && LightData.ContactShadowLength > 0)
+        
+        43:     movc r1.z, r1.z, l(1.0000), r2.w 
+        44:     mul r1.z, r1.z, abs(cb1[1].z)                                 =>    ContactShadowLength = LightData.ContactShadowLength * (LightData.ContactShadowLengthInWS ? 1.0f : ContactShadowLengthScreenScale);                                                                           
+        45:     and r1.y, r1.z, r1.y                                          
+
+
+
+        46:   else
+        47:     sample_l(texture2d)(float,float,float,float) r4.x, v0.xyxx, t6.xyzw, s6, l(0)
+        48:     mov r4.y, l(1.0000)                                           =>   这里和UE不一样 UE没有这一部分
+        49:     mov r1.y, l(0)
+        50:   endif
+
+        
+        51:   ult r1.z, cb1[2].x, l(2)
+        52:   ieq r5.xy, r1.xxxx, l(9, 7, 0, 0)
+        53:   and r1.z, r1.z, r5.y
+        54:   or r1.z, r5.x, r1.z                                             =>   if (LightData.ShadowedBits < 2 && (GBuffer.ShadingModelID == SHADINGMODELID_HAIR))
+
+
+        55:   mul r2.w, r2.w, l(0.2000)
+        56:   movc r1.y, r1.z, r2.w, r1.y                                     =>   {
+                                                                                    ContactShadowLength = 0.2 * ContactShadowLengthScreenScale;
+                                                                                        }
+
+
+        57:   lt r1.z, l(0), r1.y                                           
+        58:   if_nz r1.z                                                      =>   if (ContactShadowLength > 0.0)
+
+        59:     add r1.z, r1.w, l(-0.5000)                                    =>   float StepOffset = Dither - 0.5;
+
+        //下面开始进入ShadowRayCast这个函数  输出两个值 float HitDistance ;和 bOutHitCastContactShadow；
+                60:     add r2.xyz, r2.xyzx, cb0[70].xyzx                             =>     WorldPosition + View.PreViewTranslation
+
+                61:     mul r6.xyzw, r2.yyyy, cb0[1].xyzw                             =>     float4 RayStartClip = mul(float4(RayOriginTranslatedWorld, 1), View.TranslatedWorldToClip);
+                62:     mad r6.xyzw, r2.xxxx, cb0[0].xyzw, r6.xyzw
+                63:     mad r2.xyzw, r2.zzzz, cb0[2].xyzw, r6.xyzw
+                64:     add r2.xyzw, r2.xyzw, cb0[3].xyzw
+
+                65:     mul r6.xyz, r1.yyyy, cb1[5].xyzx                              =>     float4 RayDirClip = mul(float4(RayDirection * RayLength, 0), View.TranslatedWorldToClip);
+                66:     mul r7.xyzw, r6.yyyy, cb0[1].xyzw                             
+                67:     mad r7.xyzw, r6.xxxx, cb0[0].xyzw, r7.xyzw
+                68:     mad r6.xyzw, r6.zzzz, cb0[2].xyzw, r7.xyzw
+
+                69:     add r6.xyzw, r2.xyzw, r6.xyzw                                 =>     float4 RayEndClip = RayStartClip + RayDirClip;
+
+
+                70:     div r7.xyz, r2.xyzx, r2.wwww                                  =>     float3 RayStartScreen = RayStartClip.xyz / RayStartClip.w;
+
+                71:     div r6.xyz, r6.xyzx, r6.wwww                                  =>     float3 RayEndScreen = RayEndClip.xyz / RayEndClip.w;
+
+
+                72:     add r6.xyz, -r7.xyzx, r6.xyzx                                 =>     float3 RayStepScreen = RayEndScreen - RayStartScreen;
+
+                73:     mad r8.xy, r7.xyxx, cb0[66].xyxx, cb0[66].wzww                =>     float3 RayStartUVz = float3(RayStartScreen.xy * View.ScreenPositionScaleBias.xy + View.ScreenPositionScaleBias.wz, RayStartScreen.z);
+                81:     mov r8.z, r7.z
+
+                74:     mul r9.xy, r6.xyxx, cb0[66].xyxx                              =>     float3 RayStepUVz = float3(RayStepScreen.xy * View.ScreenPositionScaleBias.xy, RayStepScreen.z);
+                80:     mov r9.z, r6.z
+
+                75:     mad r1.yw, r1.yyyy, cb0[30].zzzw, r2.zzzw                     =>     float4 RayDepthClip = RayStartClip + mul(float4(0, 0, RayLength, 0), View.ViewToClip);
+                76:     div r1.y, r1.y, r1.w                                          =>     float3 RayDepthScreen = RayDepthClip.xyz / RayDepthClip.w;
+
+                77:     add r1.y, -r7.z, r1.y                   
+                78:     mul r1.w, abs(r1.y), l(0.2500)                                =>      const float CompareTolerance = abs(RayDepthScreen.z - RayStartScreen.z) * Step * 2;
+
+
+
+                79:    mad r2.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.1250, 0.2500, 0.3750, 0.5000)       =>    float SampleTime = StepOffset * Step + Step; 注意 这里是把常量Step存成了两个float4 常量 然后给下面的额FOR循环用
+                    For循环从这里开始 一共八次
+                        82:     mad r10.xyz, r9.xyzx, r2.xxxx, r8.xyzx
+                        83:     sample_l(texture2d)(float,float,float,float) r3.w, r10.xyxx, t1.yzwx, s1, l(0)
+                        84:     add r3.w, -r3.w, r10.z
+                        85:     mad r3.w, abs(r1.y), l(0.2500), r3.w
+                        86:     lt r3.w, abs(r3.w), r1.w
+                        87:     movc r2.x, r3.w, r2.x, l(-1.0000)
+                        88:     mad r10.xyz, r9.xyzx, r2.yyyy, r8.xyzx
+                        89:     sample_l(texture2d)(float,float,float,float) r3.w, r10.xyxx, t1.yzwx, s1, l(0)
+                        90:     add r3.w, -r3.w, r10.z
+                        91:     mad r3.w, abs(r1.y), l(0.2500), r3.w
+                        92:     lt r3.w, abs(r3.w), r1.w
+                        93:     lt r4.w, r2.x, l(0)
+                        94:     and r3.w, r3.w, r4.w
+                        95:     movc r2.x, r3.w, r2.y, r2.x
+                        96:     mad r10.xyz, r9.xyzx, r2.zzzz, r8.xyzx
+                        97:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)
+                        98:     add r2.y, -r2.y, r10.z
+                        99:     mad r2.y, abs(r1.y), l(0.2500), r2.y
+                        100:     lt r2.y, abs(r2.y), r1.w
+                        101:     lt r3.w, r2.x, l(0)
+                        102:     and r2.y, r2.y, r3.w
+                        103:     movc r2.x, r2.y, r2.z, r2.x
+                        104:     mad r10.xyz, r9.xyzx, r2.wwww, r8.xyzx
+                        105:     sample_l(texture2d)(float,float,float,float) r2.y, r10.xyxx, t1.yxzw, s1, l(0)
+                        106:     add r2.y, -r2.y, r10.z
+                        107:     mad r2.y, abs(r1.y), l(0.2500), r2.y
+                        108:     lt r2.y, abs(r2.y), r1.w
+                        109:     lt r2.z, r2.x, l(0)
+                        110:     and r2.y, r2.z, r2.y
+                        111:     movc r2.x, r2.y, r2.w, r2.x
+                        112:     mad r10.xyzw, r1.zzzz, l(0.1250, 0.1250, 0.1250, 0.1250), l(0.6250, 0.7500, 0.8750, 1.0000)
+                        113:     mad r2.yzw, r9.xxyz, r10.xxxx, r8.xxyz
+                        114:     sample_l(texture2d)(float,float,float,float) r1.z, r2.yzyy, t1.yzxw, s1, l(0)
+                        115:     add r1.z, -r1.z, r2.w
+                        116:     mad r1.z, abs(r1.y), l(0.2500), r1.z
+                        117:     lt r1.z, abs(r1.z), r1.w
+                        118:     lt r2.y, r2.x, l(0)
+                        119:     and r1.z, r1.z, r2.y
+                        120:     movc r1.z, r1.z, r10.x, r2.x
+                        121:     mad r2.xyz, r9.xyzx, r10.yyyy, r8.xyzx
+                        122:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
+                        123:     add r2.x, -r2.x, r2.z
+                        124:     mad r2.x, abs(r1.y), l(0.2500), r2.x
+                        125:     lt r2.x, abs(r2.x), r1.w
+                        126:     lt r2.y, r1.z, l(0)
+                        127:     and r2.x, r2.y, r2.x
+                        128:     movc r1.z, r2.x, r10.y, r1.z
+                        129:     mad r2.xyz, r9.xyzx, r10.zzzz, r8.xyzx
+                        130:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)
+                        131:     add r2.x, -r2.x, r2.z
+                        132:     mad r2.x, abs(r1.y), l(0.2500), r2.x
+                        133:     lt r2.x, abs(r2.x), r1.w
+                        134:     lt r2.y, r1.z, l(0)
+                        135:     and r2.x, r2.y, r2.x
+                        136:     movc r1.z, r2.x, r10.z, r1.z
+
+                        137:     mad r2.xyz, r9.xyzx, r10.wwww, r8.xyzx                                                float3 SampleUVz = RayStartUVz + RayStepUVz * SampleTime;
+                        138:     sample_l(texture2d)(float,float,float,float) r2.x, r2.xyxx, t1.xyzw, s1, l(0)         float SampleDepth = SceneTexturesStruct.SceneDepthTexture.SampleLevel(SceneTexturesStruct_SceneDepthTextureSampler, SampleUVz.xy, 0).r;
+                        139:     add r2.x, -r2.x, r2.z                                                                 float DepthDiff = SampleUVz.z - SampleDepth;
+
+                        140:     mad r1.y, abs(r1.y), l(0.2500), r2.x
+                        141:     lt r1.y, abs(r1.y), r1.w                                                              bool Hit = abs(DepthDiff + CompareTolerance) < CompareTolerance;
+
+                        142:     lt r1.w, r1.z, l(0)
+                        143:     and r1.y, r1.w, r1.y
+                        144:     movc r1.y, r1.y, r10.w, r1.z                                                          FirstHitTime = (Hit && FirstHitTime < 0.0) ? SampleTime : FirstHitTime;
+                //for循环在这里结束
+
+
+                        145:     lt r1.z, l(0), r1.y                                                                   if (FirstHitTime > 0.0)
+                        146:     and r1.z, r1.z, l(1.0000)
+
+                        147:     mad r1.yw, r6.xxxy, r1.yyyy, r7.xxxy                                                  float3 SampleUVz = RayStartUVz + RayStepUVz * FirstHitTime;
+
+
+                        148:     mad r1.yw, abs(r1.yyyw), l(0.0000, 6.0000, 0.0000, 6.0000), l(0.0000, -5.0000, 0.0000, -5.0000)          =>148到152和虚幻不一样            
+                        149:     max r1.yw, r1.yyyw, l(0, 0, 0, 0)                                                                       SampleUVz.xy=max(0,SampleUVz*6-5)
+                        150:     dp2 r1.y, r1.ywyy, r1.ywyy                                                                    FirstHitTime = max(1-dot(SampleUVz.xy,SampleUVz.xy));            
+                        151:     add r1.y, -r1.y, l(1.0000)                                                           
+                        152:     max r1.y, r1.y, l(0)
+        //       ShadowRayCast到这里结束
+
+
+        153:     mad r1.y, -r1.z, r1.y, l(1.0000)                                                  float ContactShadow = 1.0 - ContactShadowOcclusion;
+
+        154:     mul r4.xz, r1.yyyy, r4.xxyx                                                       Shadow.SurfaceShadow *= ContactShadow;
+
+
+        155:     ine r1.z, r1.x, l(9)                                                             虚幻源码 Shadow.TransmissionShadow *= ContactShadow;
+                                                                                                =>这里和虚幻不一样  判断是否是9号渲染通道 从而输出不一样的Shadow.TransmissionShadow
+        156:     mad r1.y, r1.y, l(0.5000), l(0.5000)
+        157:     mul r1.y, r1.y, r4.y
+        158:     movc r1.y, r1.z, r1.y, r4.y
+        159:     movc r4.y, r5.y, r4.z, r1.y                                                   =>  float Ashadow = Shadow.TransmissionShadow * ContactShadow ;
+                                                                                                    float Bshadow = Shadow.TransmissionShadow * (ContactShadow * 0.5 + 0.5);
+                                                                                                    if (9号通道) Bshadow = Bshadow;  else Bshadow = Shadow.TransmissionShadow;
+                                                                                                    Shadow.TransmissionShadow = t7.y > 1 ? Ashadow : Bshadow;
+//GetShadowTerms到这里结束       输出了Shadow.SurfaceShadow和Shadow.TransmissionShadow    
+                            
+ 160:   endif
+
+ 161:   add r1.y, r4.y, r4.x                                                                   =>  if (Shadow.SurfaceShadow + Shadow.TransmissionShadow > 0)
+ 162:   lt r1.y, l(0), r1.y
+ 163:   if_nz r1.y
+
+ 164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)               //世界坐标法线
+ 165:     sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s4, l(0)               //基础色
+ 166:     sample_l(texture2d)(float,float,float,float) r6.xyzw, v0.xyxx, t5.xyzw, s5, l(0)               //T5的rgb颜色的平方是次表面颜色
+
+ 167:     mul r4.zw, v0.xxxy, cb0[131].xxxy
+ 168:     ftou r4.zw, r4.zzzw
+ 169:     ftou r3.w, cb0[151].x
+ 170:     iadd r4.z, r4.w, r4.z
+ 171:     iadd r3.w, r3.w, r4.z
+ 172:     and r3.w, r3.w, l(1)                            返回0或1  每隔一个像素一个1（ 像素棋盘格）
+
+ 173:     mad r1.yzw, r1.yyzw, l(0.0000, 2.0000, 2.0000, 2.0000), l(0.0000, -1.0000, -1.0000, -1.0000)      
+ 174:     dp3 r4.z, r1.yzwy, r1.yzwy
+ 175:     rsq r4.z, r4.z                                                                       =>    GBuffer.WorldNormal = DecodeNormal(InGBufferA.xyz);
+ 176:     mul r5.yzw, r1.yyzw, r4.zzzz                                                                     //采样法线并归一化
+
+ 177:     and r0.w, r0.w, l(16)                                                                =>     判断是不是16号着色通道  是的话颜色用0 不是的话用t5.wxyz
+ 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz
+
+ 179:     movc r0.w, r5.x, l(0), r0.x                      如果是9号着色通道 用0 不是的话用T3.r (金属度)    到这里基本能确定9号通道是判断是镜面反射工作流或是金属工作流的
+ 180:     mul r4.w, r0.y, l(0.0800)                              
+ 181:     mad r7.xyz, -r0.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r2.xyzx                     
+ 182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww                                                    GBuffer.SpecularColor = ComputeF0(GBuffer.Specular, GBuffer.BaseColor, GBuffer.Metallic);
+                                                                                                   (1 - t) * a + t * b =a - t * a + t * b 
+
+
+ 183:     ieq r4.w, r1.x, l(5)                              判断是否是5号着色通道或是9号着色通道
+ 184:     or r4.w, r5.x, r4.w
+
+ 185:     lt r5.x, l(0), cb0[155].x
+ 186:     lt r8.x, l(0), cb0[200].z
+
+ 187:     and r5.x, r5.x, r8.x                             判断是否是九号着色通道并且开启了某个开关
+
+ 188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x                如果开启cb0[155].x    颜色设置为白色  否则用基础色 GBuffer.BaseColor
+ 189:     movc r8.xyz, r8.xxxx, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx           
+
+
+ 190:     movc r9.xy, r3.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
+
+ 191:     mul r10.xyz, r7.xyzx, r9.yyyy                               像素棋盘格*GBuffer.SpecularColor
+ 192:     mul r10.w, r0.y, r9.y                                       像素棋盘格*GBuffer.Metallic
+
+ 193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx                      如果打开了155开关那么用棋盘格  否则就用GBuffer.BaseColor
+ 194:     mov r7.w, r0.y                                              GBuffer.Metallic
+
+ 195:     movc r9.xyzw, r5.xxxx, r10.xyzw, r7.xyzw                    如果打开了155开关 那么用像素棋盘格*GBuffer.SpecularColor 否则用GBuffer.SpecularColor 和 GBuffer.Metallic
+ 196:     mov r8.w, r9.w
+
+ 197:     mov r10.xyz, r2.xyzx                                        基础色
+ 198:     mov r10.w, r7.w                                             GBuffer.Metallic
+
+ 199:     movc r8.xyzw, r4.wwww, r8.xyzw, r10.xyzw                    如果开启了155开关( 像素棋盘格)并且是(五号着色通道或九号着色通道) 那么GBuffer.SpecularColor 会反一个正的棋盘格  GBuffer.BaseColor GBuffer.Metallic 会乘一个正的棋盘格
+ 200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx
+
+
+ 201:     mad r7.xyz, -r8.xyzx, r0.wwww, r8.xyzx                          GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic;
+
+
+ 202:     mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx                  GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
+
+ 203:     mad r2.xyz, r2.xyzx, cb0[136].wwww, cb0[136].xyzx                  GBuffer.SpecularColor = GBuffer.SpecularColor * View.SpecularOverrideParameter.w + View.SpecularOverrideParameter.xyz;
+
+
+
+
+ 204:     mul r0.y, cb1[7].w, l(0.5000)                                         FCapsuleLight Capsule = GetCapsule(ToLight, LightData);
+ 205:     mad r9.xyz, -r0.yyyy, cb1[6].xyzx, cb1[5].xyzx                        Capsule.LightPos[0] = ToLight - 0.5 * Capsule.Length * LightData.Tangent;
+ 206:     mad r10.xyz, r0.yyyy, cb1[6].xyzx, cb1[5].xyzx                        Capsule.LightPos[1] = ToLight + 0.5 * Capsule.Length * LightData.Tangent;
+
+
+
+
+// Should this be SH instead?
+                        Lighting = IntegrateBxDF(GBuffer, N, V, Capsule, Shadow, LightData.bInverseSquared);
+
+ 207:     lt r0.y, l(0), cb1[7].w                                              if (Capsule.Length > 0)
+ 208:     if_nz r0.y
+
+//下面开始这个函数  LineIrradiance(N, Capsule.LightPos[0], Capsule.LightPos[1], Capsule.DistBiasSqr, LineCosSubtended, Falloff, NoL);
+ 209:       dp3 r3.w, r9.xyzx, r9.xyzx                              float LengthSqr0 = dot( Line0, Line0 );
+
+ 210:       dp3 r5.x, r10.xyzx, r10.xyzx                            float LengthSqr1 = dot( Line1, Line1 );
+
+ 211:       rsq r3.w, r3.w                                            float InvLength0 = rsqrt( LengthSqr0 );
+
+ 212:       rsq r5.x, r5.x                                          float InvLength1 = rsqrt( LengthSqr1 );
+
+ 213:       mul r7.w, r3.w, r5.x                                       float InvLength01 = InvLength0 * InvLength1;
+
+
+ 214:       dp3 r9.w, r9.xyzx, r10.xyzx                             CosSubtended = dot( Line0, Line1 ) * InvLength01;
+ 215:       mul r9.w, r7.w, r9.w   
+                                                  
+ 216:       mad r10.w, r9.w, l(0.5000), r7.w                        BaseIrradiance=  InvLength01 / ( CosSubtended * 0.5 + 0.5 +   InvLength01 );  
+                                                                     源码:    BaseIrradiance = InvLength01 / ( CosSubtended * 0.5 + 0.5 + DistanceBiasSqr * InvLength01 );
+ 217:       add r10.w, r10.w, l(0.5000)                              因为DistanceBiasSqr定义的是1 所以这里省略了
+ 218:       div r7.w, r7.w, r10.w
+
+
+ 219:       dp3 r10.w, r5.yzwy, r9.xyzx                            dot(N, Line0)
+ 220:       dp3 r11.x, r5.yzwy, r10.xyzx                           dot(N, Line1)
+ 221:       mul r5.x, r5.x, r11.x                                  dot(N, Line1) * InvLength1
+ 222:       mad r3.w, r10.w, r3.w, r5.x                            dot(N, Line0) * InvLength0 + dot(N, Line1) * InvLength1 
+ 223:       mul r3.w, r3.w, l(0.5000)                              NoL = 0.5 * ( dot(N, Line0) * InvLength0 + dot(N, Line1) * InvLength1 );
+
+
+ 224:     else
+ 225:       dp3 r5.x, r9.xyzx, r9.xyzx                             float DistSqr = dot(Capsule.LightPos[0], Capsule.LightPos[0]);
+ 226:       add r10.w, r5.x, l(1.0000)                             Falloff = rcp(DistSqr + Capsule.DistBiasSqr);
+ 227:       rcp r7.w, r10.w
+
+ 228:       rsq r5.x, r5.x                                         float3 L = Capsule.LightPos[0] * rsqrt(DistSqr);
+ 229:       mul r11.xyz, r5.xxxx, r9.xyzx                         
+
+ 230:       dp3 r3.w, r5.yzwy, r11.xyzx                            NoL = dot(N, L);
+  
+ 231:       mov r9.w, l(1.0000)                                    float LineCosSubtended = 1;
+ 232:     endif
+
+            233:     lt r5.x, l(0), cb1[6].w                                  if (Capsule.Radius > 0)
+
+                234:     mul r10.w, cb1[6].w, cb1[6].w                            float SinAlphaSqr = saturate(Pow2(Capsule.Radius) * Falloff);
+                235:     mul_sat r7.w, r7.w, r10.w
+                    
+                //下面是这个函数       NoL = SphereHorizonCosWrap(NoL, SinAlphaSqr);                                 
+                    236:     sqrt r7.w, r7.w                                           float SinAlpha = sqrt( SinAlphaSqr );
+                                                
+                    237:     lt r10.w, r3.w, r7.w                                     if( NoL < SinAlpha )
+
+                    238:     max r11.x, r3.w, -r7.w                                   NoL = max(NoL, -SinAlpha);
+
+                    239:     add r11.x, r7.w, r11.x                                   NoL = Pow2(SinAlpha + NoL) / (4 * SinAlpha);
+                    240:     mul r11.x, r11.x, r11.x
+                    241:     mul r7.w, r7.w, l(4.0000)
+                    242:     div r7.w, r11.x, r7.w
+
+                243:     movc r7.w, r10.w, r7.w, r3.w
+            244:     movc_sat r3.w, r5.x, r7.w, r3.w
+// NoL = SphereHorizonCosWrap(NoL, SinAlphaSqr);   到这里结束
+
+ 245:     dp3 r5.x, r3.xyzx, r5.yzwy                              float3 R = reflect(-V, N);
+ 246:     add r5.x, r5.x, r5.x
+ 247:     mad r11.xyz, r5.yzwy, -r5.xxxx, r3.xyzx
+ 
+    float3 ToLight = Capsule.LightPos[0];
+
+//  下面是这个函数            ToLight = ClosestPointLineToRay(Capsule.LightPos[0], Capsule.LightPos[1], Capsule.Length, R);
+        248:     add r10.xyz, -r9.xyzx, r10.xyzx                        float3 Line01 = Line1 - Line0;
+
+                                                                        float A = Square(Length);
+
+        249:     dp3 r5.x, r11.xyzx, r10.xyzx                           float B = dot(R, Line01);
+        250:     mad r11.xyz, r5.xxxx, r11.xyzx, -r10.xyzx             
+        251:     dp3 r7.w, r9.xyzx, r11.xyzx                            
+        252:     mul r5.x, r5.x, r5.x                                  
+        253:     mad r5.x, cb1[7].w, cb1[7].w, -r5.x                    
+        254:     div_sat r5.x, r7.w, r5.x                               float t = saturate(dot(Line0, B * R - Line01) / (A - B * B));
+
+        255:     mad r10.xyz, r5.xxxx, r10.xyzx, r9.xyzx                Line0 + t * Line01;
+// ClosestPointLineToPoint(Capsule.LightPos[0], Capsule.LightPos[1], Capsule.Length,R); 到这里结束
+
+ 256:     movc r9.xyz, r0.yyyy, r10.xyzx, r9.xyzx                       if (Capsule.Length > 0)      
+
+
+ 257:     dp3 r0.y, r9.xyzx, r9.xyzx                                    float DistSqr = dot(ToLight, ToLight);
+
+ 258:     rsq r0.y, r0.y                                                float InvDist = rsqrt(DistSqr);
+
+ 259:     mul r10.xyz, r0.yyyy, r9.xyzx                                 float3 L = ToLight * InvDist;
+
+
+ 260:     max r0.z, r0.z, cb0[219].y                                    GBuffer.Roughness = max(GBuffer.Roughness, View.MinRoughness);
+
+ 261:     mul r5.x, r0.z, r0.z                                          float a = Pow2(GBuffer.Roughness);
+
+ 262:     mul r7.w, r0.y, cb1[6].w
+ 263:     mad r10.w, -r0.z, r0.z, l(1.0000)
+ 264:     mul_sat r7.w, r7.w, r10.w                                     AreaLight.SphereSinAlpha = saturate(Capsule.Radius * InvDist * (1 - a));
+
+ 265:     mul_sat r11.x, r0.y, cb1[7].z                                 AreaLight.SphereSinAlphaSoft = saturate(Capsule.SoftRadius * InvDist);
+  
+ 266:     switch r1.x
+ 267:     case l(1)
+ 268:     case l(10)
+ 269:     case l(11)
+
+
+//这里进入函数 FDirectLighting DefaultLitBxDF(FGBufferData GBuffer, half3 N, half3 V, half3 L, float Falloff, float NoL, FAreaLight AreaLight, FShadowTerms Shadow)
+
+            // 这里进入 Init(Context, N, V, L);
+
+            270:     dp3 r1.x, r5.yzwy, r10.xyzx                                     Context.NoL = dot(N, L);
+
+            271:     dp3 r12.w, r5.yzwy, -r3.xyzx                                  Context.NoV = dot(N, V);
+
+            272:     dp3 r13.w, -r3.xyzx, r10.xyzx                                  Context.VoL = dot(V, L);
+            // 结束Init
+
+            // 进入函数     void SphereMaxNoH( inout BxDFContext Context, float SinAlpha, bool bNewtonIteration )
+            273:     lt r14.x, l(0), r7.w      
+            274:     if_nz r14.x                                                    if( SinAlpha > 0 )
+
+            275:       mad r14.y, -r7.w, r7.w, l(1.0000)
+            276:       sqrt r14.y, r14.y                                           float CosAlpha = sqrt( 1 - Pow2( SinAlpha ) );
+
+
+            277:       dp2 r14.z, r12.wwww, r1.xxxx                                float RoL = 2 * Context.NoL * Context.NoV - Context.VoL;
+            278:       add r14.w, -r13.w, r14.z
+
+            279:       ge r15.x, r14.w, r14.y 
+            280:       if_nz r15.x                                                if( RoL >= CosAlpha )
+
+            281:         mov r15.x, l(1.0000)                                      Context.NoH = 1;
+
+            282:         mov r15.y, abs(r12.w)                                     Context.VoH = abs( Context.NoV );
+            283:       else
+            284:         mad r15.z, -r14.w, r14.w, l(1.0000)
+            285:         rsq r15.z, r15.z
+            286:         mul r15.z, r7.w, r15.z                            float rInvLengthT = SinAlpha * rsqrt( 1 - RoL*RoL );
+
+            287:         mad r15.w, -r14.w, r1.x, r12.w                            
+            288:         mul r16.x, r15.w, r15.z                                   float NoTr = rInvLengthT * ( Context.NoV - RoL * Context.NoL );
+            
+            289:         mul r16.y, r12.w, r12.w                                   float VoTr =  (2 * Context.NoV * Context.NoV - 1 - RoL * Context.VoL);
+            290:         mad r16.y, r16.y, l(2.0000), l(-1.0000)                   源码    rInvLengthT * (2 * Context.NoV * Context.NoV - 1 - RoL * Context.VoL);
+            291:         mad r14.w, -r14.w, r13.w, r16.y                           少乘了rInvLengthT   少乘的rInvLengthT在297行的r14.w乘上了 所以和源码一样
+
+            292:         mad r16.y, -r1.x, r1.x, l(1.0000)                        
+            293:         mad r16.y, -r12.w, r12.w, r16.y
+            294:         mad r16.y, -r13.w, r13.w, r16.y
+            295:         mad_sat r14.z, r14.z, r13.w, r16.y                         
+            296:         sqrt r14.z, r14.z                                         float NxLoV = sqrt(saturate(1 - Pow2(Context.NoL) - Pow2(Context.NoV) - Pow2(Context.VoL) + 2 * Context.NoL * Context.NoV * Context.VoL));
+
+            297:         mul r14.zw, r14.zzzw, r15.zzzz                            float NoBr = rInvLengthT * NxLoV;
+
+            298:         mul r16.y, r12.w, r14.z                                   float VoBr = rInvLengthT * NxLoV * 2 * Context.NoV;
+            299:         add r16.z, r16.y, r16.y                                    
+
+            300:         mad r16.w, r1.x, r14.y, r12.w                             float NoLVTr = Context.NoL * CosAlpha + Context.NoV + NoTr;
+            301:         mad r15.z, r15.z, r15.w, r16.w                            
+
+
+            302:         mad r15.w, r13.w, r14.y, r14.w                            float VoLVTr = Context.VoL * CosAlpha + 1 + VoTr;
+            303:         add r15.w, r15.w, l(1.0000) 
+
+            304:         mul r17.x, r14.z, r15.w                                   float p = NoBr * VoLVTr;
+                        
+            305:         mul r17.y, r15.w, r15.z                                   float q = NoLVTr * VoLVTr;
+
+            306:         mul r17.z, r15.z, r16.z                                   float s = VoBr * NoLVTr;
+            
+            307:         mul r16.y, r16.y, r15.z                                   float xNum = q * (-0.5 * p + 0.5 * VoBr * NoLVTr);
+            308:         mul r16.y, r16.y, l(0.5000)                               和源码不一样 源码  float xNum = q * (-0.5 * p + 0.25 * VoBr * NoLVTr);
+            309:         mad r16.y, r17.x, l(-0.5000), r16.y
+            310:         mul r16.y, r16.y, r17.y                                   
+
+
+            311:         mad r17.w, -r17.x, l(2.0000), r17.z                      
+            312:         mul r17.z, r17.w, r17.z                                  
+            313:         mad r17.x, r17.x, r17.x, r17.z                           
+            314:         mul r17.z, r15.w, r15.w                                  
+            315:         mad r15.w, r13.w, r14.y, r15.w                           
+            316:         mad r15.w, r15.w, l(-0.5000), l(-0.5000)     
+            317:         mul r15.w, r15.w, r17.y
+            318:         mad r15.w, r16.w, r17.z, r15.w                           
+            319:         mad r15.z, r15.z, r15.w, r17.x                           float xDenom = p * p + s * (s - 2 * p) + NoLVTr * ((Context.NoL * CosAlpha + Context.NoV) * Pow2(VoLVTr) + q * (-0.5 * (VoLVTr + Context.VoL * CosAlpha) - 0.5));
+
+
+            320:         add r15.w, r16.y, r16.y
+            321:         mul r16.w, r16.y, r16.y
+            322:         mad r16.w, r15.z, r15.z, r16.w
+            323:         div r15.w, r15.w, r16.w                                 float TwoX1 = 2 * xNum / (Pow2(xDenom) + Pow2(xNum));
+
+            324:         mul r15.z, r15.z, r15.w                                 float SinTheta = TwoX1 * xDenom;
+
+            325:         mad r15.w, -r15.w, r16.y, l(1.0000)                     float CosTheta = 1.0 - TwoX1 * xNum;
+
+            326:         mul r14.z, r14.z, r15.z                                 NoTr = CosTheta * NoTr + SinTheta * NoBr;
+            327:         mad r14.z, r15.w, r16.x, r14.z
+
+            328:         mul r15.z, r16.z, r15.z
+            329:         mad r14.w, r15.w, r14.w, r15.z                          VoTr = CosTheta * VoTr + SinTheta * VoBr;
+
+            330:         mad r14.z, r1.x, r14.y, r14.z                           Context.NoL = Context.NoL * CosAlpha + NoTr; // dot( N, L * CosAlpha + T * SinAlpha )
+
+            331:         mad r14.y, r13.w, r14.y, r14.w                          Context.VoL = Context.VoL * CosAlpha + VoTr;
+
+
+            332:         mad r14.w, r14.y, l(2.0000), l(2.0000)                  float InvLenH = rsqrt(2 + 2 * Context.VoL);
+            333:         rsq r14.w, r14.w
+
+            334:         add r14.z, r12.w, r14.z
+            335:         mul_sat r15.x, r14.w, r14.z                             Context.NoH = saturate((Context.NoL + Context.NoV) * InvLenH);
+
+
+            336:         mad_sat r15.y, r14.w, r14.y, r14.w                      Context.VoH = saturate(InvLenH + InvLenH * Context.VoL);
+
+            337:       endif
+            //      void SphereMaxNoH(inout BxDFContext Context, float SinAlpha, bool bNewtonIteration) 
+            // 结束
+            338:     else
+
+            //这里进入函数     void Init(inout BxDFContext Context, half3 N, half3 V, half3 L)
+
+            339:       mad r14.y, r13.w, l(2.0000), l(2.0000)                    float InvLenH = rsqrt(2 + 2 * VoL);
+            340:       rsq r14.y, r14.y
+
+            341:       add r1.x, r1.x, r12.w                                     NoH = saturate((NoL + NoV) * InvLenH);
+            342:       mul_sat r15.x, r14.y, r1.x 
+
+            343:       mad_sat r15.y, r14.y, r13.w, r14.y                        VoH = saturate(InvLenH + InvLenH * VoL);
+            // void Init(inout BxDFContext Context, half3 N, half3 V, half3 L) 结束
+            344:     endif
+            
+            345:     add r1.x, abs(r12.w), l(0.0000)                             Context.NoV = min(abs(Context.NoV) + 1e-5,1);
+            346:     min r1.x, r1.x, l(1.0000)                                    应该是一种自动优化方案   Context.NoV = saturate(abs(Context.NoV) + 1e-5);
+            
+            347:     mul r14.yzw, r3.wwww, r7.xxyz                                  Lighting.Diffuse = Lighting.Diffuse = AreaLight.FalloffColor * (Falloff * NoL) * Diffuse_Lambert(GBuffer.DiffuseColor);
+            348:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)       注意 这里的Falloff因为在最初bInverseSquared判断的时候输出结果是1 所有在代码里面省略了 0.3183这个值是1/PI的结果   Diffuse_Lambert值个函数里面会将GBuffer.DiffuseColor*1/PI；
+                                                                                    
+
+
+            //进入函数 SpecularGGX(GBuffer.Roughness, GBuffer.Anisotropy, GBuffer.SpecularColor, Context, NoL, AreaLight)
+            349:     mul r12.w, r5.x, r5.x                                          float a2 = Pow4(Roughness);
+
+
+                    //进入函数 EnergyNormalization(a2, Context.VoH, AreaLight);             这里输出两个值 a2 和 Energy
+                                350:     lt r13.w, l(0), r11.x                                          if (AreaLight.SphereSinAlphaSoft > 0)
+
+                                351:     mul r14.y, r11.x, r11.x                                        a2 = min(a2 + Pow2(AreaLight.SphereSinAlphaSoft) / (VoH * 3.6 + 0.4),1);
+                                352:     mad r14.z, r15.y, l(3.6000), l(0.4000)                         和源码不一样   源码是        a2 = saturate(a2 + Pow2(AreaLight.SphereSinAlphaSoft) / (VoH * 3.6 + 0.4));
+                                353:     div r14.y, r14.y, r14.z
+                                354:     mad r14.y, r5.x, r5.x, r14.y
+                                355:     min r14.y, r14.y, l(1.0000)
+
+                                356:     movc r16.x, r13.w, r14.y, r12.w                                float Sphere_a2 = a2;
+
+
+                                //这里进入函数 New_a2(a2, AreaLight.SphereSinAlpha, VoH);
+
+                                            357:     mul r12.w, r7.w, l(0.2500)
+                                            358:     ishr r13.w, r16.x, l(1)
+                                            359:     iadd r13.w, r13.w, l(0.0000)
+                                            360:     mad r13.w, r13.w, l(3.0000), r7.w
+                                            361:     mul r12.w, r12.w, r13.w
+                                            362:     add r13.w, r15.y, l(0.0010)
+                                            363:     div r12.w, r12.w, r13.w
+                                            364:     add r17.x, r12.w, r16.x                                        return    a2 + 0.25 * SinAlpha * (3.0 * sqrtFast(a2) + SinAlpha) / (VoH + 0.001);
+                                //结束 New_a2 函数
+
+                                365:     div r17.y, r16.x, r17.x                                        Energy = a2 / Sphere_a2;
+
+
+                                366:     mov r16.y, l(1.0000)
+                                367:     movc r14.xy, r14.xxxx, r17.xyxx, r16.xyxx                     if结果 (AreaLight.SphereSinAlpha > 0)?r17.xy:r16.xy
+
+
+
+                                368:     lt r12.w, r9.w, l(1.0000)                                     if (AreaLight.LineCosSubtended < 1)
+
+                                369:     add r14.z, -r9.w, l(1.0001)                                   float LineTanAlpha = sqrt((1.0001 - LineCosTwoAlpha) / (1 + LineCosTwoAlpha));
+                                370:     add r14.w, r9.w, l(1.0000)
+                                371:     div r14.z, r14.z, r14.w
+                                372:     sqrt r14.z, r14.z
+
+                                373:     mul r14.w, r14.z, l(0.2500)                                   float Line_a2 = New_a2(Sphere_a2, LineTanAlpha, VoH);
+                                374:     ishr r15.z, r14.x, l(1)
+                                375:     iadd r15.z, r15.z, l(0.0000)
+                                376:     mad r14.z, r15.z, l(3.0000), r14.z
+                                377:     mul r14.z, r14.z, r14.w
+                                378:     div r13.w, r14.z, r13.w
+                                379:     add r13.w, r13.w, r14.x 
+
+                                380:     div r13.w, r14.x, r13.w                                       Energy *= sqrt(Sphere_a2 / Line_a2);
+                                381:     sqrt r13.w, r13.w
+                                382:     mul r13.w, r13.w, r14.y
+
+                                383:     movc r12.w, r12.w, r13.w, r14.y
+                    //结束函数 EnergyNormalization
+
+                    //进入函数     float D = D_GGX(a2, Context.NoH) * Energy;
+                                                
+                                384:     mad r13.w, r15.x, r16.x, -r15.x                               float d = (NoH * a2 - NoH) * NoH + 1;    // 2 mad
+                                385:     mad r13.w, r13.w, r15.x, l(1.0000)
+
+                                386:     mul r13.w, r13.w, r13.w                                       return a2 / (PI * d * d);    // 4 mul, 1 rcp
+                                387:     mul r13.w, r13.w, l(3.1416)
+                                388:     div r13.w, r16.x, r13.w
+                    //  结束函数 D_GGX
+
+                389:     mul r12.w, r12.w, r13.w                                                       float D = D_GGX(a2, Context.NoH) * Energy;
+
+                    //进入函数     float Vis = Vis_SmithJointApprox(a2, Context.NoV, NoL);
+                                390:     sqrt r13.w, r16.x                                             float a = sqrt(a2);
+                                391:     add r14.x, -r13.w, l(1.0000)                                   (1 - a)            
+                                392:     mad r14.y, r1.x, r14.x, r13.w                                  (NoV * (1 - a) + a)
+
+                                393:     mad r13.w, r3.w, r14.x, r13.w                                  
+                                394:     mul r1.x, r1.x, r13.w                                          float Vis_SmithL = NoV * (NoL * (1 - a) + a);
+                                                                                                        float Vis_SmithV = NoL * (NoV * (1 - a) + a);
+                                395:     mad r1.x, r3.w, r14.y, r1.x                                   Vis_SmithV + Vis_SmithL
+                                396:     rcp r1.x, r1.x                                                rcp(Vis_SmithV + Vis_SmithL)
+                                //  源码是        return 0.5 * rcp(Vis_SmithV + Vis_SmithL);   
+                                //乘以0.5换了位置  在406行
+                    //结束 Vis_SmithJointApprox
+
+                    397:     mul r1.x, r1.x, r12.w                                         D * Vis
+
+
+
+                                //进入函数     float3 F = F_Schlick(SpecularColor, Context.VoH);
+
+                                398:     add r12.w, -r15.y, l(1.0000)                                  float Fc = Pow5(1 - VoH);    // 1 sub, 3 mul
+
+                                399:     mul r13.w, r12.w, r12.w
+                                400:     mul r13.w, r13.w, r13.w
+                                401:     mul r14.x, r12.w, r13.w
+
+                                402:     mul_sat r14.y, r2.y, l(50.0000)                               saturate(50.0 * SpecularColor.g)
+
+                                403:     mad r12.w, -r13.w, r12.w, l(1.0000)                           (1 - Fc)
+
+                                404:     mul r15.xyz, r2.xyzx, r12.wwww                                (1 - Fc) * SpecularColor
+
+                                405:     mad r14.xyz, r14.yyyy, r14.xxxx, r15.xyzx                     return saturate(50.0 * SpecularColor.g) * Fc + (1 - Fc) * SpecularColor;
+
+                                //结束函数F_Schlick
+
+                    406:     mul r1.x, r1.x, l(0.5000)                  return (D * Vis) * F;
+                    407:     mul r14.xyz, r14.xyzx, r1.xxxx
+
+            // 结束函数  SpecularGGX
+
+            
+            408:     mul r12.xyz, r3.wwww, r14.xyzx                                         Lighting.Specular = AreaLight.FalloffColor * (Falloff * NoL) * SpecularGGX(GBuffer.Roughness, GBuffer.SpecularColor, Context, NoL, AreaLight);
+                                                                                            因为AreaLight.FalloffColor 和 Falloff都被定义为1 所有这里只是 NoL * SpecularGGX(GBuffer.Roughness, GBuffer.SpecularColor, Context, NoL, AreaLight);
+
+            409:     mov r13.xyz, l(0, 0, 0, 0)                                             Lighting.Transmission = 0;
+
+// 结束DefaultLitBxDF函数
+
+ 410:     break
+ 411:     case l(2)
+ //注意！ 这里412到550行和上面的270到408行是完全一样的  这个函数用来计算r13.xyz = Lighting.Transmission;
+ //这里开始函数SubsurfaceBxDF                   return SubsurfaceBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+
+//开始函数    FDirectLighting Lighting = DefaultLitBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+                    412:     dp3 r1.x, r5.yzwy, r10.xyzx
+                    413:     dp3 r12.w, r5.yzwy, -r3.xyzx
+                    414:     dp3 r13.w, -r3.xyzx, r10.xyzx
+                    415:     lt r14.x, l(0), r7.w
+                    416:     if_nz r14.x                                                                      
+                    417:       mad r14.y, -r7.w, r7.w, l(1.0000)                                              
+                    418:       sqrt r14.y, r14.y
+                    419:       dp2 r14.z, r12.wwww, r1.xxxx
+                    420:       add r14.w, -r13.w, r14.z
+                    421:       ge r15.x, r14.w, r14.y
+                    422:       if_nz r15.x
+                    423:         mov r15.x, l(1.0000)
+                    424:         mov r15.y, abs(r12.w)
+                    425:       else
+                    426:         mad r15.z, -r14.w, r14.w, l(1.0000)
+                    427:         rsq r15.z, r15.z
+                    428:         mul r15.z, r7.w, r15.z
+                    429:         mad r15.w, -r14.w, r1.x, r12.w
+                    430:         mul r16.x, r15.w, r15.z
+                    431:         mul r16.y, r12.w, r12.w
+                    432:         mad r16.y, r16.y, l(2.0000), l(-1.0000)
+                    433:         mad r14.w, -r14.w, r13.w, r16.y
+                    434:         mad r16.y, -r1.x, r1.x, l(1.0000)
+                    435:         mad r16.y, -r12.w, r12.w, r16.y
+                    436:         mad r16.y, -r13.w, r13.w, r16.y
+                    437:         mad_sat r14.z, r14.z, r13.w, r16.y
+                    438:         sqrt r14.z, r14.z
+                    439:         mul r14.zw, r14.zzzw, r15.zzzz
+                    440:         mul r16.y, r12.w, r14.z
+                    441:         add r16.z, r16.y, r16.y
+                    442:         mad r16.w, r1.x, r14.y, r12.w
+                    443:         mad r15.z, r15.z, r15.w, r16.w
+                    444:         mad r15.w, r13.w, r14.y, r14.w
+                    445:         add r15.w, r15.w, l(1.0000)
+                    446:         mul r17.x, r14.z, r15.w
+                    447:         mul r17.y, r15.w, r15.z
+                    448:         mul r17.z, r15.z, r16.z
+                    449:         mul r16.y, r16.y, r15.z
+                    450:         mul r16.y, r16.y, l(0.5000)
+                    451:         mad r16.y, r17.x, l(-0.5000), r16.y
+                    452:         mul r16.y, r16.y, r17.y
+                    453:         mad r17.w, -r17.x, l(2.0000), r17.z
+                    454:         mul r17.z, r17.w, r17.z
+                    455:         mad r17.x, r17.x, r17.x, r17.z
+                    456:         mul r17.z, r15.w, r15.w
+                    457:         mad r15.w, r13.w, r14.y, r15.w
+                    458:         mad r15.w, r15.w, l(-0.5000), l(-0.5000)
+                    459:         mul r15.w, r15.w, r17.y
+                    460:         mad r15.w, r16.w, r17.z, r15.w
+                    461:         mad r15.z, r15.z, r15.w, r17.x
+                    462:         add r15.w, r16.y, r16.y
+                    463:         mul r16.w, r16.y, r16.y
+                    464:         mad r16.w, r15.z, r15.z, r16.w
+                    465:         div r15.w, r15.w, r16.w
+                    466:         mul r15.z, r15.z, r15.w
+                    467:         mad r15.w, -r15.w, r16.y, l(1.0000)
+                    468:         mul r14.z, r14.z, r15.z
+                    469:         mad r14.z, r15.w, r16.x, r14.z
+                    470:         mul r15.z, r16.z, r15.z
+                    471:         mad r14.w, r15.w, r14.w, r15.z
+                    472:         mad r14.z, r1.x, r14.y, r14.z
+                    473:         mad r14.y, r13.w, r14.y, r14.w
+                    474:         mad r14.w, r14.y, l(2.0000), l(2.0000)
+                    475:         rsq r14.w, r14.w
+                    476:         add r14.z, r12.w, r14.z
+                    477:         mul_sat r15.x, r14.w, r14.z
+                    478:         mad_sat r15.y, r14.w, r14.y, r14.w
+                    479:       endif
+                    480:     else
+                    481:       mad r14.y, r13.w, l(2.0000), l(2.0000)
+                    482:       rsq r14.y, r14.y
+                    483:       add r1.x, r1.x, r12.w
+                    484:       mul_sat r15.x, r14.y, r1.x
+                    485:       mad_sat r15.y, r14.y, r13.w, r14.y
+                    486:     endif
+                    487:     add r1.x, abs(r12.w), l(0.0000)
+                    488:     min r1.x, r1.x, l(1.0000)
+                    489:     mul r14.yzw, r3.wwww, r7.xxyz
+                    490:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)
+                    491:     mul r12.w, r5.x, r5.x
+                    492:     lt r13.w, l(0), r11.x
+                    493:     mul r14.y, r11.x, r11.x
+                    494:     mad r14.z, r15.y, l(3.6000), l(0.4000)
+                    495:     div r14.y, r14.y, r14.z
+                    496:     mad r14.y, r5.x, r5.x, r14.y
+                    497:     min r14.y, r14.y, l(1.0000)
+                    498:     movc r16.x, r13.w, r14.y, r12.w
+                    499:     mul r12.w, r7.w, l(0.2500)
+                    500:     ishr r13.w, r16.x, l(1)
+                    501:     iadd r13.w, r13.w, l(0.0000)
+                    502:     mad r13.w, r13.w, l(3.0000), r7.w
+                    503:     mul r12.w, r12.w, r13.w
+                    504:     add r13.w, r15.y, l(0.0010)
+                    505:     div r12.w, r12.w, r13.w
+                    506:     add r17.x, r12.w, r16.x
+                    507:     div r17.y, r16.x, r17.x
+                    508:     mov r16.y, l(1.0000)
+                    509:     movc r14.xy, r14.xxxx, r17.xyxx, r16.xyxx
+                    510:     lt r12.w, r9.w, l(1.0000)
+                    511:     add r14.z, -r9.w, l(1.0001)
+                    512:     add r14.w, r9.w, l(1.0000)
+                    513:     div r14.z, r14.z, r14.w
+                    514:     sqrt r14.z, r14.z
+                    515:     mul r14.w, r14.z, l(0.2500)
+                    516:     ishr r15.z, r14.x, l(1)
+                    517:     iadd r15.z, r15.z, l(0.0000)
+                    518:     mad r14.z, r15.z, l(3.0000), r14.z
+                    519:     mul r14.z, r14.z, r14.w
+                    520:     div r13.w, r14.z, r13.w
+                    521:     add r13.w, r13.w, r14.x
+                    522:     div r13.w, r14.x, r13.w
+                    523:     sqrt r13.w, r13.w
+                    524:     mul r13.w, r13.w, r14.y
+                    525:     movc r12.w, r12.w, r13.w, r14.y
+                    526:     mad r13.w, r15.x, r16.x, -r15.x
+                    527:     mad r13.w, r13.w, r15.x, l(1.0000)
+                    528:     mul r13.w, r13.w, r13.w
+                    529:     mul r13.w, r13.w, l(3.1416)
+                    530:     div r13.w, r16.x, r13.w
+                    531:     mul r12.w, r12.w, r13.w
+                    532:     sqrt r13.w, r16.x
+                    533:     add r14.x, -r13.w, l(1.0000)
+                    534:     mad r14.y, r1.x, r14.x, r13.w
+                    535:     mad r13.w, r3.w, r14.x, r13.w
+                    536:     mul r1.x, r1.x, r13.w
+                    537:     mad r1.x, r3.w, r14.y, r1.x
+                    538:     rcp r1.x, r1.x
+                    539:     mul r1.x, r1.x, r12.w
+                    540:     add r12.w, -r15.y, l(1.0000)
+                    541:     mul r13.w, r12.w, r12.w
+                    542:     mul r13.w, r13.w, r13.w
+                    543:     mul r14.x, r12.w, r13.w
+                    544:     mul_sat r14.y, r2.y, l(50.0000)
+                    545:     mad r12.w, -r13.w, r12.w, l(1.0000)
+                    546:     mul r15.xyz, r2.xyzx, r12.wwww
+                    547:     mad r14.xyz, r14.yyyy, r14.xxxx, r15.xyzx
+                    548:     mul r1.x, r1.x, l(0.5000)
+                    549:     mul r14.xyz, r14.xyzx, r1.xxxx
+                    550:     mul r12.xyz, r3.wwww, r14.xyzx
+
+// DefaultLitBxDF函数到这里结束   
+
+
+            551:     mul r14.xyz, r6.yzwy, r6.yzwy                                             float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);  从这里确定了T5的rgb颜色是次表面颜色
+
+            552:     mad r9.xyz, r9.xyzx, r0.yyyy, -r3.xyzx                                    float3 H = normalize(V + L);
+            553:     dp3 r0.y, r9.xyzx, r9.xyzx
+            554:     rsq r0.y, r0.y
+            555:     mul r9.xyz, r0.yyyy, r9.xyzx
+
+            556:     dp3_sat r0.y, r10.xyzx, r3.xyzx                                           pow(saturate(dot(L, -V)), 12)
+            557:     log r0.y, r0.y
+            558:     mul r0.y, r0.y, l(12.0000)
+            559:     exp r0.y, r0.y
+
+            560:     mad r1.x, r6.x, l(-2.9000), l(3.0000)                                     lerp(3, 0.1f, Opacity)
+
+            561:     mul r0.y, r0.y, r1.x                                                      float InScatter = pow(saturate(dot(L, -V)), 12) * lerp(3, 0.1f, Opacity);
+
+            562:     dp3 r1.x, r5.yzwy, r9.xyzx                                                float NormalContribution = saturate(dot(N, H) * Opacity + 1 - Opacity);
+            563:     mad r1.x, r1.x, r6.x, l(1.0000)
+            564:     add_sat r1.x, -r6.x, r1.x
+
+            565:     mul r1.x, r1.x, r2.w                                                      GBuffer.GBufferAO * NormalContribution
+
+            566:     mul r2.w, r1.x, l(0.1592)                                                 float BackScatter = GBuffer.GBufferAO * NormalContribution / (PI * 2);  
+
+            567:     mad r1.x, -r1.x, l(0.1592), l(1.0000)                                     Lighting.Transmission = AreaLight.FalloffColor * (Falloff * lerp(BackScatter, 1, InScatter)) * SubsurfaceColor;
+            568:     mad r0.y, r0.y, r1.x, r2.w                                                注意！这里的  AreaLight.FalloffColor 和 Falloff都在最初的时候被定义为了1 所有被省略了
+            569:     mul r13.xyz, r14.xyzx, r0.yyyy
+
+//  SubsurfaceBxDF函数到这里结束 
+
+ 570:     break
+ 571:     case l(3)
+//进入 PreintegratedSkinBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+  //注意！ 这里572到711行和上面的270到408行是完全一样的
+ //DefaultLitBxDF函数
+            572:     dp3 r0.y, r5.yzwy, r10.xyzx
+            573:     dp3 r1.x, r5.yzwy, -r3.xyzx
+            574:     dp3 r2.w, -r3.xyzx, r10.xyzx
+            575:     lt r9.x, l(0), r7.w
+            576:     if_nz r9.x
+            577:       mad r9.y, -r7.w, r7.w, l(1.0000)
+            578:       sqrt r9.y, r9.y
+            579:       dp2 r9.z, r1.xxxx, r0.yyyy
+            580:       add r12.w, -r2.w, r9.z
+            581:       ge r13.w, r12.w, r9.y
+            582:       if_nz r13.w
+            583:         mov r13.w, l(1.0000)
+            584:         mov r14.x, abs(r1.x)
+            585:       else
+            586:         mad r14.y, -r12.w, r12.w, l(1.0000)
+            587:         rsq r14.y, r14.y
+            588:         mul r14.y, r7.w, r14.y
+            589:         mad r14.z, -r12.w, r0.y, r1.x
+            590:         mul r14.w, r14.z, r14.y
+            591:         mul r15.x, r1.x, r1.x
+            592:         mad r15.x, r15.x, l(2.0000), l(-1.0000)
+            593:         mad r12.w, -r12.w, r2.w, r15.x
+            594:         mul r12.w, r12.w, r14.y
+            595:         mad r15.x, -r0.y, r0.y, l(1.0000)
+            596:         mad r15.x, -r1.x, r1.x, r15.x
+            597:         mad r15.x, -r2.w, r2.w, r15.x
+            598:         mad_sat r9.z, r9.z, r2.w, r15.x
+            599:         sqrt r9.z, r9.z
+            600:         mul r9.z, r9.z, r14.y
+            601:         mul r15.x, r1.x, r9.z
+            602:         add r15.y, r15.x, r15.x
+            603:         mad r15.z, r0.y, r9.y, r1.x
+            604:         mad r14.y, r14.y, r14.z, r15.z
+            605:         mad r14.z, r2.w, r9.y, r12.w
+            606:         add r14.z, r14.z, l(1.0000)
+            607:         mul r15.w, r9.z, r14.z
+            608:         mul r16.x, r14.z, r14.y
+            609:         mul r16.y, r14.y, r15.y
+            610:         mul r15.x, r15.x, r14.y
+            611:         mul r15.x, r15.x, l(0.5000)
+            612:         mad r15.x, r15.w, l(-0.5000), r15.x
+            613:         mul r15.x, r15.x, r16.x
+            614:         mad r16.z, -r15.w, l(2.0000), r16.y
+            615:         mul r16.y, r16.z, r16.y
+            616:         mad r15.w, r15.w, r15.w, r16.y
+            617:         mul r16.y, r14.z, r14.z
+            618:         mad r14.z, r2.w, r9.y, r14.z
+            619:         mad r14.z, r14.z, l(-0.5000), l(-0.5000)
+            620:         mul r14.z, r14.z, r16.x
+            621:         mad r14.z, r15.z, r16.y, r14.z
+            622:         mad r14.y, r14.y, r14.z, r15.w
+            623:         add r14.z, r15.x, r15.x
+            624:         mul r15.z, r15.x, r15.x
+            625:         mad r15.z, r14.y, r14.y, r15.z
+            626:         div r14.z, r14.z, r15.z
+            627:         mul r14.y, r14.y, r14.z
+            628:         mad r14.z, -r14.z, r15.x, l(1.0000)
+            629:         mul r9.z, r9.z, r14.y
+            630:         mad r9.z, r14.z, r14.w, r9.z
+            631:         mul r14.y, r15.y, r14.y
+            632:         mad r12.w, r14.z, r12.w, r14.y
+            633:         mad r9.z, r0.y, r9.y, r9.z
+            634:         mad r9.y, r2.w, r9.y, r12.w
+            635:         mad r12.w, r9.y, l(2.0000), l(2.0000)
+            636:         rsq r12.w, r12.w
+            637:         add r9.z, r1.x, r9.z
+            638:         mul_sat r13.w, r12.w, r9.z
+            639:         mad_sat r14.x, r12.w, r9.y, r12.w
+            640:       endif
+            641:     else
+            642:       mad r9.y, r2.w, l(2.0000), l(2.0000)
+            643:       rsq r9.y, r9.y
+            644:       add r9.z, r0.y, r1.x
+            645:       mul_sat r13.w, r9.y, r9.z
+            646:       mad_sat r14.x, r9.y, r2.w, r9.y
+            647:     endif
+            648:     add r1.x, abs(r1.x), l(0.0000)
+            649:     min r1.x, r1.x, l(1.0000)
+            650:     mul r14.yzw, r3.wwww, r7.xxyz
+            651:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)
+            652:     mul r2.w, r5.x, r5.x
+            653:     lt r9.y, l(0), r11.x
+            654:     mul r9.z, r11.x, r11.x
+            655:     mad r12.w, r14.x, l(3.6000), l(0.4000)
+            656:     div r9.z, r9.z, r12.w
+            657:     mad r9.z, r5.x, r5.x, r9.z
+            658:     min r9.z, r9.z, l(1.0000)
+            659:     movc r15.x, r9.y, r9.z, r2.w
+            660:     mul r2.w, r7.w, l(0.2500)
+            661:     ishr r9.y, r15.x, l(1)
+            662:     iadd r9.y, r9.y, l(0.0000)
+            663:     mad r9.y, r9.y, l(3.0000), r7.w
+            664:     mul r2.w, r2.w, r9.y
+            665:     add r9.y, r14.x, l(0.0010)
+            666:     div r2.w, r2.w, r9.y
+            667:     add r16.x, r2.w, r15.x
+            668:     div r16.y, r15.x, r16.x
+            669:     mov r15.y, l(1.0000)
+            670:     movc r9.xz, r9.xxxx, r16.xxyx, r15.xxyx
+            671:     lt r2.w, r9.w, l(1.0000)
+            672:     add r12.w, -r9.w, l(1.0001)
+            673:     add r14.y, r9.w, l(1.0000)
+            674:     div r12.w, r12.w, r14.y
+            675:     sqrt r12.w, r12.w
+            676:     mul r14.y, r12.w, l(0.2500)
+            677:     ishr r14.z, r9.x, l(1)
+            678:     iadd r14.z, r14.z, l(0.0000)
+            679:     mad r12.w, r14.z, l(3.0000), r12.w
+            680:     mul r12.w, r12.w, r14.y
+            681:     div r9.y, r12.w, r9.y
+            682:     add r9.y, r9.y, r9.x
+            683:     div r9.x, r9.x, r9.y
+            684:     sqrt r9.x, r9.x
+            685:     mul r9.x, r9.x, r9.z
+            686:     movc r2.w, r2.w, r9.x, r9.z
+            687:     mad r9.x, r13.w, r15.x, -r13.w
+            688:     mad r9.x, r9.x, r13.w, l(1.0000)
+            689:     mul r9.x, r9.x, r9.x
+            690:     mul r9.x, r9.x, l(3.1416)
+            691:     div r9.x, r15.x, r9.x
+            692:     mul r2.w, r2.w, r9.x
+            693:     sqrt r9.x, r15.x
+            694:     add r9.y, -r9.x, l(1.0000)
+            695:     mad r9.z, r1.x, r9.y, r9.x
+            696:     mad r9.x, r3.w, r9.y, r9.x
+            697:     mul r1.x, r1.x, r9.x
+            698:     mad r1.x, r3.w, r9.z, r1.x
+            699:     rcp r1.x, r1.x
+            700:     mul r1.x, r1.x, r2.w
+            701:     add r2.w, -r14.x, l(1.0000)
+            702:     mul r9.x, r2.w, r2.w
+            703:     mul r9.x, r9.x, r9.x
+            704:     mul r9.y, r2.w, r9.x
+            705:     mul_sat r9.z, r2.y, l(50.0000)
+            706:     mad r2.w, -r9.x, r2.w, l(1.0000)
+            707:     mul r14.xyz, r2.xyzx, r2.wwww
+            708:     mad r9.xyz, r9.zzzz, r9.yyyy, r14.xyzx
+            709:     mul r1.x, r1.x, l(0.5000)
+            710:     mul r9.xyz, r9.xyzx, r1.xxxx
+            711:     mul r12.xyz, r3.wwww, r9.xyzx
+// DefaultLitBxDF函数到这里结束
+
+ 712:     mul r9.xyz, r6.yzwy, r6.yzwy                                            float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
+
+
+ 713:     mad_sat r14.x, r0.y, l(0.5000), l(0.5000)                               float3 PreintegratedBRDF = Texture2DSampleLevel(View.PreIntegratedBRDF, View.PreIntegratedBRDFSampler, float2(saturate(dot(N, L) * .5 + .5), 1 - Opacity), 0).rgb;
+ 714:     add r14.y, -r6.x, l(1.0000)
+ 715:     sample_l(texture2d)(float,float,float,float) r14.xyz, r14.xyxx, t0.xyzw, s0, l(0) 
+
+
+
+ 716:     mul r13.xyz, r9.xyzx, r14.xyzx                                          Lighting.Transmission = AreaLight.FalloffColor * Falloff * PreintegratedBRDF * SubsurfaceColor;
+                                                                                  这里AreaLight.FalloffColor 和 Falloff还是1  被忽略了
+// 结束PreintegratedSkinBxDF
+
+ 717:     break
+ 718:     case l(4)
+
+
+//这里开始进入     ClearCoatBxDF( GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow );
+//从这里法线 kena用的是4.25的UE
+ 719:     max r0.y, r6.z, l(0.0200)                                               const float ClearCoatRoughness = max(GBuffer.CustomData.y, 0.02f);
+
+// Init(Context, Nspec, V, L);
+ 720:     dp3 r9.x, r5.yzwy, r10.xyzx                                             Context.NoL  
+ 721:     dp3 r1.x, r5.yzwy, -r3.xyzx                                             Context.NoV
+ 722:     dp3 r2.w, -r3.xyzx, r10.xyzx                                            Context.VoL
+
+// 进入函数    SphereMaxNoH(Context, AreaLight.SphereSinAlpha, CLEAR_COAT_BOTTOM_NORMAL == 0);
+ 723:     lt r12.w, l(0), r7.w
+ 724:     if_nz r12.w
+ 725:       mad r13.w, -r7.w, r7.w, l(1.0000)                                     
+ 726:       sqrt r13.w, r13.w
+
+ 727:       dp2 r14.x, r1.xxxx, r9.xxxx                                           
+ 728:       add r14.y, -r2.w, r14.x
+
+ 729:       ge r14.z, r14.y, r13.w                                                
+ 730:       if_nz r14.z 
+
+ 731:         mov r9.z, abs(r1.x)                                                
+
+ 732:         mov r9.y, l(1.0000)                                                   
+ 733:       else
+ 734:         mad r14.z, -r14.y, r14.y, l(1.0000)
+ 735:         rsq r14.z, r14.z
+ 736:         mul r14.z, r7.w, r14.z
+ 737:         mad r14.w, -r14.y, r9.x, r1.x
+ 738:         mul r15.x, r14.w, r14.z
+ 739:         mul r15.y, r1.x, r1.x
+ 740:         mad r15.y, r15.y, l(2.0000), l(-1.0000)
+ 741:         mad r14.y, -r14.y, r2.w, r15.y
+ 742:         mad r15.y, -r9.x, r9.x, l(1.0000)
+ 743:         mad r15.y, -r1.x, r1.x, r15.y
+ 744:         mad r15.y, -r2.w, r2.w, r15.y
+ 745:         mad_sat r14.x, r14.x, r2.w, r15.y
+ 746:         sqrt r14.x, r14.x
+ 747:         mul r14.xy, r14.xyxx, r14.zzzz
+ 748:         mul r15.y, r1.x, r14.x
+ 749:         add r15.z, r15.y, r15.y
+ 750:         mad r15.w, r9.x, r13.w, r1.x
+ 751:         mad r14.z, r14.z, r14.w, r15.w
+ 752:         mad r14.w, r2.w, r13.w, r14.y
+ 753:         add r14.w, r14.w, l(1.0000)
+ 754:         mul r16.xy, r14.wwww, r14.xzxx
+ 755:         mul r16.z, r14.z, r15.z
+ 756:         mul r15.y, r15.y, r14.z
+ 757:         mul r15.y, r15.y, l(0.5000)
+ 758:         mad r15.y, r16.x, l(-0.5000), r15.y
+ 759:         mul r15.y, r15.y, r16.y
+ 760:         mad r16.w, -r16.x, l(2.0000), r16.z
+ 761:         mul r16.z, r16.w, r16.z
+ 762:         mad r16.x, r16.x, r16.x, r16.z
+ 763:         mul r16.z, r14.w, r14.w
+ 764:         mad r14.w, r2.w, r13.w, r14.w
+ 765:         mad r14.w, r14.w, l(-0.5000), l(-0.5000)
+ 766:         mul r14.w, r14.w, r16.y
+ 767:         mad r14.w, r15.w, r16.z, r14.w
+ 768:         mad r14.z, r14.z, r14.w, r16.x
+ 769:         add r14.w, r15.y, r15.y
+ 770:         mul r15.w, r15.y, r15.y
+ 771:         mad r15.w, r14.z, r14.z, r15.w
+ 772:         div r14.w, r14.w, r15.w
+ 773:         mul r14.z, r14.z, r14.w
+ 774:         mad r14.w, -r14.w, r15.y, l(1.0000)
+ 775:         mul r14.x, r14.x, r14.z
+ 776:         mad r14.x, r14.w, r15.x, r14.x
+ 777:         mul r14.z, r15.z, r14.z
+ 778:         mad r14.y, r14.w, r14.y, r14.z
+ 779:         mad r9.x, r9.x, r13.w, r14.x
+ 780:         mad r13.w, r2.w, r13.w, r14.y
+ 781:         mad r14.x, r13.w, l(2.0000), l(2.0000)
+ 782:         rsq r14.x, r14.x
+ 783:         add r14.y, r1.x, r9.x
+ 784:         mul_sat r9.y, r14.x, r14.y
+ 785:         mad_sat r9.z, r14.x, r13.w, r14.x
+ 786:       endif
+ 787:     else
+ 788:       mad r13.w, r2.w, l(2.0000), l(2.0000)
+ 789:       rsq r13.w, r13.w
+ 790:       add r14.x, r1.x, r9.x
+ 791:       mul_sat r9.y, r13.w, r14.x
+ 792:       mad_sat r9.z, r13.w, r2.w, r13.w
+ 793:     endif 
+// 结束函数 SphereMaxNoH    输出 Context.NoL  Context.VoL  Context.NoH   Context.VoH
+
+
+ 794:     add r1.x, abs(r1.x), l(0.0000)                                      Context.NoV = saturate(abs(Context.NoV) + 1e-5);
+ 795:     min r1.x, r1.x, l(1.0000)                                         源码是saturate这里是用的min
+
+ ！！这里还有一句     Context.VoH = AreaLight.bIsRect ? Context.NoV : Context.VoH; 因为AreaLight.bIsRect一开始就定义为false 所以下面的用的Context.VoH
+
+ 796:     add r2.w, -r9.z, l(1.0000)                                        float Fc = Pow5(1 - Context.VoH); 
+ 797:     mul r13.w, r2.w, r2.w
+ 798:     mul r13.w, r13.w, r13.w
+ 799:     mul r14.x, r2.w, r13.w
+                                                                            float F0 = 0.04;
+ 800:     mad r2.w, -r13.w, r2.w, l(1.0000)
+ 801:     mad r2.w, r2.w, l(0.0400), r14.x                                     float F = Fc + (1 - Fc) * F0;
+
+
+！！这里还有一句    if (AreaLight.bIsRect) 同上 AreaLight.bIsRect被定义为了false 所有直接省略了
+    {
+    Lighting.Specular = ClearCoat * RectGGXApproxLTC(ClearCoatRoughness, F0, Nspec, V, AreaLight.Rect, AreaLight.Texture);
+    }
+
+ 802:     mul r0.y, r0.y, r0.y                                                float a2 = Pow4(ClearCoatRoughness);
+ 803:     mul r13.w, r0.y, r0.y
+                                                                             
+                                                                             if (AreaLight.SphereSinAlphaSoft > 0)
+                                                                                {
+                                                                                    // Modify Roughness
+                                                                                    a2 = saturate(a2 + Pow2(AreaLight.SphereSinAlphaSoft) / (VoH * 3.6 + 0.4));
+                                                                                }
+ 804:     lt r14.x, l(0), r11.x
+ 805:     mul r14.y, r11.x, r11.x
+ 806:     mad r14.z, r9.z, l(3.6000), l(0.4000)
+ 807:     div r14.z, r14.y, r14.z
+ 808:     mad r0.y, r0.y, r0.y, r14.z
+ 809:     min r0.y, r0.y, l(1.0000)
+ 810:     movc r15.x, r14.x, r0.y, r13.w
+
+
+                                                                            float Sphere_a2 = a2;
+                                                                            float Energy = 1;
+                                                                             if (AreaLight.SphereSinAlpha > 0) 这一句的判断是在下面821行的r12哪里 
+
+ 811:     mul r0.y, r7.w, l(0.2500)                                          {Sphere_a2 = New_a2(a2, AreaLight.SphereSinAlpha, VoH);
+ 812:     ishr r13.w, r15.x, l(1)
+ 813:     iadd r13.w, r13.w, l(0.0000)
+ 814:     mad r13.w, r13.w, l(3.0000), r7.w
+ 815:     mul r13.w, r0.y, r13.w
+ 816:     add r14.z, r9.z, l(0.0010)
+ 817:     div r13.w, r13.w, r14.z
+ 818:     add r16.x, r13.w, r15.x
+
+ 819:     div r16.y, r15.x, r16.x                                            Energy = a2 / Sphere_a2;}
+ 820:     mov r15.yw, l(0.0000, 1.0000, 0.0000, 1.0000)
+ 821:     movc r16.xy, r12.wwww, r16.xyxx, r15.xyxx
+
+
+
+ 822:     lt r13.w, r9.w, l(1.0000)                                             if (AreaLight.LineCosSubtended < 1)
+                                                                                float LineCosTwoAlpha = AreaLight.LineCosSubtended;
+
+ 823:     add r14.w, -r9.w, l(1.0001)                                           float LineTanAlpha = sqrt((1.0001 - LineCosTwoAlpha) / (1 + LineCosTwoAlpha));
+ 824:     add r15.y, r9.w, l(1.0000)
+ 825:     div r14.w, r14.w, r15.y
+ 826:     sqrt r14.w, r14.w
+
+ 827:     mul r15.y, r14.w, l(0.2500)                                           float Line_a2 = New_a2(Sphere_a2, LineTanAlpha, VoH);
+ 828:     ishr r16.z, r16.x, l(1)
+ 829:     iadd r16.z, r16.z, l(0.0000)
+ 830:     mad r16.z, r16.z, l(3.0000), r14.w
+ 831:     mul r16.z, r15.y, r16.z
+ 832:     div r14.z, r16.z, r14.z
+ 833:     add r14.z, r14.z, r16.x
+
+ 834:     div r14.z, r16.x, r14.z                                               Energy *= sqrt(Sphere_a2 / Line_a2);
+ 835:     sqrt r14.z, r14.z
+ 836:     mul r14.z, r14.z, r16.y                                               
+
+ 837:     movc r14.z, r13.w, r14.z, r16.y                                      //这里赋值
+
+
+
+ 838:     mad r16.x, r9.y, r15.x, -r9.y                                        float D = D_GGX(a2, Context.NoH) * ClearCoatEnergy;
+ 839:     mad r16.x, r16.x, r9.y, l(1.0000)
+ 840:     mul r16.x, r16.x, r16.x
+ 841:     mul r16.x, r16.x, l(3.1416)
+ 842:     div r16.x, r15.x, r16.x
+ 843:     mul r14.z, r14.z, r16.x
+
+ 844:     sqrt r15.x, r15.x                                                    float Vis = Vis_SmithJointApprox(a2, Context.NoV, NoL);
+ 845:     add r16.x, -r15.x, l(1.0000)
+ 846:     mad r16.y, r1.x, r16.x, r15.x
+ 847:     mad r15.x, r3.w, r16.x, r15.x
+ 848:     mul r15.x, r1.x, r15.x
+ 849:     mad r15.x, r3.w, r16.y, r15.x
+ 850:     rcp r15.x, r15.x
+
+ 851:     mul r14.z, r14.z, r15.x                                              float Fr1 = D * Vis * F;
+ 852:     mul r14.z, r2.w, r14.z
+
+ 853:     mul r14.z, r3.w, r14.z                                               Lighting.Specular = ClearCoat * AreaLight.FalloffColor * (Falloff * NoL * Fr1);
+ 854:     mul r14.z, r6.y, r14.z                                               这里的AreaLight.FalloffColor和Falloff还是1  
+                                                                               ！！！这里的Lighting.Specular比源码还差一个*0.5的值 在942行补上了
+
+
+ 855:     add r2.w, -r2.w, l(1.0000)                                           float FresnelCoeff = 1.0 - F;
+
+ 856:     mul r2.w, r2.w, r2.w                                                 FresnelCoeff *= FresnelCoeff;
+
+
+//下面进入函数                                                                 BxDFContext BottomContext = RefractClearCoatContext(Context);
+
+                                                                               float Eta = 1.0 / 1.5;
+
+ 857:     mad r15.x, -r9.z, l(0.2200), l(0.6300)                               float RefractionBlendFactor = RefractBlendClearCoatApprox(Context.VoH);
+ 858:     mad r15.x, r15.x, r9.z, l(-0.7450)
+
+ 859:     mul r16.x, r9.y, r15.x                                               float RefractionProjectionTerm = RefractionBlendFactor * Context.NoH;
+
+ 860:     mad_sat r1.x, r1.x, l(0.6667), -r16.x                                RefractedContext.NoV = saturate(Eta * Context.NoV - RefractionProjectionTerm);
+ 
+ 861:     mad_sat r16.x, r9.x, l(0.6667), -r16.x                               RefractedContext.NoL = saturate(Eta * Context.NoL - RefractionProjectionTerm);
+
+ 862:     mad_sat r9.z, r9.z, l(0.6667), -r15.x                                RefractedContext.VoH = saturate(Eta * Context.VoH - RefractionBlendFactor);
+
+
+ //进入函数                                                                 float3 Transmission = CalcThinTransmission(BottomContext.NoL, BottomContext.NoV, GBuffer);
+ 863:     lt r15.x, l(0), r16.x
+ 864:     lt r16.y, l(0), r1.x
+ 865:     and r15.x, r15.x, r16.y
+                                                                            float NormalizedLayerThickness = 1.0;
+ 
+ 866:     rcp r16.y, r1.x                                                      
+ 867:     rcp r16.z, r16.x
+ 868:     add r16.y, r16.z, r16.y                                            float ThinDistance = NormalizedLayerThickness * (rcp(NoV) + rcp(NoL));
+
+
+ 869:     lt r16.z, l(0), r0.w                                               if (AbsorptionMix > 0.0)
+
+
+ 870:     mul r17.xyz, r8.xyzx, l(0.3183, 0.3183, 0.3183, 0.0000)            float3 TransmissionColor = Diffuse_Lambert(GBuffer.BaseColor); BaseColor*1/PI
+
+ 871:     log r17.xyz, r17.xyzx                                              这里和源码不一样 源码是 float3 ExtinctionCoefficient = -log(TransmissionColor) / (2.0 * NormalizedLayerThickness);
+ 872:     mul r17.xyz, r17.xyzx, l(-0.3466, -0.3466, -0.3466, 0.0000)        这里是  float3 ExtinctionCoefficient = -log(TransmissionColor) / (2.885170225043278 * NormalizedLayerThickness);
+
+ 
+ 873:     add r16.y, r16.y, l(-2.0000)                                       float3 OpticalDepth = ExtinctionCoefficient * max(ThinDistance - 2.0 * NormalizedLayerThickness, 0.0);
+ 874:     max r16.y, r16.y, l(0)
+ 875:     mul r17.xyz, r16.yyyy, r17.xyzx
+
+ 876:     mul r17.xyz, r17.xyzx, l(-1.4427, -1.4427, -1.4427, 0.0000)        这里和源码不一样          源码是   Transmission = saturate(exp(-OpticalDepth)); 这里乘了一个1.4427
+ 877:     exp r17.xyz, r17.xyzx
+ 878:     min r17.xyz, r17.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+
+ 879:     add r17.xyz, r17.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)        Transmission = lerp(1.0, Transmission, AbsorptionMix);
+ 880:     mad r17.xyz, r0.wwww, r17.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)            
+
+ 881:     movc r16.yzw, r16.zzzz, r17.xxyz, l(0.0000, 1.0000, 1.0000, 1.0000)                    赋值
+ 882:     and r16.yzw, r15.xxxx, r16.yyzw
+
+//结束函数CalcThinTransmission
+                                                                                        float Alpha = Pow2(GBuffer.Roughness);
+ 883:     mul r15.x, r5.x, r5.x                                                         float a2 = Pow2(Alpha);
+
+
+
+ 884:     mad r17.x, r9.z, l(3.6000), l(0.4000)                         float Energy = EnergyNormalization(a2, BottomContext.VoH, AreaLight);
+ 885:     div r14.y, r14.y, r17.x
+ 886:     mad r14.y, r5.x, r5.x, r14.y
+ 887:     min r14.y, r14.y, l(1.0000)
+ 888:     movc r15.z, r14.x, r14.y, r15.x
+ 889:     ishr r14.x, r15.z, l(1)
+ 890:     iadd r14.x, r14.x, l(0.0000)
+ 891:     mad r14.x, r14.x, l(3.0000), r7.w
+ 892:     mul r0.y, r0.y, r14.x
+ 893:     add r14.x, r9.z, l(0.0010)                                                          
+ 894:     div r0.y, r0.y, r14.x
+ 895:     add r17.x, r0.y, r15.z
+ 896:     div r17.y, r15.z, r17.x                                                            
+ 897:     movc r15.xw, r12.wwww, r17.xxxy, r15.zzzw
+ 898:     ishr r0.y, r15.x, l(1)
+ 899:     iadd r0.y, r0.y, l(0.0000)
+ 900:     mad r0.y, r0.y, l(3.0000), r14.w
+ 901:     mul r0.y, r0.y, r15.y
+ 902:     div r0.y, r0.y, r14.x
+ 903:     add r0.y, r0.y, r15.x
+ 904:     div r0.y, r15.x, r0.y
+ 905:     sqrt r0.y, r0.y
+ 906:     mul r0.y, r0.y, r15.w
+ 907:     movc r0.y, r13.w, r0.y, r15.w
+
+
+
+
+
+                                                                        Falloff  = AreaLight.FalloffColor = 1
+ 908:     mul r14.xyw, r0.yyyy, r7.xyxz                                 float3 CommonDiffuse = (Energy * Falloff) * AreaLight.FalloffColor * Diffuse_Lambert(GBuffer.DiffuseColor);
+ 909:     mul r14.xyw, r14.xyxw, l(0.3183, 0.3183, 0.0000, 0.3183)    
+
+ 910:     mul r12.w, r2.w, r16.x                                        float3 RefractedDiffuse = (FresnelCoeff * BottomContext.NoL) * Transmission;      
+ 911:     mad r15.xyw, r12.wwww, r16.yzyw, -r9.xxxx
+
+ 912:     mad r15.xyw, r6.yyyy, r15.xyxw, r9.xxxx                       Lighting.Diffuse = CommonDiffuse * lerp(DefaultDiffuse, RefractedDiffuse, ClearCoat);
+ 913:     mul r11.yzw, r14.xxyw, r15.xxyw
+
+
+
+
+
+
+ 914:     mad r12.w, r9.y, r15.z, -r9.y                                 D2 = D_GGX(a2, Context.NoH);
+ 915:     mad r9.y, r12.w, r9.y, l(1.0000)
+ 916:     mul r9.y, r9.y, r9.y
+ 917:     mul r9.y, r9.y, l(3.1416)
+ 918:     div r9.y, r15.z, r9.y
+
+ 919:     sqrt r12.w, r15.z                                             Vis2 = Vis_SmithJointApprox(a2, BottomContext.NoV, BottomContext.NoL);
+ 920:     add r13.w, -r12.w, l(1.0000)
+ 921:     mad r14.x, r1.x, r13.w, r12.w
+ 922:     mad r12.w, r16.x, r13.w, r12.w
+ 923:     mul r1.x, r1.x, r12.w
+ 924:     mad r1.x, r16.x, r14.x, r1.x
+ 925:     rcp r1.x, r1.x
+ 926:     mul r1.x, r1.x, l(0.5000)
+
+ 927:     add r9.z, -r9.z, l(1.0000)                                    float3 F = F_Schlick(GBuffer.SpecularColor, BottomContext.VoH);
+ 928:     mul r12.w, r9.z, r9.z
+ 929:     mul r12.w, r12.w, r12.w
+ 930:     mul r13.w, r9.z, r12.w
+ 931:     mul_sat r14.x, r2.y, l(50.0000)
+ 932:     mad r9.z, -r12.w, r9.z, l(1.0000)
+ 933:     mul r15.xyz, r2.xyzx, r9.zzzz
+ 934:     mad r14.xyw, r14.xxxx, r13.wwww, r15.xyxz
+
+ 935:     mul r0.y, r0.y, r9.y                                         float3 CommonSpecular = (Energy * Falloff * D2 * Vis2) * AreaLight.FalloffColor * F;
+ 936:     mul r0.y, r1.x, r0.y
+ 937:     mul r14.xyw, r14.xyxw, r0.yyyy
+
+ 938:     mul r15.xyz, r2.wwww, r16.yzwy                               float3 RefractedSpecular = FresnelCoeff * Transmission * BottomContext.NoL;
+ 939:     mad r15.xyz, r15.xyzx, r16.xxxx, -r9.xxxx
+ 940:     mad r9.xyz, r6.yyyy, r15.xyzx, r9.xxxx
+
+ 941:     mul r9.xyz, r9.xyzx, r14.xywx                                Lighting.Specular += CommonSpecular * lerp(DefaultSpecular, RefractedSpecular, ClearCoat);
+ 942:     mad r12.xyz, r14.zzzz, l(0.5000, 0.5000, 0.5000, 0.0000), r9.xyzx
+
+ 943:     mov r13.xyz, l(0, 0, 0, 0)                                       Lighting.Transmission=0; 
+ //ClearCoatBxDF 函数结束
+ 944:     break
+
+ 945:     case l(5)
+ 946:     dp3 r0.y, r5.yzwy, r10.xyzx                                  Init(Context, N, V, L);
+ 947:     dp3 r1.x, r5.yzwy, -r3.xyzx
+ 948:     dp3 r2.w, -r3.xyzx, r10.xyzx
+                                                                       SphereMaxNoH(Context, AreaLight.SphereSinAlpha, true);
+ 949:     lt r9.x, l(0), r7.w
+ 950:     if_nz r9.x
+ 951:       mad r9.y, -r7.w, r7.w, l(1.0000)
+ 952:       sqrt r9.y, r9.y
+ 953:       dp2 r9.z, r1.xxxx, r0.yyyy
+ 954:       add r12.w, -r2.w, r9.z
+ 955:       ge r13.w, r12.w, r9.y
+ 956:       if_nz r13.w
+ 957:         mov r13.w, l(1.0000)
+ 958:         mov r14.x, abs(r1.x)
+ 959:       else
+ 960:         mad r14.y, -r12.w, r12.w, l(1.0000)
+ 961:         rsq r14.y, r14.y
+ 962:         mul r14.y, r7.w, r14.y
+ 963:         mad r14.z, -r12.w, r0.y, r1.x
+ 964:         mul r14.w, r14.z, r14.y
+ 965:         mul r15.x, r1.x, r1.x
+ 966:         mad r15.x, r15.x, l(2.0000), l(-1.0000)
+ 967:         mad r12.w, -r12.w, r2.w, r15.x
+ 968:         mul r12.w, r12.w, r14.y
+ 969:         mad r15.x, -r0.y, r0.y, l(1.0000)
+ 970:         mad r15.x, -r1.x, r1.x, r15.x
+ 971:         mad r15.x, -r2.w, r2.w, r15.x
+ 972:         mad_sat r9.z, r9.z, r2.w, r15.x
+ 973:         sqrt r9.z, r9.z
+ 974:         mul r9.z, r9.z, r14.y
+ 975:         mul r15.x, r1.x, r9.z
+ 976:         add r15.y, r15.x, r15.x
+ 977:         mad r15.z, r0.y, r9.y, r1.x
+ 978:         mad r14.y, r14.y, r14.z, r15.z
+ 979:         mad r14.z, r2.w, r9.y, r12.w
+ 980:         add r14.z, r14.z, l(1.0000)
+ 981:         mul r15.w, r9.z, r14.z
+ 982:         mul r16.x, r14.z, r14.y
+ 983:         mul r16.y, r14.y, r15.y
+ 984:         mul r15.x, r15.x, r14.y
+ 985:         mul r15.x, r15.x, l(0.5000)
+ 986:         mad r15.x, r15.w, l(-0.5000), r15.x
+ 987:         mul r15.x, r15.x, r16.x
+ 988:         mad r16.z, -r15.w, l(2.0000), r16.y
+ 989:         mul r16.y, r16.z, r16.y
+ 990:         mad r15.w, r15.w, r15.w, r16.y
+ 991:         mul r16.y, r14.z, r14.z
+ 992:         mad r14.z, r2.w, r9.y, r14.z
+ 993:         mad r14.z, r14.z, l(-0.5000), l(-0.5000)
+ 994:         mul r14.z, r14.z, r16.x
+ 995:         mad r14.z, r15.z, r16.y, r14.z
+ 996:         mad r14.y, r14.y, r14.z, r15.w
+ 997:         add r14.z, r15.x, r15.x
+ 998:         mul r15.z, r15.x, r15.x
+ 999:         mad r15.z, r14.y, r14.y, r15.z
+1000:         div r14.z, r14.z, r15.z
+1001:         mul r14.y, r14.y, r14.z
+1002:         mad r14.z, -r14.z, r15.x, l(1.0000)
+1003:         mul r9.z, r9.z, r14.y
+1004:         mad r9.z, r14.z, r14.w, r9.z
+1005:         mul r14.y, r15.y, r14.y
+1006:         mad r12.w, r14.z, r12.w, r14.y
+1007:         mad r9.z, r0.y, r9.y, r9.z
+1008:         mad r9.y, r2.w, r9.y, r12.w
+1009:         mad r12.w, r9.y, l(2.0000), l(2.0000)
+1010:         rsq r12.w, r12.w
+1011:         add r9.z, r1.x, r9.z
+1012:         mul_sat r13.w, r12.w, r9.z
+1013:         mad_sat r14.x, r12.w, r9.y, r12.w
+1014:       endif
+1015:     else
+1016:       mad r9.y, r2.w, l(2.0000), l(2.0000)
+1017:       rsq r9.y, r9.y
+1018:       add r0.y, r0.y, r1.x
+1019:       mul_sat r13.w, r9.y, r0.y
+1020:       mad_sat r14.x, r9.y, r2.w, r9.y
+1021:     endif
+    // SphereMaxNoH 结束
+
+1022:     add r0.y, abs(r1.x), l(0.0000)                         Context.NoV = saturate(abs(Context.NoV) + 1e-5);
+1023:     min r0.y, r0.y, l(1.0000)
+
+
+
+// 进入函数  GetProfileDualSpecular(GBuffer, AverageToRoughness0, AverageToRoughness1, LobeMix);
+
+1024:     mul r1.x, r6.x, l(10.0000)                              saturate(Opacity * 10.0f)
+
+1025:     mad r2.w, r6.y, l(255.0000), l(0.5000)                 uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(GBuffer);
+1026:     ftou r15.y, r2.w
+
+1027:     mov r15.xzw, l(5, 0, 0, 0)                             SSSS_DUAL_SPECULAR_OFFSET (常量 5)
+
+1028:     ld_indexable(texture2d)(float,float,float,float) r14.yzw, r15.xyzw, t8.wxyz        float4 Data = ActualSSProfilesTexture.Load(int3(SSSS_DUAL_SPECULAR_OFFSET, SubsurfaceProfileInt, 0));
+
+1029:     dp2_sat r2.w, r14.yyyy, r0.zzzz
+
+
+1031:     dp2_sat r9.y, r14.zzzz, r0.zzzz
+// 结束函数 GetProfileDualSpecular
+
+1030:     max r2.w, r2.w, l(0.0200)                         float Lobe0Roughness = max(saturate(AverageRoughness * AverageToRoughness0), 0.02f);
+
+
+1032:     mov_sat r1.x, r1.x
+
+1033:     add r2.w, r2.w, l(-1.0000)                        Lobe0Roughness = lerp(1.0f, Lobe0Roughness, saturate(Opacity * 10.0f));
+1034:     mad r2.w, r1.x, r2.w, l(1.0000)                  
+
+1035:     add r9.y, r9.y, l(-1.0000)                        Lobe1Roughness = lerp(1.0f, Lobe1Roughness, saturate(Opacity * 10.0f));
+1036:     mad r1.x, r1.x, r9.y, l(1.0000)
+
+1037:     mul r9.y, r14.x, r14.x                            float FD90 = 0.5 + 2 * VoH * VoH * Roughness;
+1038:     dp2 r9.y, r9.yyyy, r0.zzzz
+1039:     add r9.y, r9.y, l(-0.5000)                        (FD90 - 1)
+
+1040:     add r9.z, -r0.y, l(1.0000)                        float FdV = 1 + (FD90 - 1) * Pow5(1 - NoV);
+1041:     mul r12.w, r9.z, r9.z
+1042:     mul r12.w, r12.w, r12.w
+1043:     mul r9.z, r9.z, r12.w
+
+1044:     mad r9.z, r9.y, r9.z, l(1.0000)                   
+
+1045:     add r12.w, -r3.w, l(1.0000)                       float FdL = 1 + (FD90 - 1) * Pow5(1 - NoL);
+1046:     mul r14.y, r12.w, r12.w 
+1047:     mul r14.y, r14.y, r14.y
+1048:     mul r12.w, r12.w, r14.y
+1049:     mad r9.y, r9.y, r12.w, l(1.0000)                  
+
+1050:     mul r9.y, r9.z, r9.y
+1051:     mul r9.y, r9.y, l(0.3183)
+1052:     mul r15.xyz, r7.xyzx, r9.yyyy                     return DiffuseColor * ((1 / PI) * FdV * FdL);
+
+1053:     mul r11.yzw, r3.wwww, r15.xxyz                    Lighting.Diffuse = AreaLight.FalloffColor * (Falloff * NoL) * Diffuse_Burley(GBuffer.DiffuseColor, GBuffer.Roughness, Context.NoV, NoL, Context.VoH);
+
+
+1054:     mul r2.w, r2.w, r2.w                              Lighting.Specular = AreaLight.FalloffColor * (Falloff * NoL) * DualSpecularGGX(AverageRoughness, Lobe0Roughness, Lobe1Roughness, LobeMix, GBuffer.SpecularColor, Context, NoL, AreaLight);
+1055:     mul r9.y, r2.w, r2.w
+1056:     mul r1.x, r1.x, r1.x
+1057:     mul r9.z, r1.x, r1.x
+1058:     lt r12.w, l(0), r11.x
+1059:     mul r14.y, r11.x, r11.x
+1060:     mad r14.z, r14.x, l(3.6000), l(0.4000)
+1061:     div r14.y, r14.y, r14.z
+1062:     mad r2.w, r2.w, r2.w, r14.y
+1063:     min r2.w, r2.w, l(1.0000)
+1064:     movc r15.x, r12.w, r2.w, r9.y
+1065:     mul r2.w, r7.w, l(0.2500)
+1066:     ishr r9.y, r15.x, l(1)
+1067:     iadd r9.y, r9.y, l(0.0000)
+1068:     mad r9.y, r9.y, l(3.0000), r7.w
+1069:     mul r9.y, r2.w, r9.y
+1070:     add r14.z, r14.x, l(0.0010)
+1071:     div r9.y, r9.y, r14.z
+1072:     add r16.x, r9.y, r15.x
+1073:     div r16.y, r15.x, r16.x
+1074:     mov r15.yw, l(0.0000, 1.0000, 0.0000, 1.0000)
+1075:     movc r16.xy, r9.xxxx, r16.xyxx, r15.xyxx
+1076:     lt r9.y, r9.w, l(1.0000)
+1077:     add r15.y, -r9.w, l(1.0001)
+1078:     add r16.z, r9.w, l(1.0000)
+1079:     div r15.y, r15.y, r16.z
+1080:     sqrt r15.y, r15.y
+1081:     mul r16.z, r15.y, l(0.2500)
+1082:     ishr r16.w, r16.x, l(1)
+1083:     iadd r16.w, r16.w, l(0.0000)
+1084:     mad r16.w, r16.w, l(3.0000), r15.y
+1085:     mul r16.w, r16.w, r16.z
+1086:     div r16.w, r16.w, r14.z
+1087:     add r16.w, r16.w, r16.x
+1088:     div r16.x, r16.x, r16.w
+1089:     sqrt r16.x, r16.x
+1090:     mul r16.x, r16.x, r16.y
+1091:     movc r16.x, r9.y, r16.x, r16.y
+1092:     mad r1.x, r1.x, r1.x, r14.y
+1093:     min r1.x, r1.x, l(1.0000)
+1094:     movc r15.z, r12.w, r1.x, r9.z
+1095:     ishr r1.x, r15.z, l(1)
+1096:     iadd r1.x, r1.x, l(0.0000)
+1097:     mad r1.x, r1.x, l(3.0000), r7.w
+1098:     mul r1.x, r1.x, r2.w
+1099:     div r1.x, r1.x, r14.z
+1100:     add r17.x, r1.x, r15.z
+1101:     div r17.y, r15.z, r17.x
+1102:     movc r9.xz, r9.xxxx, r17.xxyx, r15.zzwz
+1103:     ishr r1.x, r9.x, l(1)
+1104:     iadd r1.x, r1.x, l(0.0000)
+1105:     mad r1.x, r1.x, l(3.0000), r15.y
+1106:     mul r1.x, r1.x, r16.z
+1107:     div r1.x, r1.x, r14.z
+1108:     add r1.x, r1.x, r9.x
+1109:     div r1.x, r9.x, r1.x
+1110:     sqrt r1.x, r1.x
+1111:     mul r1.x, r1.x, r9.z
+1112:     movc r1.x, r9.y, r1.x, r9.z
+1113:     mad r9.xy, r13.wwww, r15.xzxx, -r13.wwww
+1114:     mad r9.xy, r9.xyxx, r13.wwww, l(1.0000, 1.0000, 0.0000, 0.0000)
+1115:     mul r9.xy, r9.xyxx, r9.xyxx
+1116:     mul r9.xy, r9.xyxx, l(3.1416, 3.1416, 0.0000, 0.0000)
+1117:     div r9.xy, r15.xzxx, r9.xyxx
+1118:     mul r2.w, r16.x, r9.x
+1119:     mad r1.x, r9.y, r1.x, -r2.w
+1120:     mad r1.x, r14.w, r1.x, r2.w
+1121:     mad r2.w, r0.y, r10.w, r5.x
+1122:     mad r9.x, r3.w, r10.w, r5.x
+1123:     mul r0.y, r0.y, r9.x
+1124:     mad r0.y, r3.w, r2.w, r0.y
+1125:     rcp r0.y, r0.y
+1126:     mul r0.y, r0.y, r1.x
+1127:     add r1.x, -r14.x, l(1.0000)
+1128:     mul r2.w, r1.x, r1.x
+1129:     mul r2.w, r2.w, r2.w
+1130:     mul r9.x, r1.x, r2.w
+1131:     mul_sat r9.y, r2.y, l(50.0000)
+1132:     mad r1.x, -r2.w, r1.x, l(1.0000)
+1133:     mul r14.xyz, r2.xyzx, r1.xxxx
+1134:     mad r9.xyz, r9.yyyy, r9.xxxx, r14.xyzx
+1135:     mul r0.y, r0.y, l(0.5000)
+1136:     mul r9.xyz, r9.xyzx, r0.yyyy
+1137:     mul r12.xyz, r3.wwww, r9.xyzx        
+
+1138:     mov r13.xyz, l(0, 0, 0, 0)        Lighting.Transmission = 0;
+// SubsurfaceProfileBxDF结束
+
+1139:     break
+1140:     case l(6)
+
+
+// 开始函数                    return TwoSidedBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+ //DefaultLitBxDF函数
+1141:     dp3 r0.y, r5.yzwy, r10.xyzx
+1142:     dp3 r1.x, r5.yzwy, -r3.xyzx
+1143:     dp3 r2.w, -r3.xyzx, r10.xyzx
+1144:     lt r9.x, l(0), r7.w
+1145:     if_nz r9.x
+1146:       mad r9.y, -r7.w, r7.w, l(1.0000)
+1147:       sqrt r9.y, r9.y
+1148:       dp2 r9.z, r1.xxxx, r0.yyyy
+1149:       add r10.w, -r2.w, r9.z
+1150:       ge r12.w, r10.w, r9.y
+1151:       if_nz r12.w
+1152:         mov r12.w, l(1.0000)
+1153:         mov r13.w, abs(r1.x)
+1154:       else
+1155:         mad r14.x, -r10.w, r10.w, l(1.0000)
+1156:         rsq r14.x, r14.x
+1157:         mul r14.x, r7.w, r14.x
+1158:         mad r14.y, -r10.w, r0.y, r1.x
+1159:         mul r14.z, r14.y, r14.x
+1160:         mul r14.w, r1.x, r1.x
+1161:         mad r14.w, r14.w, l(2.0000), l(-1.0000)
+1162:         mad r10.w, -r10.w, r2.w, r14.w
+1163:         mul r10.w, r10.w, r14.x
+1164:         mad r14.w, -r0.y, r0.y, l(1.0000)
+1165:         mad r14.w, -r1.x, r1.x, r14.w
+1166:         mad r14.w, -r2.w, r2.w, r14.w
+1167:         mad_sat r9.z, r9.z, r2.w, r14.w
+1168:         sqrt r9.z, r9.z
+1169:         mul r9.z, r9.z, r14.x
+1170:         mul r14.w, r1.x, r9.z
+1171:         add r15.x, r14.w, r14.w
+1172:         mad r15.y, r0.y, r9.y, r1.x
+1173:         mad r14.x, r14.x, r14.y, r15.y
+1174:         mad r14.y, r2.w, r9.y, r10.w
+1175:         add r14.y, r14.y, l(1.0000)
+1176:         mul r15.z, r9.z, r14.y
+1177:         mul r15.w, r14.y, r14.x
+1178:         mul r16.x, r14.x, r15.x
+1179:         mul r14.w, r14.w, r14.x
+1180:         mul r14.w, r14.w, l(0.5000)
+1181:         mad r14.w, r15.z, l(-0.5000), r14.w
+1182:         mad r16.y, -r15.z, l(2.0000), r16.x
+1183:         mul r16.x, r16.y, r16.x
+1184:         mad r15.z, r15.z, r15.z, r16.x
+1185:         mul r16.x, r14.y, r14.y
+1186:         mad r14.y, r2.w, r9.y, r14.y
+1187:         mad r14.y, r14.y, l(-0.5000), l(-0.5000)
+1188:         mul r14.yw, r14.yyyw, r15.wwww
+1189:         mad r14.y, r15.y, r16.x, r14.y
+1190:         mad r14.x, r14.x, r14.y, r15.z
+1191:         add r14.y, r14.w, r14.w
+1192:         mul r15.y, r14.w, r14.w
+1193:         mad r15.y, r14.x, r14.x, r15.y
+1194:         div r14.y, r14.y, r15.y
+1195:         mul r14.x, r14.x, r14.y
+1196:         mad r14.y, -r14.y, r14.w, l(1.0000)
+1197:         mul r9.z, r9.z, r14.x
+1198:         mad r9.z, r14.y, r14.z, r9.z
+1199:         mul r14.x, r15.x, r14.x
+1200:         mad r10.w, r14.y, r10.w, r14.x
+1201:         mad r9.z, r0.y, r9.y, r9.z
+1202:         mad r9.y, r2.w, r9.y, r10.w
+1203:         mad r10.w, r9.y, l(2.0000), l(2.0000)
+1204:         rsq r10.w, r10.w
+1205:         add r9.z, r1.x, r9.z
+1206:         mul_sat r12.w, r10.w, r9.z
+1207:         mad_sat r13.w, r10.w, r9.y, r10.w
+1208:       endif
+1209:     else
+1210:       mad r9.y, r2.w, l(2.0000), l(2.0000)
+1211:       rsq r9.y, r9.y
+1212:       add r9.z, r0.y, r1.x
+1213:       mul_sat r12.w, r9.y, r9.z
+1214:       mad_sat r13.w, r9.y, r2.w, r9.y
+1215:     endif
+1216:     add r1.x, abs(r1.x), l(0.0000)
+1217:     min r1.x, r1.x, l(1.0000)
+1218:     mul r14.xyz, r3.wwww, r7.xyzx
+1219:     mul r11.yzw, r14.xxyz, l(0.0000, 0.3183, 0.3183, 0.3183)
+1220:     mul r9.y, r5.x, r5.x
+1221:     lt r9.z, l(0), r11.x
+1222:     mul r10.w, r11.x, r11.x
+1223:     mad r14.x, r13.w, l(3.6000), l(0.4000)
+1224:     div r10.w, r10.w, r14.x
+1225:     mad r10.w, r5.x, r5.x, r10.w
+1226:     min r10.w, r10.w, l(1.0000)
+1227:     movc r14.x, r9.z, r10.w, r9.y
+1228:     mul r9.y, r7.w, l(0.2500)
+1229:     ishr r9.z, r14.x, l(1)
+1230:     iadd r9.z, r9.z, l(0.0000)
+1231:     mad r9.z, r9.z, l(3.0000), r7.w
+1232:     mul r9.y, r9.z, r9.y
+1233:     add r9.z, r13.w, l(0.0010)
+1234:     div r9.y, r9.y, r9.z
+1235:     add r15.x, r9.y, r14.x
+1236:     div r15.y, r14.x, r15.x
+1237:     mov r14.y, l(1.0000)
+1238:     movc r9.xy, r9.xxxx, r15.xyxx, r14.xyxx
+1239:     lt r10.w, r9.w, l(1.0000)
+1240:     add r14.y, -r9.w, l(1.0001)
+1241:     add r14.z, r9.w, l(1.0000)
+1242:     div r14.y, r14.y, r14.z
+1243:     sqrt r14.y, r14.y
+1244:     mul r14.z, r14.y, l(0.2500)
+1245:     ishr r14.w, r9.x, l(1)
+1246:     iadd r14.w, r14.w, l(0.0000)
+1247:     mad r14.y, r14.w, l(3.0000), r14.y
+1248:     mul r14.y, r14.y, r14.z
+1249:     div r9.z, r14.y, r9.z
+1250:     add r9.z, r9.z, r9.x
+1251:     div r9.x, r9.x, r9.z
+1252:     sqrt r9.x, r9.x
+1253:     mul r9.x, r9.x, r9.y
+1254:     movc r9.x, r10.w, r9.x, r9.y
+1255:     mad r9.y, r12.w, r14.x, -r12.w
+1256:     mad r9.y, r9.y, r12.w, l(1.0000)
+1257:     mul r9.y, r9.y, r9.y
+1258:     mul r9.y, r9.y, l(3.1416)
+1259:     div r9.y, r14.x, r9.y
+1260:     mul r9.x, r9.x, r9.y
+1261:     sqrt r9.y, r14.x
+1262:     add r9.z, -r9.y, l(1.0000)
+1263:     mad r10.w, r1.x, r9.z, r9.y
+1264:     mad r9.y, r3.w, r9.z, r9.y
+1265:     mul r1.x, r1.x, r9.y
+1266:     mad r1.x, r3.w, r10.w, r1.x
+1267:     rcp r1.x, r1.x
+1268:     mul r1.x, r1.x, r9.x
+1269:     add r9.x, -r13.w, l(1.0000)
+1270:     mul r9.y, r9.x, r9.x
+1271:     mul r9.y, r9.y, r9.y
+1272:     mul r9.z, r9.x, r9.y
+1273:     mul_sat r10.w, r2.y, l(50.0000)
+1274:     mad r9.x, -r9.y, r9.x, l(1.0000)
+1275:     mul r14.xyz, r2.xyzx, r9.xxxx
+1276:     mad r9.xyz, r10.wwww, r9.zzzz, r14.xyzx
+1277:     mul r1.x, r1.x, l(0.5000)
+1278:     mul r9.xyz, r9.xyzx, r1.xxxx
+1279:     mul r12.xyz, r3.wwww, r9.xyzx
+// DefaultLitBxDF函数结束
+
+
+
+1280:     mul r9.xyz, r6.yzwy, r6.yzwy                   float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
+                                                         float Wrap = 0.5;
+1281:     add r0.y, -r0.y, l(0.5000)                     float WrapNoL = saturate((-dot(N, L) + Wrap) / Square(1 + Wrap));
+1282:     mul_sat r0.y, r0.y, l(0.4444)           
+
+1283:     mov_sat r2.w, -r2.w                            float Scatter = D_GGX(0.6 * 0.6, saturate(-VoL));
+1284:     mul r1.x, r2.w, r2.w
+1285:     mad r1.x, r1.x, l(-0.6400), l(1.0000)
+1286:     mul r1.x, r1.x, r1.x
+1287:     mul r1.x, r1.x, l(3.1416)
+1288:     div r1.x, l(0.3600), r1.x
+
+1289:     mul r0.y, r0.y, r1.x                           Lighting.Transmission = AreaLight.FalloffColor * (Falloff * WrapNoL * Scatter) * SubsurfaceColor;
+1290:     mul r13.xyz, r9.xyzx, r0.yyyy 
+
+
+1291:     break
+1292:     case l(7)
+
+// 进入函数                                         return HairBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+// 整个HairBxDF就输出下面这两句                          
+bool bEvalMultiScatter = true;
+Lighting.Transmission = AreaLight.FalloffColor * Falloff * HairShading(GBuffer, L, V, N, Shadow.TransmissionShadow, Shadow.HairTransmittance, 1, 0, uint2(0, 0), bEvalMultiScatter);
+1293:     max r0.y, r0.z, l(0.0039)                            float ClampedRoughness = clamp(GBuffer.Roughness, 1 / 255.0f, 1.0f);  
+1294:     min r0.y, r0.y, l(1.0000)
+
+1295:     dp3 r0.z, -r3.xyzx, r10.xyzx                                           const float VoL = dot(V, L);
+
+1296:     dp3 r1.x, r5.yzwy, r10.xyzx                                            const float SinThetaL = dot(N, L);
+
+1297:     dp3 r2.w, r5.yzwy, -r3.xyzx                                            const float SinThetaV = dot(N, V);
+
+
+1298:     mad r9.x, abs(r2.w), l(-0.1566), l(1.5708)                             float CosThetaD = cos(0.5 * abs(asinFast(SinThetaV) - asinFast(SinThetaL)));
+1299:     add r9.y, -abs(r2.w), l(1.0000)
+1300:     sqrt r9.y, r9.y
+1301:     mul r9.z, r9.y, r9.x
+1302:     ge r10.w, r2.w, l(0)
+1303:     mad r9.x, -r9.x, r9.y, l(3.1416)
+1304:     movc r9.x, r10.w, r9.z, r9.x
+
+1305:     mad r9.y, abs(r1.x), l(-0.1566), l(1.5708)
+1306:     add r9.z, -abs(r1.x), l(1.0000)
+1307:     sqrt r10.w, r9.z
+1308:     mul r12.w, r9.y, r10.w
+1309:     ge r13.w, r1.x, l(0)
+1310:     mad r9.y, -r9.y, r10.w, l(3.1416)
+1311:     movc r9.y, r13.w, r12.w, r9.y
+
+1312:     add r9.xy, -r9.xyxx, l(1.5708, 1.5708, 0.0000, 0.0000)
+
+1313:     add r9.x, -r9.y, r9.x
+
+1314:     mul r9.x, abs(r9.x), l(0.5000)
+
+1315:     sincos null, r9.x, r9.x
+
+
+
+1316:     mad r14.xyz, -r1.xxxx, r5.yzwy, r10.xyzx                             const float3 Lp = L - SinThetaL * N;
+
+1317:     mad r15.xyz, -r2.wwww, r5.yzwy, -r3.xyzx                             const float3 Vp = V - SinThetaV * N;
+
+
+1318:     dp3 r9.y, r14.xyzx, r15.xyzx                                         const float CosPhi = dot(Lp, Vp) * rsqrt(dot(Lp, Lp) * dot(Vp, Vp) + 1e-4);
+
+1319:     dp3 r10.w, r14.xyzx, r14.xyzx
+
+1320:     dp3 r12.w, r15.xyzx, r15.xyzx
+
+1321:     mad r10.w, r10.w, r12.w, l(0.0001)
+1322:     rsq r10.w, r10.w
+1323:     mul r9.y, r9.y, r10.w
+
+1324:     mad r14.xyz, r9.yyyy, l(0.5000, -3.6500, 17.0000, 0.0000), l(0.5000, -3.9800, -16.7800, 0.0000)   这里包含了三组数据 当前用的是    0.5 + 0.5 * CosPhi   后面还有-3.65 * CosPhi - 3.98 和17 * CosPhi - 16.78
+                                                                                                         const float CosHalfPhi = sqrt(saturate(0.5 + 0.5 * CosPhi));                                                                                                  
+1325:     mov_sat r14.x, r14.x                                                                                         
+1326:     sqrt r10.w, r14.x
+
+1327:     div r14.xw, l(1.1900, 0.0000, 0.0000, 0.8000), r9.xxxx              这里包含了        1.19 / CosThetaD 和0.8 / CosThetaD                  
+                                                                              loat n_prime = 1.19 / CosThetaD + 0.36 * CosThetaD;
+1328:     mad r13.w, r9.x, l(0.3600), r14.x
+
+                                                                                float Shift = 0.035;
+                                                                                float Alpha[] = {
+                                                                                    - Shift * 2,    0.07          
+                                                                                    Shift,          0.035
+                                                                                    Shift * 4,      0.14
+                                                                                };
+
+1329:     mul r0.y, r0.y, r0.y                                                  float B[] = {
+                                                                                    Area + Pow2(ClampedRoughness),
+                                                                                    Area + Pow2(ClampedRoughness) / 2,     这里是 r16.x
+                                                                                    Area + Pow2(ClampedRoughness) * 2,
+                                                                                };
+
+1330:     mul r16.xyz, r0.yyyy, l(0.5000, 1.2533, 5.0133, 0.0000)
+
+1331:     add r14.x, r0.y, r0.y
+
+
+            // R
+  if (HairTransmittance.ScatteringComponent & HAIR_COMPONENT_R)
+                                                                                const float sa = sin(Alpha[0]);= -0.0699
+                                                                                const float ca = cos(Alpha[0]);= -0.9976
+
+
+1332:     mul r15.w, r10.w, l(0.9976)                                           ca * CosHalfPhi
+
+1333:     mad r16.w, -r2.w, r2.w, l(1.0000)                                     sqrt(1 - SinThetaV * SinThetaV)
+1334:     sqrt r16.w, r16.w
+
+1335:     mul r17.x, r2.w, l(-0.0699)                                           sa * SinThetaV
+
+1336:     mad r15.w, r15.w, r16.w, r17.x                                        (ca * CosHalfPhi * sqrt(1 - SinThetaV * SinThetaV) + sa * SinThetaV)
+                                                                        源码是    float Shift = 2 * sa * (ca * CosHalfPhi * sqrt(1 - SinThetaV * SinThetaV) + sa * SinThetaV);
+                                                                          这里少的2*sa在1340行补上了
+
+1337:     mul r0.y, r10.w, r0.y                                                 B[0]  * CosHalfPhi
+
+1338:     mul r17.xy, r0.yyyy, l(1.4142, 3.5449, 0.0000, 0.0000)               r17.x = B[0] * sqrt(2.0) * CosHalfPhir;   17.Y = B[0] * sqrt(2.0) * CosHalfPhi *sqrt(2 * PI)
+
+1339:     add r0.y, r1.x, r2.w                                                 SinThetaL + SinThetaV
+
+1340:     mad r1.x, -r15.w, l(-0.1399), r0.y                                  SinThetaL + SinThetaV - Shift
+
+
+                                                                         float Mp = Hair_g(B[0] * sqrt(2.0) * CosHalfPhi, SinThetaL + SinThetaV - Shift);
+
+1341:     mul r1.x, r1.x, r1.x                                            exp(-0.5 * Pow2(Theta) / (B * B))
+1342:     mul r1.x, r1.x, l(-0.5000)
+1343:     mul r2.w, r17.x, r17.x
+1344:     div r1.x, r1.x, r2.w
+1345:     mul r1.x, r1.x, l(1.4427)
+1346:     exp r1.x, r1.x
+
+1347:     div r1.x, r1.x, r17.y                                           exp(-0.5 * Pow2(Theta) / (B * B)) / (sqrt(2 * PI) * B);
+
+
+1348:     mul r1.x, r10.w, r1.x                                           CosHalfPhi*Mp
+
+
+
+1349:     mad_sat r0.z, r0.z, l(0.5000), l(0.5000)                        sqrt(saturate(0.5 + 0.5 * VoL))
+1350:     sqrt r0.z, r0.z
+                               
+1351:     add r0.z, -r0.z, l(1.0000)                                      float Fp = Hair_F(sqrt(saturate(0.5 + 0.5 * VoL)));
+1352:     mul r2.w, r0.z, r0.z
+1353:     mul r2.w, r2.w, r2.w
+1354:     mul r0.z, r0.z, r2.w
+1355:     mad r0.z, r0.z, l(0.9535), l(0.0465)
+
+1356:     mul r0.z, r1.x, r0.z                                             CosHalfPhi * Mp * Fp
+
+1357:     mul r0.z, r8.w, r0.z                                             CosHalfPhi * Mp * Fp * GBuffer.Specular
+
+这里的源码是                S += Mp * Np * Fp * (GBuffer.Specular * 2) * lerp(1, Backlit, saturate(-VoL));
+          缺少的     *2*0.25   在1393补上了                                   
+ 缺少了  * lerp(1, Backlit, saturate(-VoL))  原因是Backlit也是1 所以lerp的结果是1  省略了
+
+
+
+            // TT
+            if (HairTransmittance.ScatteringComponent & HAIR_COMPONENT_TT)
+
+1358:     add r17.xy, r0.yyyy, l(-0.0350, -0.1400, 0.0000, 0.0000)                          float Mp = Hair_g(B[1], SinThetaL + SinThetaV - Alpha[1]);
+1359:     mul r17.xy, r17.xyxx, r17.xyxx
+1360:     mul r17.xy, r17.xyxx, l(-0.5000, -0.5000, 0.0000, 0.0000)
+1361:     mul r0.y, r16.x, r16.x
+1362:     div r0.y, r17.x, r0.y
+1363:     mul r0.y, r0.y, l(1.4427)
+1364:     exp r0.y, r0.y
+1365:     div r0.y, r0.y, r16.y 
+
+1366:     div r1.x, l(1.0000, 1.0000, 1.0000, 1.0000), r13.w                                float a = 1 / n_prime;
+
+1367:     mad r2.w, -r9.y, l(0.8000), l(0.6000)                                             float h = CosHalfPhi * (1 + a * (0.6 - 0.8 * CosPhi));
+1368:     mad r2.w, r1.x, r2.w, l(1.0000)
+1369:     mul r2.w, r2.w, r10.w
+
+1370:     mad r9.y, -r2.w, r2.w, l(1.0000)
+1371:     max r9.y, r9.y, l(0)
+1372:     sqrt r9.y, r9.y
+
+1373:     mad r9.y, -r9.x, r9.y, l(1.0000)                                                 float f = Hair_F(CosThetaD * sqrt(saturate(1 - h * h)));
+1374:     mul r10.w, r9.y, r9.y
+1375:     mul r10.w, r10.w, r10.w
+1376:     mul r9.y, r9.y, r10.w
+1377:     mad r9.y, r9.y, l(0.9535), l(0.0465)
+
+1378:     add r9.y, -r9.y, l(1.0000)                                                       float Fp = Pow2(1 - f);
+1379:     mul r9.y, r9.y, r9.y
+
+1380:     mul r1.x, r1.x, r2.w                                                         float3 Tp = pow(GBuffer.BaseColor, 0.5 * sqrt(1 - Pow2(h * a)) / CosThetaD);
+1381:     mad r1.x, -r1.x, r1.x, l(1.0000)
+1382:     sqrt r1.x, r1.x
+1383:     mul r1.x, r1.x, l(0.5000)
+1384:     div r1.x, r1.x, r9.x
+1385:     log r16.xyw, r8.xyxz
+1386:     mul r17.xzw, r1.xxxx, r16.xxyw
+1387:     exp r17.xzw, r17.xxzw
+
+1388:     mul r14.yz, r14.yyzy, l(0.0000, 1.4427, 1.4427, 0.0000)                float Np = exp(-3.65 * CosPhi - 3.98);
+1389:     exp r14.yz, r14.yyzy
+
+1390:     mul r0.y, r0.y, r14.y                                                  S += Mp * Np * Fp * Tp * Backlit;      Backlit省略了
+1391:     mul r0.y, r9.y, r0.y
+1392:     mul r17.xzw, r17.xxzw, r0.yyyy
+1393:     mad r17.xzw, r0.zzzz, l(0.5000, 0.0000, 0.5000, 0.5000), r17.xxzw
+
+
+
+            // TRT
+            if (HairTransmittance.ScatteringComponent & HAIR_COMPONENT_TRT)
+
+
+1394:     mul r0.y, r14.x, r14.x                                              float Mp = Hair_g(B[2], SinThetaL + SinThetaV - Alpha[2]);
+1395:     div r0.y, r17.y, r0.y
+1396:     mul r0.y, r0.y, l(1.4427)
+1397:     exp r0.y, r0.y
+1398:     div r0.y, r0.y, r16.z
+
+1399:     mad r0.z, -r9.x, l(0.5000), l(1.0000)                               float f = Hair_F(CosThetaD * 0.5);
+1400:     mul r1.x, r0.z, r0.z
+1401:     mul r1.x, r1.x, r1.x
+1402:     mul r0.z, r0.z, r1.x
+1403:     mad r0.z, r0.z, l(0.9535), l(0.0465)
+
+1404:     add r1.x, -r0.z, l(1.0000)                                          float Fp = Pow2(1 - f) * f;
+1405:     mul r1.x, r1.x, r1.x
+1406:     mul r0.z, r0.z, r1.x
+
+1407:     mul r14.xyw, r14.wwww, r16.xyxw                                     float3 Tp = pow(GBuffer.BaseColor, 0.8 / CosThetaD);
+1408:     exp r14.xyw, r14.xyxw
+
+                                                                 少的这一句已经在上面1388行算过了     float Np = exp(17 * CosPhi - 16.78);
+
+1409:     mul r0.y, r14.z, r0.y
+
+1410:     mul r0.y, r0.z, r0.y
+
+1411:     mad r14.xyz, r0.yyyy, r14.xywx, r17.xzwx                            S += Mp * Np * Fp * Tp;
+
+
+
+
+
+
+         if (bEvalMultiScatter)
+     
+
+1412:     rsq r0.y, r12.w                                            
+1413:     mul r15.xyz, r0.yyyy, r15.xyzx
+1414:     dp3 r0.y, r15.xyzx, r10.xyzx                    
+1415:     add r0.y, r0.y, l(1.0000)
+
+1416:     mul_sat r0.y, r0.y, l(0.2500)
+
+1417:    add r0.z, -r0.y, r9.z                                1 - SinThetaL - (dot(rsqrt(dot(Vp, Vp)) * Vp, L) + 1) * 0.25
+
+                                                      这里和源码不一样  源码是 float KajiyaDiffuse = 1 - abs(dot(N, L));
+
+                                                             
+
+1418:     mad r0.y, r0.z, l(0.3300), r0.y             这里和源码不一样    Diffuse  0.33*(1 - SinThetaL - (dot(rsqrt(dot(Vp, Vp)) * Vp, L) + 1) * 0.25) + (dot(rsqrt(dot(Vp, Vp)) * Vp, L) + 1)       
+
+
+1419:     mul r0.y, r0.y, r0.w                          这里和源码不一样    float DiffuseScatter = (1 / PI) * Diffuse * GBuffer.Metallic;         
+1420:     mul r0.y, r0.y, l(0.3183)
+
+
+
+1421:     dp3 r0.z, r8.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)               float Luma = Luminance(GBuffer.BaseColor);
+
+
+1422:     div r9.xyz, r8.xyzx, r0.zzzz                                       float3 ScatterTint = pow(GBuffer.BaseColor / Luma, 1 - Shadow);
+1423:     add r0.z, -r4.y, l(1.0000)
+1424:     log r9.xyz, r9.xyzx
+1425:     mul r9.xyz, r0.zzzz, r9.xyzx
+1426:     exp r9.xyz, r9.xyzx
+
+1427:     sqrt r8.xyz, r8.xyzx                                         return sqrt(GBuffer.BaseColor) * DiffuseScatter * ScatterTint; 这里少乘了一个 ScatterTint 融合在了下一句
+1428:     mul r0.yzw, r0.yyyy, r8.xxyz
+
+
+1429:     mad r0.yzw, r0.yyzw, r9.xxyz, r14.xxyz                                 S += KajiyaKayDiffuseAttenuation(GBuffer, L, V, N, Shadow);
+
+
+
+1430:     min r13.xyz, -r0.yzwy, l(0, 0, 0, 0)
+
+1431:     mov r11.yzw, l(0, 0, 0, 0)
+1432:     mov r12.xyz, l(0, 0, 0, 0)
+1433:     mov r13.xyz, -r13.xyzx                                              S = -min(-S, 0.0);
+// 结束HairBxDF函数
+
+
+// 进入函数                       ClothBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+1434:     break
+1435:     case l(8)
+1436:     mul r0.yzw, r6.yyzw, r6.yyzw                          const float3 FuzzColor = ExtractSubsurfaceColor(GBuffer);
+
+1437:     mov_sat r6.x, r6.x                                    const float Cloth = saturate(GBuffer.CustomData.a);
+
+1438:     dp3 r1.x, r5.yzwy, r10.xyzx                               Init(Context, N, V, L);
+1439:     dp3 r2.w, r5.yzwy, -r3.xyzx
+1440:     dp3 r6.y, -r3.xyzx, r10.xyzx
+
+1441:     lt r8.x, l(0), r7.w                                  SphereMaxNoH(Context, AreaLight.SphereSinAlpha, true); 输出r9.y = Context.NoH ; r9.z =Context.VoH 
+1442:     if_nz r8.x
+1443:       mad r8.y, -r7.w, r7.w, l(1.0000)
+1444:       sqrt r8.y, r8.y
+1445:       dp2 r8.z, r2.wwww, r1.xxxx
+1446:       add r9.x, -r6.y, r8.z
+1447:       ge r9.y, r9.x, r8.y
+1448:       if_nz r9.y
+1449:         mov r9.y, l(1.0000)                                       
+1450:         mov r9.z, abs(r2.w)
+1451:       else
+1452:         mad r10.w, -r9.x, r9.x, l(1.0000)
+1453:         rsq r10.w, r10.w
+1454:         mul r10.w, r7.w, r10.w
+1455:         mad r12.w, -r9.x, r1.x, r2.w
+1456:         mul r13.w, r10.w, r12.w
+1457:         mul r14.x, r2.w, r2.w
+1458:         mad r14.x, r14.x, l(2.0000), l(-1.0000)
+1459:         mad r9.x, -r9.x, r6.y, r14.x
+1460:         mul r9.x, r9.x, r10.w
+1461:         mad r14.x, -r1.x, r1.x, l(1.0000)
+1462:         mad r14.x, -r2.w, r2.w, r14.x
+1463:         mad r14.x, -r6.y, r6.y, r14.x
+1464:         mad_sat r8.z, r8.z, r6.y, r14.x
+1465:         sqrt r8.z, r8.z
+1466:         mul r8.z, r8.z, r10.w
+1467:         mul r14.x, r2.w, r8.z
+1468:         add r14.y, r14.x, r14.x
+1469:         mad r14.z, r1.x, r8.y, r2.w
+1470:         mad r10.w, r10.w, r12.w, r14.z
+1471:         mad r12.w, r6.y, r8.y, r9.x
+1472:         add r12.w, r12.w, l(1.0000)
+1473:         mul r14.w, r8.z, r12.w
+1474:         mul r15.x, r10.w, r12.w
+1475:         mul r15.y, r10.w, r14.y
+1476:         mul r14.x, r14.x, r10.w
+1477:         mul r14.x, r14.x, l(0.5000)
+1478:         mad r14.x, r14.w, l(-0.5000), r14.x
+1479:         mul r14.x, r14.x, r15.x
+1480:         mad r15.z, -r14.w, l(2.0000), r15.y
+1481:         mul r15.y, r15.z, r15.y
+1482:         mad r14.w, r14.w, r14.w, r15.y
+1483:         mul r15.y, r12.w, r12.w
+1484:         mad r12.w, r6.y, r8.y, r12.w
+1485:         mad r12.w, r12.w, l(-0.5000), l(-0.5000)
+1486:         mul r12.w, r12.w, r15.x
+1487:         mad r12.w, r14.z, r15.y, r12.w
+1488:         mad r10.w, r10.w, r12.w, r14.w
+1489:         add r12.w, r14.x, r14.x
+1490:         mul r14.z, r14.x, r14.x
+1491:         mad r14.z, r10.w, r10.w, r14.z
+1492:         div r12.w, r12.w, r14.z
+1493:         mul r10.w, r10.w, r12.w
+1494:         mad r12.w, -r12.w, r14.x, l(1.0000)
+1495:         mul r8.z, r8.z, r10.w
+1496:         mad r8.z, r12.w, r13.w, r8.z
+1497:         mul r10.w, r14.y, r10.w
+1498:         mad r9.x, r12.w, r9.x, r10.w
+1499:         mad r8.z, r1.x, r8.y, r8.z
+1500:         mad r8.y, r6.y, r8.y, r9.x
+1501:         mad r9.x, r8.y, l(2.0000), l(2.0000)
+1502:         rsq r9.x, r9.x
+1503:         add r8.z, r2.w, r8.z
+1504:         mul_sat r9.y, r9.x, r8.z
+1505:         mad_sat r9.z, r9.x, r8.y, r9.x
+1506:       endif
+1507:     else
+1508:       mad r8.y, r6.y, l(2.0000), l(2.0000)
+1509:       rsq r8.y, r8.y
+1510:       add r1.x, r1.x, r2.w
+1511:       mul_sat r9.y, r8.y, r1.x
+1512:       mad_sat r9.z, r8.y, r6.y, r8.y
+1513:     endif
+      // 输出r9.y = Context.NoH ; r9.z =Context.VoH 
+1514:     add r1.x, abs(r2.w), l(0.0000)                Context.NoV = saturate(abs(Context.NoV) + 1e-5);
+1515:     min r1.x, r1.x, l(1.0000)
+ 
+1516:     mul r2.w, r5.x, r5.x                           Pow4(GBuffer.Roughness)
+
+
+1517:     lt r6.y, l(0), r11.x                       Spec1 = AreaLight.FalloffColor * (Falloff * NoL) * SpecularGGX(GBuffer.Roughness, GBuffer.SpecularColor, Context, NoL, AreaLight);
+1518:     mul r8.y, r11.x, r11.x
+1519:     mad r8.z, r9.z, l(3.6000), l(0.4000)
+1520:     div r8.y, r8.y, r8.z
+1521:     mad r8.y, r5.x, r5.x, r8.y
+1522:     min r8.y, r8.y, l(1.0000)
+1523:     movc r14.x, r6.y, r8.y, r2.w
+1524:     mul r6.y, r7.w, l(0.2500)
+1525:     ishr r8.y, r14.x, l(1)
+1526:     iadd r8.y, r8.y, l(0.0000)
+1527:     mad r8.y, r8.y, l(3.0000), r7.w
+1528:     mul r6.y, r6.y, r8.y
+1529:     add r8.y, r9.z, l(0.0010)
+1530:     div r6.y, r6.y, r8.y
+1531:     add r15.x, r6.y, r14.x
+1532:     div r15.y, r14.x, r15.x
+1533:     mov r14.y, l(1.0000)
+1534:     movc r8.xz, r8.xxxx, r15.xxyx, r14.xxyx
+1535:     lt r6.y, r9.w, l(1.0000)
+1536:     add r9.x, -r9.w, l(1.0001)
+1537:     add r10.w, r9.w, l(1.0000)
+1538:     div r9.x, r9.x, r10.w
+1539:     sqrt r9.x, r9.x
+1540:     mul r10.w, r9.x, l(0.2500)
+1541:     ishr r12.w, r8.x, l(1)
+1542:     iadd r12.w, r12.w, l(0.0000)
+1543:     mad r9.x, r12.w, l(3.0000), r9.x
+1544:     mul r9.x, r9.x, r10.w
+1545:     div r8.y, r9.x, r8.y
+1546:     add r8.y, r8.y, r8.x
+1547:     div r8.x, r8.x, r8.y
+1548:     sqrt r8.x, r8.x
+1549:     mul r8.x, r8.x, r8.z
+1550:     movc r6.y, r6.y, r8.x, r8.z
+1551:     mad r8.x, r9.y, r14.x, -r9.y
+1552:     mad r8.x, r8.x, r9.y, l(1.0000)
+1553:     mul r8.x, r8.x, r8.x
+1554:     mul r8.x, r8.x, l(3.1416)
+1555:     div r8.x, r14.x, r8.x
+1556:     mul r6.y, r6.y, r8.x
+1557:     sqrt r8.x, r14.x
+1558:     add r8.y, -r8.x, l(1.0000)
+1559:     mad r8.z, r1.x, r8.y, r8.x
+1560:     mad r8.x, r3.w, r8.y, r8.x
+1561:     mul r8.x, r1.x, r8.x
+1562:     mad r8.x, r3.w, r8.z, r8.x
+1563:     rcp r8.x, r8.x
+1564:     mul r6.y, r6.y, r8.x
+1565:     add r8.x, -r9.z, l(1.0000)
+1566:     mul r8.y, r8.x, r8.x
+1567:     mul r8.y, r8.y, r8.y
+1568:     mul r8.z, r8.x, r8.y
+1569:     mul_sat r9.x, r2.y, l(50.0000)
+1570:     mad r8.x, -r8.y, r8.x, l(1.0000)
+1571:     mul r2.xyz, r2.xyzx, r8.xxxx
+1572:     mad r2.xyz, r9.xxxx, r8.zzzz, r2.xyzx
+1573:     mul r6.y, r6.y, l(0.5000)
+1574:     mul r2.xyz, r2.xyzx, r6.yyyy
+1575:     mul r2.xyz, r2.xyzx, r3.wwww
+
+1576:     mad r6.y, -r2.w, r9.y, r9.y                                      float D2 = D_InvGGX(Pow4(GBuffer.Roughness), Context.NoH);
+1577:     mad r6.y, r6.y, r9.y, r2.w
+1578:     mul r8.y, r2.w, l(4.0000)
+1579:     mad r9.x, r2.w, l(4.0000), l(1.0000)
+1580:     mul r9.x, r9.x, l(3.1416)
+1581:     rcp r9.x, r9.x
+1582:     mul r2.w, r2.w, r8.y
+1583:     mul r6.y, r6.y, r6.y
+1584:     div r2.w, r2.w, r6.y
+1585:     add r2.w, r2.w, l(1.0000)
+1586:     mul r2.w, r2.w, r9.x
+
+
+
+1587:     add r6.y, r1.x, r3.w                                            float Vis2 = Vis_Cloth(Context.NoV, NoL);
+1588:     mad r1.x, -r3.w, r1.x, r6.y
+1589:     mul r1.x, r1.x, l(4.0000)
+1590:     rcp r1.x, r1.x
+
+1591:     mul r6.y, r0.z, l(50.0000)                                      float3 F2 = F_Schlick(FuzzColor, Context.VoH);
+1592:     min r6.y, r6.y, l(1.0000)
+1593:     mul r0.yzw, r0.yyzw, r8.xxxx
+1594:     mad r0.yzw, r6.yyyy, r8.zzzz, r0.yyzw
+
+
+1595:     mul r1.x, r1.x, r2.w                            少了F2 在1599行补上了    float3 Spec2 = AreaLight.FalloffColor * (Falloff * NoL) * (D2 * Vis2) * F2;
+1596:     mul r1.x, r1.x, r3.w
+
+1597:     mul r8.xyz, r3.wwww, r7.xyzx                                     Lighting.Diffuse = AreaLight.FalloffColor * (Falloff * NoL) * Diffuse_Lambert(GBuffer.DiffuseColor);
+1598:     mul r11.yzw, r8.xxyz, l(0.0000, 0.3183, 0.3183, 0.3183)
+
+1599:     mad r0.yzw, r1.xxxx, r0.yyzw, -r2.xxyz
+1600:     mad r12.xyz, r6.xxxx, r0.yzwy, r2.xyzx                         Lighting.Specular = lerp(Spec1, Spec2, Cloth);
+
+1601:     mov r13.xyz, l(0, 0, 0, 0)                                         Lighting.Transmission = 0;
+
+// ClothBxDF函数结束
+
+
+1602:     break
+1603:     case l(9)
+
+//进入函数                   return EyeBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+
+1604:     mad r0.yz, r6.zzwz, l(0.0000, 2.0000, 2.0000, 0.0000), l(0.0000, -1.0000, -1.0000, 0.0000)                   const float3 IrisNormal = OctahedronToUnitVector(GBuffer.CustomData.yz * 2 - 1);
+1605:     dp2 r0.w, l(1.0000, 1.0000, 0.0000, 0.0000), abs(r0.yzyy)
+1606:     add r2.z, -r0.w, l(1.0000)
+1607:     lt r0.w, r2.z, l(0)
+1608:     add r6.yz, -abs(r0.zzyz), l(0.0000, 1.0000, 1.0000, 0.0000)
+1609:     ge r8.xy, r0.yzyy, l(0, 0, 0, 0)
+1610:     movc r8.xy, r8.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
+1611:     mul r6.yz, r6.yyzy, r8.xxyx
+1612:     movc r2.xy, r0.wwww, r6.yzyy, r0.yzyy
+1613:     dp3 r0.y, r2.xyzx, r2.xyzx
+1614:     rsq r0.y, r0.y
+1615:     mul r0.yzw, r0.yyyy, r2.xxyz
+
+1616:     add r1.x, -r6.x, l(1.0000)                                                const float IrisMask = 1.0f - GBuffer.CustomData.w;
+                                                                                    const float IrisDistance = GBuffer.StoredMetallic;
+
+
+1617:     mul r0.x, r0.x, r1.x                                                      const float3 CausticNormal = normalize(lerp(IrisNormal, -N, IrisMask * IrisDistance));
+1618:     mad r1.yzw, -r1.yyzw, r4.zzzz, -r0.yyzw
+1619:     mad r1.yzw, r0.xxxx, r1.yyzw, r0.yyzw
+1620:     dp3 r0.x, r1.yzwy, r1.yzwy
+1621:     rsq r0.x, r0.x
+1622:     mul r1.yzw, r0.xxxx, r1.yyzw
+
+1623:     dp3 r0.x, r5.yzwy, r10.xyzx                                               Init(Context, N, V, L);
+1624:     dp3 r2.x, r5.yzwy, -r3.xyzx
+1625:     dp3 r2.y, -r3.xyzx, r10.xyzx
+
+
+                                                                                    SphereMaxNoH(Context, AreaLight.SphereSinAlpha, false);
+1626:     lt r2.z, l(0), r7.w
+1627:     if_nz r2.z
+1628:       mad r2.w, -r7.w, r7.w, l(1.0000)
+1629:       sqrt r2.w, r2.w
+1630:       dp2 r3.x, r2.xxxx, r0.xxxx
+1631:       add r3.x, -r2.y, r3.x
+1632:       ge r3.y, r3.x, r2.w
+1633:       if_nz r3.y
+1634:         mov r3.y, l(1.0000)
+1635:         mov r3.z, abs(r2.x)
+1636:       else
+1637:         mad r4.z, -r3.x, r3.x, l(1.0000)
+1638:         rsq r4.z, r4.z
+1639:         mul r4.z, r4.z, r7.w
+1640:         mad r5.y, -r3.x, r0.x, r2.x
+1641:         mul r5.y, r4.z, r5.y
+1642:         dp2 r5.z, r2.xxxx, r2.xxxx
+1643:         add r5.z, r5.z, l(-1.0000)
+1644:         mad r3.x, -r3.x, r2.y, r5.z
+1645:         mul r3.x, r3.x, r4.z
+1646:         mad r4.z, r0.x, r2.w, r5.y
+1647:         mad r2.w, r2.y, r2.w, r3.x
+1648:         mad r3.x, r2.w, l(2.0000), l(2.0000)
+1649:         rsq r3.x, r3.x
+1650:         add r4.z, r2.x, r4.z
+1651:         mul_sat r3.y, r3.x, r4.z
+1652:         mad_sat r3.z, r3.x, r2.w, r3.x
+1653:       endif
+1654:     else
+1655:       mad r2.w, r2.y, l(2.0000), l(2.0000)
+1656:       rsq r2.w, r2.w
+1657:       add r0.x, r0.x, r2.x
+1658:       mul_sat r3.y, r2.w, r0.x
+1659:       mad_sat r3.z, r2.w, r2.y, r2.w
+1660:     endif
+
+1661:     add r0.x, abs(r2.x), l(0.0000)                      Context.NoV = saturate(abs(Context.NoV) + 1e-5);
+1662:     min r0.x, r0.x, l(1.0000)
+
+                                                              Context.VoH = AreaLight.bIsRect ? Context.NoV : Context.VoH; 源码里有这一句 因为AreaLight.bIsRect在一开始就定义为了 false 所以这里是Context.VoH
+
+1663:     mul r2.x, r8.w, l(0.0800)        float F0 = GBuffer.Specular * 0.08;
+
+
+1664:     add r2.y, -r3.z, l(1.0000)                             float Fc = Pow5(1 - Context.VoH);
+1665:     mul r2.w, r2.y, r2.y
+1666:     mul r2.w, r2.w, r2.w
+1667:     mul r3.x, r2.y, r2.w
+
+1668:     mad r2.y, -r2.w, r2.y, l(1.0000)                       float F = Fc + (1 - Fc) * F0;
+1669:     mad r2.x, r2.y, r2.x, r3.x
+
+1670:     mul r2.y, r5.x, r5.x                                   float a2 = Pow4(GBuffer.Roughness);
+
+1671:     lt r2.w, l(0), r11.x                                   float Energy = EnergyNormalization(a2, Context.VoH, AreaLight);
+1672:     mul r3.x, r11.x, r11.x
+1673:     mad r4.z, r3.z, l(3.6000), l(0.4000)
+1674:     div r3.x, r3.x, r4.z
+1675:     mad r3.x, r5.x, r5.x, r3.x
+1676:     min r3.x, r3.x, l(1.0000)
+1677:     movc r5.x, r2.w, r3.x, r2.y
+1678:     mul r2.y, r7.w, l(0.2500)
+1679:     ishr r2.w, r5.x, l(1)
+1680:     iadd r2.w, r2.w, l(0.0000)
+1681:     mad r2.w, r2.w, l(3.0000), r7.w
+1682:     mul r2.y, r2.w, r2.y
+1683:     add r2.w, r3.z, l(0.0010)
+1684:     div r2.y, r2.y, r2.w
+1685:     add r6.x, r2.y, r5.x
+1686:     div r6.y, r5.x, r6.x
+1687:     mov r5.y, l(1.0000)
+1688:     movc r2.yz, r2.zzzz, r6.xxyx, r5.xxyx
+1689:     lt r3.x, r9.w, l(1.0000)
+1690:     add r3.z, -r9.w, l(1.0001)
+1691:     add r4.z, r9.w, l(1.0000)
+1692:     div r3.z, r3.z, r4.z
+1693:     sqrt r3.z, r3.z
+1694:     mul r4.z, r3.z, l(0.2500)
+1695:     ishr r5.y, r2.y, l(1)
+1696:     iadd r5.y, r5.y, l(0.0000)
+1697:     mad r3.z, r5.y, l(3.0000), r3.z
+1698:     mul r3.z, r3.z, r4.z
+1699:     div r2.w, r3.z, r2.w
+1700:     add r2.w, r2.w, r2.y
+1701:     div r2.y, r2.y, r2.w
+1702:     sqrt r2.y, r2.y
+1703:     mul r2.y, r2.y, r2.z
+1704:     movc r2.y, r3.x, r2.y, r2.z
+
+1705:     mad r2.z, r3.y, r5.x, -r3.y                          float D = D_GGX(a2, Context.NoH) * Energy;
+1706:     mad r2.z, r2.z, r3.y, l(1.0000)
+1707:     mul r2.z, r2.z, r2.z
+1708:     mul r2.z, r2.z, l(3.1416)
+1709:     div r2.z, r5.x, r2.z
+1710:     mul r2.y, r2.y, r2.z  
+
+1711:     sqrt r2.z, r5.x                                            float Vis = Vis_SmithJointApprox(a2, Context.NoV, NoL);
+1712:     add r2.w, -r2.z, l(1.0000)
+1713:     mad r3.x, r0.x, r2.w, r2.z
+1714:     mad r2.z, r3.w, r2.w, r2.z
+1715:     mul r0.x, r0.x, r2.z
+1716:     mad r0.x, r3.w, r3.x, r0.x
+1717:     rcp r0.x, r0.x
+1718:     mul r0.x, r0.x, l(0.5000)
+
+1719:     mul r2.y, r2.y, r3.w                                       Lighting.Specular = AreaLight.FalloffColor * (Falloff * NoL) * D * Vis * F;
+1720:     mul r0.x, r0.x, r2.y
+1721:     mul r12.xyz, r2.xxxx, r0.xxxx
+
+1722:     dp3_sat r0.x, r0.yzwy, r10.xyzx                            float IrisNoL = saturate(dot(IrisNormal, L));
+
+1723:     mad r0.yz, r0.xxxx, l(0.0000, -11.0000, -11.0000, 0.0000), l(0.0000, 12.0000, 13.0000, 0.0000)             float Power = lerp(12, 1, IrisNoL);
+
+
+1724:     mul r0.z, r0.z, l(0.2000)
+1725:     dp3_sat r0.w, r1.yzwy, r10.xyzx                            float Caustic = 0.8 + 0.2 * (Power + 1) * pow(saturate(dot(CausticNormal, L)), Power);
+1726:     log r0.w, r0.w
+1727:     mul r0.y, r0.w, r0.y
+1728:     exp r0.y, r0.y
+1729:     mad r0.y, r0.z, r0.y, l(0.8000)
+                                                                    float Sclera = NoL; 
+                                                                    float Iris = IrisNoL * Caustic; r0.x * r0.y
+
+1730:     mad r0.x, r0.x, r0.y, -r3.w                               lerp(Sclera, Iris, IrisMask)
+1731:     mad r0.x, r1.x, r0.x, r3.w
+
+1732:     add r0.y, -r2.x, l(1.0000)                                (1 - F)
+
+1733:     mul r0.x, r0.y, r0.x
+
+1734:     mul r0.xyz, r0.xxxx, r7.xyzx
+
+1735:     mul r13.xyz, r0.xyzx, l(0.3183, 0.3183, 0.3183, 0.0000)               Lighting.Transmission = AreaLight.FalloffColor * (Falloff * lerp(Sclera, Iris, IrisMask) * (1 - F)) * Diffuse_Lambert(GBuffer.DiffuseColor);
+
+
+1736:     mov r11.yzw, l(0, 0, 0, 0)             Lighting.Diffuse = 0;
+
+//EyeBxDF 结束
+
+1737:     break
+1738:     default
+1739:     mov r11.yzw, l(0, 0, 0, 0)                      return (FDirectLighting)0;
+1740:     mov r12.xyz, l(0, 0, 0, 0)
+1741:     mov r13.xyz, l(0, 0, 0, 0)
+1742:     break
+1743:     endswitch
+
+1744:     mul r0.xyz, r12.xyzx, cb1[5].wwww                 Lighting.Specular *= LightData.SpecularScale;
+
+    LightAccumulator_AddSplit( LightAccumulator, Lighting.Diffuse, Lighting.Specular, Lighting.Diffuse, LightColor * LightMask * Shadow.SurfaceShadow, bNeedsSeparateSubsurfaceLightAccumulation );
+
+1745:     mul r1.xyz, r4.xxxx, cb1[4].xyzx                          LightColor * LightMask * Shadow.SurfaceShadow
+
+1746:     eq r0.w, cb0[200].z, l(0)
+
+1747:     mul r2.xyz, r1.xyzx, r11.yzwy                         
+
+1748:     dp3 r1.w, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)     In.ScatterableLightLuma += Luminance(ScatterableLight * CommonMultiplier);
+1749:     and r1.w, r0.w, r1.w
+
+1750:     and r1.w, r1.w, r4.w
+
+1751:     mul r2.xyz, r0.xyzx, r1.xyzx                             SpecularTotalLight * CommonMultiplier
+
+
+
+    LightAccumulator_AddSplit( LightAccumulator, Lighting.Transmission, 0.0f, Lighting.Transmission, LightColor * LightMask * Shadow.TransmissionShadow, bNeedsSeparateSubsurfaceLightAccumulation );
+
+1752:     mul r0.xyz, r4.yyyy, cb1[4].xyzx                         LightColor * LightMask * Shadow.SurfaceShadow
+
+1753:     mul r0.xyz, r0.xyzx, r13.xyzx                            Lighting.Transmission
+
+1754:     dp3 r3.x, r0.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+1755:     add r3.x, r1.w, r3.x
+
+1756:     movc r0.w, r0.w, r3.x, r1.w
+
+1757:     and r0.w, r0.w, r4.w
+
+1758:     mad r1.xyz, r11.yzwy, r1.xyzx, r0.xyzx          SplitLighting.Transmission + SplitLighting.DiffuseLighting;
+
+1759:   else
+1760:     mov r2.xyz, l(0, 0, 0, 0)
+1761:     mov r0.w, l(0)
+1762:     mov r1.xyz, l(0, 0, 0, 0)
+
+// GetDynamicLightingSplit 到这里结束
+
+1763:   endif
+1764:   eq r0.x, cb0[200].z, l(0)
+1765:   and r1.w, r0.w, r0.x
+1766:   mov r2.w, l(0)
+1767:   add r0.xyzw, r1.xyzw, r2.xyzw                             return SplitLighting.SpecularLighting + SplitLighting.DiffuseLighting;
+// float4 GetDynamicLighting 到这里结束
+
+1768: else
+1769:   mov r0.xyzw, l(0, 0, 0, 0)
+1770: endif
+1771: mul o0.xyzw, r0.xyzw, cb0[134].yyyy                      OutColor.rgba *= GetExposure();
+1772: ret
