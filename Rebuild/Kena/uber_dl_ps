@@ -333,6 +333,7 @@ ps_5_0
  162:   lt r1.y, l(0), r1.y                           -> 0 < (~) ? 受到影响 : 不受影响 -> todo:定义“影响” 
  163:   if_nz r1.y                                    -> 如果“受到影响”则进入 
                                                       -> if( Shadow.SurfaceShadow + Shadow.TransmissionShadow > 0 ) 
+
 -------Func:DecodeGBufferData(Start)
  164:     sample_l(texture2d)(float,float,float,float) r1.yzw, v0.xyxx, t2.wxyz, s2, l(0)       -> 采样 Normal
                                                                                                 -> Normal[R10G10B10] Mask?[A2]
@@ -349,26 +350,39 @@ ps_5_0
  170:     iadd r4.z, r4.w, r4.z                       -> 当前屏幕像素坐标XY值相加 
  171:     iadd r3.w, r3.w, r4.z                       -> 屏幕像素XY之和 + 3 
  172:     and r3.w, r3.w, l(1)                        -> 奇偶性判断 -> 形成全屏西洋棋盘状纹理 
+                                                      -> bCheckerboardRequired 
+ -------|-------Func:CheckerFromSceneColorUV(End) 
 
  173:     mad r1.yzw, r1.yyzw, l(0, 2, 2, 2), l(0, -1, -1, -1)  -> Normal.xyz * 2 - 1 
  174:     dp3 r4.z, r1.yzwy, r1.yzwy                  -> dot(~) 
  175:     rsq r4.z, r4.z                              -> 1/sqrt(~) 
  176:     mul r5.yzw, r1.yyzw, r4.zzzz                -> normalize(Normal.xyz * 2 - 1) 
+                                                      -> GBuffer.WorldNormal = normalize(DecodeNormal(Normal_Raw));
+
  177:     and r0.w, r0.w, l(16)                       -> raw_Flag & uint(16) 
-                                                      -> 木墙 == true，其他 == false 
- 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否为木墙 ? r6(0) : r6(tex5.wxyz) 
- 179:     movc r0.w, r5.x, l(0), r0.x                 -> 是否为眼睛 ? r0.w(0) : r0.w(Tex3.x=Metallic) 
+                                                      -> 木墙 == true，其他 == false -> SKIP_CUSTOMDATA_MASK
+ 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否跳过Custom_Data ? r6(0) : r6(tex5.wxyz) 
+                                                      -> GBuffer.CustomData = !(GBuffer.SelectiveOutputMask & SKIP_CUSTOMDATA_MASK) ? InGBufferD : 0; 
+ 179:     movc r0.w, r5.x, l(0), r0.x                 -> 是否为眼睛 ? r0.w(0) : r0.w(Tex3.x=Metallic)
+                                                      -> if( GBuffer.ShadingModelID == SHADINGMODELID_EYE ) GBuffer.Metallic = 0.0;
+
  180:     mul r4.w, r0.y, l(0.08)                     -> kDieletricSpec * 0.08 
  181:     mad r7.xyz, -r0.yyyy, l(0.08, 0.08, 0.08, 0), r2.xyzx   -> Albedo - 0.08 * kDieletricSpec 
  182:     mad r7.xyz, r0.wwww, r7.xyzx, r4.wwww       -> Metallic * (~) + kDieletricSpec * 0.08 
+                                                      -> GBuffer.SpecularColor = ComputeF0(GBuffer.Specular, GBuffer.BaseColor, GBuffer.Metallic);
+
  183:     ieq r4.w, r1.x, l(5)                        -> Flag == uint(5) ? -> 是否是皮肤 
  184:     or r4.w, r5.x, r4.w                         -> 眼睛 or 皮肤 ? 
- 185:     lt r5.x, l(0), cb0[155].x                   -> 0 < cb0[155].x=1 ? true
- 186:     lt r8.x, l(0), cb0[200].z                   -> 0 < cb0[200].z=1 ? true
+                                                      -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) 
+
+ 185:     lt r5.x, l(0), cb0[155].x                   -> 0 < cb0[155].x=1 ? true -> cb0[155].x=bSubsurfacePostprocessEnabled
+ 186:     lt r8.x, l(0), cb0[200].z                   -> 0 < cb0[200].z=1 ? true -> cb0[200].z=bCheckerboardSubsurfaceProfileRendering
  187:     and r5.x, r5.x, r8.x                        -> r5.x = true
+
  188:     ne r8.x, l(0, 0, 0, 0), cb0[155].x          -> 0 != cb0[155].x=1 ? true 
                                                       -> 以上皆为 控制开关 
  189:     movc r8.xyz, r8.xxxx, l(1, 1, 1, 0), r2.xyzx      -> 控制开关是否打开(L188) ? r8(1) : r8(Albedo)
+                                                      -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
  190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0) -> 奇偶性判断 ? r9(1,0) : r9(0,1) 
  191:     mul r10.xyz, r7.xyzx, r9.yyyy               -> L182 * (~).y -> 对Albedo应用棋盘纹理  
  192:     mul r10.w, r0.y, r9.y                       -> kDieletricSpec * L190.y 
