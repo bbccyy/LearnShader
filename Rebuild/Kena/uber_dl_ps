@@ -2189,21 +2189,24 @@ ps_5_0
 1742:     break
 1743:     endswitch
 
-1744:     mul r0.xyz, r12.xyzx, cb1[5].wwww
-1745:     mul r1.xyz, r4.xxxx, cb1[4].xyzx
-1746:     eq r0.w, cb0[200].z, l(0)
-1747:     mul r2.xyz, r1.xyzx, r11.yzwy
-1748:     dp3 r1.w, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
-1749:     and r1.w, r0.w, r1.w
-1750:     and r1.w, r1.w, r4.w
-1751:     mul r2.xyz, r0.xyzx, r1.xyzx
-1752:     mul r0.xyz, r4.yyyy, cb1[4].xyzx
-1753:     mul r0.xyz, r0.xyzx, r13.xyzx
-1754:     dp3 r3.x, r0.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
-1755:     add r3.x, r1.w, r3.x
-1756:     movc r0.w, r0.w, r3.x, r1.w
-1757:     and r0.w, r0.w, r4.w
-1758:     mad r1.xyz, r11.yzwy, r1.xyzx, r0.xyzx
+1744:     mul r0.xyz, r12.xyzx, cb1[5].wwww     -> Lighting.Specular *= LightData.SpecularScale;
+1745:     mul r1.xyz, r4.xxxx, cb1[4].xyzx      -> CommonMultiplier = LightData.Color* LightMask* Shadow.SurfaceShadow;  其中Mask==1 
+1746:     eq r0.w, cb0[200].z, l(0)             -> bNeedsSeparateSubsurfaceLightAccumulation ? todo 
+1747:     mul r2.xyz, r1.xyzx, r11.yzwy         -> ScatterableLight * CommonMultiplier
+1748:     dp3 r1.w, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)  -> Luminance(ScatterableLight * CommonMultiplier);
+1749:     and r1.w, r0.w, r1.w                  -> if(bNeedsSeparateSubsurfaceLightAccumulation) set ... 
+1750:     and r1.w, r1.w, r4.w                  -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) -> 2个if全开启，Luminance才会被设置上 
+
+1751:     mul r2.xyz, r0.xyzx, r1.xyzx          -> Lighting.Specular * CommonMultiplier 
+1752:     mul r0.xyz, r4.yyyy, cb1[4].xyzx      -> TransmissionShadow * LightData.Color 
+1753:     mul r0.xyz, r0.xyzx, r13.xyzx         -> TransmissionShadow * LightData.Color * Transmission
+
+1754:     dp3 r3.x, r0.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000) -> Luminance(~) 
+1755:     add r3.x, r1.w, r3.x                  -> SpecularEye + SpecularCommon 
+1756:     movc r0.w, r0.w, r3.x, r1.w           -> bNeedsSeparateSubsurfaceLightAccumulation ? SpecularEye + SpecularCommon : SpecularEye 
+1757:     and r0.w, r0.w, r4.w                  -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) set r0.w 
+
+1758:     mad r1.xyz, r11.yzwy, r1.xyzx, r0.xyzx      -> Diffuse * CommonMultiplier + TransmissionShadow * LightData.Color * Transmission
 1759:   else
 1760:     mov r2.xyz, l(0, 0, 0, 0)
 1761:     mov r0.w, l(0)
@@ -2211,12 +2214,13 @@ ps_5_0
 1763:   endif
 ------------------------ 超级大 IF 分支的结尾  
 
-1764:   eq r0.x, cb0[200].z, l(0)
-1765:   and r1.w, r0.w, r0.x
-1766:   mov r2.w, l(0)
-1767:   add r0.xyzw, r1.xyzw, r2.xyzw
+1764:   eq r0.x, cb0[200].z, l(0)               -> cb0[200].z=1 == 0 ? -> false 
+1765:   and r1.w, r0.w, r0.x                    -> 0x0000 
+1766:   mov r2.w, l(0)                          -> alpha = 0
+1767:   add r0.xyzw, r1.xyzw, r2.xyzw           -> Diffuse * CommonMultiplier + 
+                                                TransmissionShadow * LightData.Color * Transmission+Lighting.Specular * CommonMultiplier 
 1768: else
 1769:   mov r0.xyzw, l(0, 0, 0, 0)
 1770: endif
-1771: mul o0.xyzw, r0.xyzw, cb0[134].yyyy
+1771: mul o0.xyzw, r0.xyzw, cb0[134].yyyy       -> cb0[134].y=1 * colorFinal 
 1772: ret
