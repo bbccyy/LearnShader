@@ -17,6 +17,6 @@ for key, val in ipairs(data) do
 end
 
 local s = math.sqrt(0.51555^2 + 0.29836^2 + 0.80324^2)
-print(0.50625 * 0.2)
+print((0x1FBD1DF5))
 
 print("DONE")

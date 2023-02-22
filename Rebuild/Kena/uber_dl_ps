@@ -385,23 +385,60 @@ ps_5_0
                                                       -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
  190:     movc r9.xy, r3.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0) -> 奇偶性判断 ? r9(1,0) : r9(0,1) 
  191:     mul r10.xyz, r7.xyzx, r9.yyyy               -> L182 * (~).y -> 对Albedo应用棋盘纹理  
+                                                      -> SpecularColor *= !bChecker;
+
  192:     mul r10.w, r0.y, r9.y                       -> kDieletricSpec * L190.y 
+                                                      -> Specular *= !bChecker;
+
  193:     movc r8.xyz, r5.xxxx, r9.xxxx, r8.xyzx      -> 控制开关是否打开(L187) ? L190.xxx(棋盘) : L189.xyz(纯色/Albedo) -> 3者切换 
+                                                      -> 这货是 BaseColor
+
  194:     mov r7.w, r0.y                              -> 保存 kDieletricSpec 
  195:     movc r9.xyzw, r5.xxxx, r10.xyzw, r7.xyzw    -> 控制开关是否打开(L187) ? 棋盘纹理化的(L182)颜色 : (L182)颜色 
+                                                      -> SpecularColor
+
  196:     mov r8.w, r9.w                              -> 控制开关是否打开(L187) ? 保存"kDieletricSpec * L190.y" : 保存 "kDieletricSpec" 
+                                                      -> Specular 
+                                                      -> if (bCheckerboardRequired)
+                                                      {
+                                                            // we apply the base color later in SubsurfaceRecombinePS()
+                                                            BaseColor = bChecker;
+                                                            // in SubsurfaceRecombinePS() does not multiply with Specular so we do it here
+                                                            SpecularColor *= !bChecker;
+                                                            Specular *= !bChecker;
+                                                      }
+
+
  197:     mov r10.xyz, r2.xyzx                        -> 保存 Albedo
  198:     mov r10.w, r7.w                             -> 保存 kDieletricSpec -> r10=[Albedo.rgb, kDieletricSpec] 
  199:     movc r8.xyzw, r4.wwww, r8.xyzw, r10.xyzw    -> 是否是眼睛 or 皮肤 ? L193(棋盘/纯色/Albedo之一) : [Albedo.rgb, kDieletricSpec]
- 200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx      -> 是否是眼睛 or 皮肤 ? L195(棋盘纹理化的L182)颜色 : (L182)颜色 
- 201:     mad r7.xyz, -r8.xyzx, r0.wwww, r8.xyzx      -> (1 - L179(0 or Metallic)) * L199颜色 
- 202:     mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx -> (~).xyz * cb0[135].w=1 + cb0[135].xyz=0  -> 缩放 
- 203:     mad r2.xyz, r2.xyzx, cb0[136].wwww, cb0[136].xyzx -> L200.xyz * cb0[136].w=1 + cb0[136].xyz=0 -> 缩放 
- 204:     mul r0.y, cb1[7].w, l(0.5000)               -> cb1[7].w=0 * 0.5 
- 205:     mad r9.xyz, -r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] - (L204) * cb1[6].xyz=[...] 
- 206:     mad r10.xyz, r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] + (L204) * cb1[6].xyz=[...] 
+                                                      -> BaseColor
 
- 207:     lt r0.y, l(0), cb1[7].w                     -> 0 < cb1[7].w=0 ? false 
+ 200:     movc r2.xyz, r4.wwww, r9.xyzx, r7.xyzx      -> 是否是眼睛 or 皮肤 ? L195(棋盘纹理化的L182)颜色 : (L182)颜色 
+                                                      -> SpecularColor
+
+ 201:     mad r7.xyz, -r8.xyzx, r0.wwww, r8.xyzx      -> (1 - L179(0 or Metallic)) * L199颜色 
+                                                      -> GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic;
+
+ 202:     mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx -> (~).xyz * cb0[135].w=1 + cb0[135].xyz=0  -> 缩放 
+                                                      -> GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
+
+ 203:     mad r2.xyz, r2.xyzx, cb0[136].wwww, cb0[136].xyzx -> L200.xyz * cb0[136].w=1 + cb0[136].xyz=0 -> 缩放 
+                                                      -> GBuffer.SpecularColor = GBuffer.SpecularColor * View.SpecularOverrideParameter.w + View.SpecularOverrideParameter.xyz;
+-------Func:DecodeGBufferData(End) 
+
+
+-------Func:GetCapsule(Start)                         -> FCapsuleLight Capsule = GetCapsule( ToLight, LightData );                      
+ 204:     mul r0.y, cb1[7].w, l(0.5000)               -> cb1[7].w=0 * 0.5 
+                                                      -> Capsule.Length *= 0.5
+ 205:     mad r9.xyz, -r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] - (L204) * cb1[6].xyz=[...] 
+                                                      -> Capsule.LightPos[0] = ToLight - 0.5 * Capsule.Length * LightData.Tangent;
+ 206:     mad r10.xyz, r0.yyyy, cb1[6].xyzx, cb1[5].xyzx    -> cb1[5].xyz=[0.51555, -0.29836, 0.80324] + (L204) * cb1[6].xyz=[...] 
+                                                      -> Capsule.LightPos[1] = ToLight + 0.5 * Capsule.Length * LightData.Tangent;
+-------Func:GetCapsule(End)                           -> 显然，截帧场景的Kena并没有使用 CapsuleLight
+
+-------Func:IntegrateBxDF(Start) 
+ 207:     lt r0.y, l(0), cb1[7].w                     -> 0 < cb1[7].w=0 ? false -> LightData.SourceLength > 0 时才进入 
  208:     if_nz r0.y                                  -> 不进入 
  209:       dp3 r3.w, r9.xyzx, r9.xyzx
  210:       dp3 r5.x, r10.xyzx, r10.xyzx
@@ -423,91 +460,175 @@ ps_5_0
  226:       add r10.w, r5.x, l(1.0000)                -> 1 + (~)
  227:       rcp r7.w, r10.w                           -> 1 / (~) 
  228:       rsq r5.x, r5.x                            -> 1 / (L225)
- 229:       mul r11.xyz, r5.xxxx, r9.xyzx             -> normalize(L205)
- 230:       dp3 r3.w, r5.yzwy, r11.xyzx               -> Dot(Normal, (~))
+ 229:       mul r11.xyz, r5.xxxx, r9.xyzx             -> normalize(L205) -> L
+ 230:       dp3 r3.w, r5.yzwy, r11.xyzx               -> Dot(Normal, (~)) -> NoL 
+                                                      ->    float DistSqr = dot( Capsule.LightPos[0], Capsule.LightPos[0] );
+                                                            Falloff = rcp( DistSqr + Capsule.DistBiasSqr );
+                                                            float3 L = Capsule.LightPos[0] * rsqrt( DistSqr );
+                                                            NoL = dot( N, L );
+
  231:       mov r9.w, l(1.0000)                       -> Set r9.w=1 
+                                                      -> AreaLight.LineCosSubtended = 1 
  232:     endif
 
  233:     lt r5.x, l(0), cb1[6].w                     -> 0 < cb1[6].w=0.00467 ? true 
+                                                      -> Capsule.Radius > 0
+
  234:     mul r10.w, cb1[6].w, cb1[6].w               -> cb1[6].w * cb1[6].w 
  235:     mul_sat r7.w, r7.w, r10.w                   -> saturate(L227) * (~) -> L227 = 1/(1+Dot(cb1[5].xyz, cb1[5].xyz)) 
+                                                      -> float SinAlphaSqr = saturate( Pow2( Capsule.Radius ) * Falloff );
+-------|-------Func: SphereHorizonCosWrap(Start)
  236:     sqrt r7.w, r7.w                             -> sqrt(~) 
- 237:     lt r10.w, r3.w, r7.w                        -> L230 < (~) ? -> L230 = Dot(Normal, normalize(cb1[5].xyz)) 
- 238:     max r11.x, r3.w, -r7.w                      -> max(L230, -L236) 
+                                                      -> float SinAlpha = sqrt( SinAlphaSqr );
+
+ 237:     lt r10.w, r3.w, r7.w                        -> L230 < (~) ? -> L230 = Dot(Normal, normalize(cb1[5].xyz))
+                                                      -> NoL < SinAlpha ?  
+
+ 238:     max r11.x, r3.w, -r7.w                      -> max(L230, -L236)
+                                                      -> NoL = max( NoL, -SinAlpha ); 
+
  239:     add r11.x, r7.w, r11.x                      -> L236 + (~) 
  240:     mul r11.x, r11.x, r11.x                     -> (~) * (~) 
  241:     mul r7.w, r7.w, l(4.0000)                   -> L236 * 4 
  242:     div r7.w, r11.x, r7.w                       -> L240 / (~) 
- 243:     movc r7.w, r10.w, r7.w, r3.w                -> 条件L230 < L236是否达成 ? (~) : L230 
- 244:     movc_sat r3.w, r5.x, r7.w, r3.w             -> 条件0 < cb1[6].w=0.00467是否达成 ? saturate(~) : saturate(L230) 
+                                                      -> NoL = Pow2( SinAlpha + NoL ) / ( 4 * SinAlpha ); 
 
+ 243:     movc r7.w, r10.w, r7.w, r3.w                -> 条件L230 < L236是否达成 ? (~) : L230 
+                                                      -> 实现 if( NoL < SinAlpha ) ... else ... 
+-------|-------Func: SphereHorizonCosWrap(End)
+
+ 244:     movc_sat r3.w, r5.x, r7.w, r3.w             -> 条件0 < cb1[6].w=0.00467是否达成 ? saturate(~) : saturate(L230) 
+                                                      -> if( Capsule.Radius > 0 ) NoL = ... else NoL 维持 
+
+-------|-------Func: ClosestPointLineToRay(Start)
  245:     dp3 r5.x, r3.xyzx, r5.yzwy                  -> Dot(normalize(ViewDirWS), normalize(Normal))
  246:     add r5.x, r5.x, r5.x                        -> (~) + (~) 
  247:     mad r11.xyz, r5.yzwy, -r5.xxxx, r3.xyzx     -> normalize(ViewDirWS) - (~) * normalize(Normal) -> ReflectDir 
- 248:     add r10.xyz, -r9.xyzx, r10.xyzx             -> L206=cb1[5].xyz - L205=cb1[5].xyz = 0
+                                                      -> float3 R = reflect( -V, N );
+
+ 248:     add r10.xyz, -r9.xyzx, r10.xyzx             -> L206=cb1[5].xyz - L205=cb1[5].xyz = 0 -> Capsule.LightPos[1] - Capsule.LightPos[0] 
+                                                      -> float3 Line01 = Line1 - Line0;
  249:     dp3 r5.x, r11.xyzx, r10.xyzx                -> Dot(ReflectDir, (~))
+                                                      -> float B = dot( R, Line01 );
  250:     mad r11.xyz, r5.xxxx, r11.xyzx, -r10.xyzx   -> (~) * ReflectDir - L248 -> 大概率为0 
+                                                      -> B*R - Line01
  251:     dp3 r7.w, r9.xyzx, r11.xyzx                 -> Dot(L205=cb1[5].xyz, (~)) 
- 252:     mul r5.x, r5.x, r5.x                        -> L249 * L249 
- 253:     mad r5.x, cb1[7].w, cb1[7].w, -r5.x         -> cb1[7].w=0 * cb1[7].w=0 - (~) 
+                                                      -> dot( Line0, B*R - Line01 )
+ 252:     mul r5.x, r5.x, r5.x                        -> L249 * L249 -> B*B 
+ 253:     mad r5.x, cb1[7].w, cb1[7].w, -r5.x         -> cb1[7].w=0 * cb1[7].w=0 - (~)
+                                                      -> float A = Square( Length ); 
+                                                      -> (A - B*B)
  254:     div_sat r5.x, r7.w, r5.x                    -> saturate(L251 / (~)) 
+                                                      -> float t = saturate( dot( Line0, B*R - Line01 ) / (A - B*B) );
  255:     mad r10.xyz, r5.xxxx, r10.xyzx, r9.xyzx     -> (~) * L248 + L205 
+                                                      -> return Line0 + t * Line01;
+-------|-------Func: ClosestPointLineToRay(End) 
+
  256:     movc r9.xyz, r0.yyyy, r10.xyzx, r9.xyzx     -> 条件0 < cb1[7].w=0是否达成 ? (~) : L205=cb1[5].xyz 
+                                                      -> if( Capsule.Length > 0 ) ToLight = ... else ToLight = Capsule.LightPos[0];
+
  257:     dp3 r0.y, r9.xyzx, r9.xyzx                  -> Dot((~), (~)) 
+                                                      -> float DistSqr = dot( ToLight, ToLight );
+
  258:     rsq r0.y, r0.y                              -> 1 / sqrt(~) 
+                                                      -> float InvDist = rsqrt( DistSqr );
+
  259:     mul r10.xyz, r0.yyyy, r9.xyzx               -> normalize(L256) -> 此处相当于 normalize(cb1[5].xyz) 
+                                                      -> float3 L = ToLight * InvDist;
+
  260:     max r0.z, r0.z, cb0[219].y                  -> max(cb0[219].y=0.02, Tex.z=Rough) 
+                                                      -> GBuffer.Roughness = max( GBuffer.Roughness, View.MinRoughness );
+
  261:     mul r5.x, r0.z, r0.z                        -> (~) * (~) 
+                                                      -> float a = Pow2( GBuffer.Roughness );
+
  262:     mul r7.w, r0.y, cb1[6].w                    -> cb1[6].w=0.00467 * L258 
  263:     mad r10.w, -r0.z, r0.z, l(1.0000)           -> 1 - Rough^2 
  264:     mul_sat r7.w, r7.w, r10.w                   -> saturate(L262 * (~)) 
+                                                      -> AreaLight.SphereSinAlpha = saturate(Capsule.Radius * InvDist * (1 - a));
+
  265:     mul_sat r11.x, r0.y, cb1[7].z               -> saturate(L258 * cb1[7].z=0) 
+                                                      -> AreaLight.SphereSinAlphaSoft = saturate(Capsule.SoftRadius * InvDist);
  266:     switch r1.x
  267:     case l(1)                                   -> 木墙部分 
  268:     case l(10)                                  -> 未知A 
  269:     case l(11)                                  -> 未知B 
 
- 270:     dp3 r1.x, r5.yzwy, r10.xyzx                 -> Dot(normalize(Normal), normalize(cb1[5].xyz)) 
- 271:     dp3 r12.w, r5.yzwy, -r3.xyzx                -> Dot(normalize(Normal), normalize(-ViewDirWS)) 
- 272:     dp3 r13.w, -r3.xyzx, r10.xyzx               -> Dot(normalize(-ViewDirWS), normalize(cb1[5].xyz)) 
- 273:     lt r14.x, l(0), r7.w                        -> 0 < L264 ? 
+ -------|-------Func: DefaultLitBxDF(Start)
+ 270:     dp3 r1.x, r5.yzwy, r10.xyzx                 -> Dot(normalize(Normal), normalize(cb1[5].xyz)) -> dot(N, L)
+ 271:     dp3 r12.w, r5.yzwy, -r3.xyzx                -> Dot(normalize(Normal), normalize(-ViewDirWS)) -> dot(N, V)
+ 272:     dp3 r13.w, -r3.xyzx, r10.xyzx               -> Dot(normalize(-ViewDirWS), normalize(cb1[5].xyz)) -> dot(V, L) 
+
+ -------|-------|-------Func: SphereMaxNoH(Start)
+ 273:     lt r14.x, l(0), r7.w                        -> 0 < L264 ? -> SinAlpha > 0
  274:     if_nz r14.x                                 -> 如果上式成立则进入 
  275:       mad r14.y, -r7.w, r7.w, l(1)              -> 1 - L264^2 
  276:       sqrt r14.y, r14.y                         -> sqrt(~) 
- 277:       dp2 r14.z, r12.wwww, r1.xxxx              -> Dot(L270.xx, L271.ww)  ?? 
+                                                      -> float CosAlpha = sqrt( 1 - Pow2( SinAlpha ) );
+
+ 277:       dp2 r14.z, r12.wwww, r1.xxxx              -> Dot(L270.xx, L271.ww) 
+                                                      ->  2 * Context.NoL * Context.NoV  
+
  278:       add r14.w, -r13.w, r14.z                  -> (~) - L272 
- 279:       ge r15.x, r14.w, r14.y                    -> (~) >= L276 ? 
+                                                      -> float RoL = 2 * Context.NoL * Context.NoV - Context.VoL; 
+
+ 279:       ge r15.x, r14.w, r14.y                    -> (~) >= L276 ? -> RoL >= CosAlpha
  280:       if_nz r15.x                               -> 若成立 
- 281:         mov r15.x, l(1.0000)                    -> 返回值.x = 1.0
+ 281:         mov r15.x, l(1.0000)                    -> 返回值.x = 1.0 
+                                                      -> Context.NoH = 1;
+
  282:         mov r15.y, abs(r12.w)                   -> 返回值.y = abs(Dot(normalize(Normal), normalize(-ViewDirWS))) 
+                                                      -> Context.VoH = abs( Context.NoV );
+
  283:       else
  284:         mad r15.z, -r14.w, r14.w, l(1.0000)     -> 1 - L278^2 
  285:         rsq r15.z, r15.z                        -> 1/sqrt(~) 
  286:         mul r15.z, r7.w, r15.z                  -> L264 / sqrt(1 - L278^2) 
+                                                      -> float rInvLengthT = SinAlpha * rsqrt( 1 - RoL*RoL );
+
  287:         mad r15.w, -r14.w, r1.x, r12.w          -> L271 - L270 * L278 
  288:         mul r16.x, r15.w, r15.z                 -> (~) * L264 / sqrt(1 - L278^2) 
- 289:         mul r16.y, r12.w, r12.w                 -> L271^2 
+                                                      -> float NoTr = rInvLengthT * ( Context.NoV - RoL * Context.NoL );
+
+ 289:         mul r16.y, r12.w, r12.w                 -> L271^2 -> NoV^2
  290:         mad r16.y, r16.y, l(2.0000), l(-1.0000) -> 2 * (~) - 1 
  291:         mad r14.w, -r14.w, r13.w, r16.y         -> (~) - L272 * L278 
- 292:         mad r16.y, -r1.x, r1.x, l(1.0000)       -> 1 - L270^2 
- 293:         mad r16.y, -r12.w, r12.w, r16.y         -> (~) - L271^2 
- 294:         mad r16.y, -r13.w, r13.w, r16.y         -> (~) - L272^2 
+                                                      -> 2 * Context.NoV * Context.NoV - 1 - RoL * Context.VoL
+
+ 292:         mad r16.y, -r1.x, r1.x, l(1.0000)       -> 1 - L270^2 -> 1 - NoL^2 
+ 293:         mad r16.y, -r12.w, r12.w, r16.y         -> (~) - L271^2 -> 1 - NoL^2  - NoV^2
+ 294:         mad r16.y, -r13.w, r13.w, r16.y         -> (~) - L272^2 -> 1 - NoL^2  - NoV^2 - VoL^2 
  295:         mad_sat r14.z, r14.z, r13.w, r16.y      -> saturate(L277 * L272 + (~)) 
  296:         sqrt r14.z, r14.z                       -> sqrt(~) 
+                                                      -> float NxLoV = sqrt( saturate( 1 - Pow2(Context.NoL) - Pow2(Context.NoV) - Pow2(Context.VoL) + 2 * Context.NoL * Context.NoV * Context.VoL ) ); 
+
  297:         mul r14.zw, r14.zzzw, r15.zzzz          -> [z:(~)*L286, w:L291*L286] 
+                                                      -> r14.w=VoTr;  r14.z=rInvLengthT*NxLoV=NoBr
+
  298:         mul r16.y, r12.w, r14.z                 -> L271 * (~).z 
- 299:         add r16.z, r16.y, r16.y                 -> (~) + (~)
- 300:         mad r16.w, r1.x, r14.y, r12.w           -> L270 * L276 + L271
+ 299:         add r16.z, r16.y, r16.y                 -> (~) + (~) 
+                                                      -> float VoBr = rInvLengthT * NxLoV * 2 * Context.NoV; 
+
+ 300:         mad r16.w, r1.x, r14.y, r12.w           -> L270 * L276 + L271 
  301:         mad r15.z, r15.z, r15.w, r16.w          -> L286 * L287 + (~) 
- 302:         mad r15.w, r13.w, r14.y, r14.w          -> L272 * L276 + l297.w 
+                                                      -> float NoLVTr = Context.NoL * CosAlpha + Context.NoV + NoTr;
+
+ 302:         mad r15.w, r13.w, r14.y, r14.w          -> L272 * L276 + L297.w -> Context.VoL * CosAlpha + VoTr
  303:         add r15.w, r15.w, l(1.0000)             -> 1 + (~) 
- 304:         mul r17.x, r14.z, r15.w                 -> L297.z * (~)
- 305:         mul r17.y, r15.w, r15.z                 -> L303 * L301 
- 306:         mul r17.z, r15.z, r16.z                 -> L301 * L299 
- 307:         mul r16.y, r16.y, r15.z                 -> L298 * L301 
+                                                      -> float VoLVTr = Context.VoL * CosAlpha + 1   + VoTr;
+
+ 304:         mul r17.x, r14.z, r15.w                 -> L297.z * (~) 
+                                                      -> float p = NoBr * VoLVTr; 
+
+ 305:         mul r17.y, r15.w, r15.z                 -> L303 * L301 -> float q = NoLVTr * VoLVTr;
+ 306:         mul r17.z, r15.z, r16.z                 -> L301 * L299 -> float s = VoBr   * NoLVTr;
+
+ 307:         mul r16.y, r16.y, r15.z                 -> L298 * L301
  308:         mul r16.y, r16.y, l(0.5000)             -> 0.5 * (~)
  309:         mad r16.y, r17.x, l(-0.5000), r16.y     -> (~) - 0.5 * L304
  310:         mul r16.y, r16.y, r17.y                 -> (~) * L305
+                                                      -> float xNum = q * ( -0.5 * p + 0.25 * VoBr * NoLVTr );
+
  311:         mad r17.w, -r17.x, l(2.0000), r17.z     -> L306 - 2.0 * L304
  312:         mul r17.z, r17.w, r17.z                 -> (~) * L306
  313:         mad r17.x, r17.x, r17.x, r17.z          -> L304 * L304 + (~) 
@@ -517,23 +638,44 @@ ps_5_0
  317:         mul r15.w, r15.w, r17.y                 -> (~) * L305 
  318:         mad r15.w, r16.w, r17.z, r15.w          -> L300 * L314 + (~) 
  319:         mad r15.z, r15.z, r15.w, r17.x          -> L301 * (~) + L313 
+                                                      -> float xDenom = p*p + s * (s - 2*p) + NoLVTr * ( (Context.NoL * CosAlpha + Context.NoV) * Pow2(VoLVTr) + q * (-0.5 * (VoLVTr + Context.VoL * CosAlpha) - 0.5) );
+
  320:         add r15.w, r16.y, r16.y                 -> L310 + L310 
  321:         mul r16.w, r16.y, r16.y                 -> L310 * L310 
  322:         mad r16.w, r15.z, r15.z, r16.w          -> L319 * L319 + (~) 
  323:         div r15.w, r15.w, r16.w                 -> L320 / (~) 
+                                                      -> float TwoX1 = 2 * xNum / ( Pow2(xDenom) + Pow2(xNum) );
+
  324:         mul r15.z, r15.z, r15.w                 -> L319 * (~) 
+                                                      -> float SinTheta = TwoX1 * xDenom;
+
  325:         mad r15.w, -r15.w, r16.y, l(1.0000)     -> 1 - L323 * L310 
+                                                      -> float CosTheta = 1.0 - TwoX1 * xNum;
+
  326:         mul r14.z, r14.z, r15.z                 -> L297.z * L324 
  327:         mad r14.z, r15.w, r16.x, r14.z          -> L325 * L288 + (~)
+                                                      -> NoTr = CosTheta * NoTr + SinTheta * NoBr;
+
  328:         mul r15.z, r16.z, r15.z                 -> L299 * L324
  329:         mad r14.w, r15.w, r14.w, r15.z          -> L297.w * L325 + (~)
+                                                      -> VoTr = CosTheta * VoTr + SinTheta * VoBr;
+
  330:         mad r14.z, r1.x, r14.y, r14.z           -> L270 * L276 + L327 
+                                                      -> Context.NoL = Context.NoL * CosAlpha + NoTr;
+
  331:         mad r14.y, r13.w, r14.y, r14.w          -> L272 * L276 + L329 
+                                                      -> Context.VoL = Context.VoL * CosAlpha + VoTr;
+
  332:         mad r14.w, r14.y, l(2.0000), l(2.0000)  -> 2 * (~) + 2 
  333:         rsq r14.w, r14.w                        -> 1 / sqrt(~) 
+                                                      -> float InvLenH = rsqrt( 2 + 2 * Context.VoL );
+
  334:         add r14.z, r12.w, r14.z                 -> L271 + L330 
  335:         mul_sat r15.x, r14.w, r14.z             -> saturate((~) * L333)             -> 返回值.x
+                                                      -> Context.NoH = saturate( ( Context.NoL + Context.NoV ) * InvLenH );
+
  336:         mad_sat r15.y, r14.w, r14.y, r14.w      -> saturate(L333 * L331 + L333)     -> 返回值.y 
+                                                      -> Context.VoH = saturate( InvLenH + InvLenH * Context.VoL ); 
  337:       endif
  338:     else                                        -> 若 0 < L264 不成立 
  339:       mad r14.y, r13.w, l(2.0000), l(2.0000)    -> L272 * 2 + 2
@@ -542,73 +684,171 @@ ps_5_0
  342:       mul_sat r15.x, r14.y, r1.x                -> saturate(L340 * (~))             -> 返回值.x 
  343:       mad_sat r15.y, r14.y, r13.w, r14.y        -> saturate(L340 * L272 + L340)     -> 返回值.y 
  344:     endif
+ -------|-------|-------Func: SphereMaxNoH(End)
+
  345:     add r1.x, abs(r12.w), l(0.0000)             -> abs(L271) + 0
  346:     min r1.x, r1.x, l(1.0000)                   -> min((~), 1)
- 347:     mul r14.yzw, r3.wwww, r7.xxyz               -> L244 * L202 
- 348:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)      -> (~) / PI 
+                                                      -> Context.NoV = saturate(abs(Context.NoV) + 1e-5); 
+
+ 347:     mul r14.yzw, r3.wwww, r7.xxyz               -> L244 * L202 -> NoL * GBuffer.DiffuseColor
+ 348:     mul r11.yzw, r14.yyzw, l(0.0000, 0.3183, 0.3183, 0.3183)      -> (~) / PI -> Diffuse_Lambert
+                                                      -> Lighting.Diffuse = Diffuse_Lambert(GBuffer.DiffuseColor * NoL); 
+
+-------|-------|-------Func: SpecularGGX(Start)
  349:     mul r12.w, r5.x, r5.x                       -> L261 * L261 -> Rough^4 
- 350:     lt r13.w, l(0), r11.x                       -> 0 < L265 ?     -> L265 推测为0 
+                                                      -> float a2 = Pow4(Roughness); 
+
+-------|-------|-------|-------Func: EnergyNormalization(Start)
+ 350:     lt r13.w, l(0), r11.x                       -> 0 < L265 ?     -> AreaLight.SphereSinAlphaSoft > 0 ? 
  351:     mul r14.y, r11.x, r11.x                     -> L265 * L265 
  352:     mad r14.z, r15.y, l(3.6), l(0.4)            -> 返回值.y * 3.6 + 0.4 
  353:     div r14.y, r14.y, r14.z                     -> L351 / L352 
  354:     mad r14.y, r5.x, r5.x, r14.y                -> L261 * L261 + (~) 
  355:     min r14.y, r14.y, l(1.0000)                 -> min((~), 1) 
- 356:     movc r16.x, r13.w, r14.y, r12.w             -> 0 < L265 ? (~) : (L261 * L261 = Rough^4) 
- 357:     mul r12.w, r7.w, l(0.2500)                  -> L264 * 0.25 
+                                                      -> a2 = saturate( a2 + Pow2( AreaLight.SphereSinAlphaSoft ) / ( VoH * 3.6 + 0.4 ) );
+
+ 356:     movc r16.x, r13.w, r14.y, r12.w             -> if (AreaLight.SphereSinAlpha > 0) a2 = ... else a2 维持不变 = Rough^4
+
+-------|-------|-------|-------|-------Func: New_a2(Start)  -> Sphere_a2 = New_a2( a2, AreaLight.SphereSinAlpha, VoH );
+ 357:     mul r12.w, r7.w, l(0.2500)                  -> L264 * 0.25 -> AreaLight.SphereSinAlpha * 0.25
+
  358:     ishr r13.w, r16.x, l(1)                     -> L356 >> 1 
+                                                      -> asint(a2) >> 1 
  359:     iadd r13.w, r13.w, l(0.0000)                -> (int)(~) + 0 
+                                                      -> 0x1FBD1DF5=532487669 
+                                                      -> i = 0x1FBD1DF5 + (i >> 1); 
+                                                      -> return asfloat(i);  -> sqrtFast(a2)  
+
  360:     mad r13.w, r13.w, l(3.0000), r7.w           -> (~) * 3 + L264 
+                                                      -> 3.0 * sqrtFast(a2) + SinAlpha  
+
  361:     mul r12.w, r12.w, r13.w                     -> L357 * (~) 
- 362:     add r13.w, r15.y, l(0.0010)                 -> 返回值.y + 0.001 
+ 362:     add r13.w, r15.y, l(0.0010)                 -> 返回值.y + 0.001  -> VoH + 0.001
  363:     div r12.w, r12.w, r13.w                     -> L361 / (~) 
  364:     add r17.x, r12.w, r16.x                     -> (~) + L356 
+                                                      -> return a2 + 0.25 * SinAlpha * (3.0 * sqrtFast(a2) + SinAlpha) / ( VoH + 0.001 );
+-------|-------|-------|-------|-------Func: New_a2(End)
+
  365:     div r17.y, r16.x, r17.x                     -> L356 / (~) 
+                                                      -> Energy = a2 / Sphere_a2;
+
  366:     mov r16.y, l(1.0000)                        -> Set 1 to r16.y 
  367:     movc r14.xy, r14.xxxx, r17.xyxx, r16.xyxx   -> 0 < L264 ? r17.xy : r16.xy 
- 368:     lt r12.w, r9.w, l(1.0000)                   -> L231=1 < 1 ? 
- 369:     add r14.z, -r9.w, l(1.0001)                 -> 1.0001 - (L231=1) 
- 370:     add r14.w, r9.w, l(1.0000)                  -> 1 + L231 
+                                                      -> if( AreaLight.SphereSinAlpha > 0 ) 
+                                                            Sphere_a2 = ...; Energy = ...
+                                                         else
+                                                            keep origin   
+
+ 368:     lt r12.w, r9.w, l(1.0000)                   -> L231=1 < 1 ?   ->  AreaLight.LineCosSubtended < 1 ? 
+
+ 369:     add r14.z, -r9.w, l(1.0001)                 -> 1.0001 - LineCosTwoAlpha  
+ 370:     add r14.w, r9.w, l(1.0000)                  -> 1 + LineCosTwoAlpha 
  371:     div r14.z, r14.z, r14.w                     -> L369 / (~) 
  372:     sqrt r14.z, r14.z                           -> sqrt(~) 
+                                                      -> float LineCosTwoAlpha = AreaLight.LineCosSubtended;
+                                                      -> float LineTanAlpha = sqrt( ( 1.0001 - LineCosTwoAlpha ) / ( 1 + LineCosTwoAlpha ) );
+
+-------|-------|-------|-------|-------Func: New_a2(Start)  -> float Line_a2 = New_a2( Sphere_a2, LineTanAlpha, VoH );
  373:     mul r14.w, r14.z, l(0.2500)                 -> 0.25 * (~) 
  374:     ishr r15.z, r14.x, l(1)                     -> L367.x >> 1 
  375:     iadd r15.z, r15.z, l(0.0000)                -> (~) + 0 
  376:     mad r14.z, r15.z, l(3.0000), r14.z          -> (~) * 3 + L372 
+                                                      -> 3.0 * sqrtFast(a2) + SinAlpha
+
  377:     mul r14.z, r14.z, r14.w                     -> (~) * L373 
  378:     div r13.w, r14.z, r13.w                     -> (~) / L362 
  379:     add r13.w, r13.w, r14.x                     -> (~) + L367.x 
+                                                      -> return a2 + 0.25 * SinAlpha * (3.0 * sqrtFast(a2) + SinAlpha) / ( VoH + 0.001 );
+-------|-------|-------|-------|-------Func: New_a2(End)
+
  380:     div r13.w, r14.x, r13.w                     -> L367.x / (~)
  381:     sqrt r13.w, r13.w                           -> sqrt(~) 
  382:     mul r13.w, r13.w, r14.y                     -> (~) * L367.y 
+                                                      -> Energy *= sqrt( Sphere_a2 / Line_a2 );
+
  383:     movc r12.w, r12.w, r13.w, r14.y             -> L231=1 < 1 ? (~) : L367.y 
+                                                      -> if( AreaLight.LineCosSubtended < 1 ) Energy = ... else 维持不变 
+-------|-------|-------|-------Func: EnergyNormalization(End) -> return Energy; 
+
+-------|-------|-------|-------|-------Func: D_GGX(Start) 
  384:     mad r13.w, r15.x, r16.x, -r15.x             -> 返回值.x * L356 - 返回值.x 
+                                                      -> NoH * a2 - NoH
+
  385:     mad r13.w, r13.w, r15.x, l(1.0000)          -> (~) * 返回值.x + 1 
+                                                      -> float d = ( NoH * a2 - NoH ) * NoH + 1;      // 2 mad
+
  386:     mul r13.w, r13.w, r13.w                     -> (~) * (~) 
  387:     mul r13.w, r13.w, l(3.1416)                 -> (~) * PI 
  388:     div r13.w, r16.x, r13.w                     -> L356 / (~) 
+                                                      -> return a2 / ( PI*d*d );    
+-------|-------|-------|-------|-------Func: D_GGX(End)
+
  389:     mul r12.w, r12.w, r13.w                     -> L383 * (~) 
- 390:     sqrt r13.w, r16.x                           -> sqrt(L356)
+                                                      -> D = D_GGX( a2, Context.NoH ) * Energy;
+
+-------|-------|-------|-------|-------Func: Vis_SmithJointApprox(Start)  
+                                                      -> Vis = Vis_SmithJointApprox(a2, Context.NoV, NoL);                               
+ 390:     sqrt r13.w, r16.x                           -> sqrt(L356) 
+                                                      -> float a = sqrt(a2);
+
  391:     add r14.x, -r13.w, l(1.0000)                -> 1 - (~)
- 392:     mad r14.y, r1.x, r14.x, r13.w               -> min(abs(L271)+0, 1) * (~) + sqrt(L356)
+ 392:     mad r14.y, r1.x, r14.x, r13.w               -> L346 * (~) + sqrt(L356)
+                                                      -> NoV * ( 1 - a ) + a 
+
  393:     mad r13.w, r3.w, r14.x, r13.w               -> L244 * (1 - sqrt(L356)) + sqrt(L356) 
- 394:     mul r1.x, r1.x, r13.w                       -> min(abs(L271)+0, 1) * (~) 
+                                                      -> NoL * ( 1 - a ) + a 
+
+ 394:     mul r1.x, r1.x, r13.w                       -> L346 * (~) 
+                                                      -> float Vis_SmithV = NoL * ( NoV * ( 1 - a ) + a ); 
+
  395:     mad r1.x, r3.w, r14.y, r1.x                 -> L244 * L392 + (~) 
+                                                      -> float Vis_SmithL = NoV * ( NoL * ( 1 - a ) + a ); 
+                                                      -> Vis_SmithV + Vis_SmithL 
+
  396:     rcp r1.x, r1.x                              -> 1 / (~) 
+                                                      -> return rcp( Vis_SmithV + Vis_SmithL );  
+                                                      -> 注:后面L406处补上了 0.5 * (~) 
+-------|-------|-------|-------|-------Func: Vis_SmithJointApprox(End) 
+
  397:     mul r1.x, r1.x, r12.w                       -> (~) * L389 
+                                                      -> D * Vis
+-------|-------|-------|-------|-------Func: F_Schlick(Start)
+                                                      -> float3 F = F_Schlick( SpecularColor, Context.VoH );
  398:     add r12.w, -r15.y, l(1.0000)                -> 1 - 返回值.y 
  399:     mul r13.w, r12.w, r12.w                     -> (~) * (~) 
  400:     mul r13.w, r13.w, r13.w                     -> (~) * (~) -> (1 - 返回值.y)^4 
  401:     mul r14.x, r12.w, r13.w                     -> (1 - 返回值.y)^5 
+                                                      -> float Fc = Pow5( 1 - VoH );
+
  402:     mul_sat r14.y, r2.y, l(50.0000)             -> saturate(L203.y * 50.0) 
+                                                      -> saturate(GBuffer.SpecularColor.g * 50)
+
  403:     mad r12.w, -r13.w, r12.w, l(1.0000)         -> 1 - (1 - 返回值.y)^5 
+                                                      -> 1 - Fc
+
  404:     mul r15.xyz, r2.xyzx, r12.wwww              -> L203.xyz * (1 - 返回值.y)^5
+                                                      -> SpecularColor.rgb * (1 - Fc)
+
  405:     mad r14.xyz, r14.yyyy, r14.xxxx, r15.xyzx   -> saturate(L203.y * 50.0) * (1 - 返回值.y)^5 + L203.xyz * (1 - 返回值.y)^5
+                                                      -> return saturate(SpecularColor.g * 50) * Fc + (1 - Fc) * SpecularColor.rgb; 
+-------|-------|-------|-------|-------Func: F_Schlick(End)
+
  406:     mul r1.x, r1.x, l(0.5000)                   -> L397 * 0.5 
  407:     mul r14.xyz, r14.xyzx, r1.xxxx              -> L405 * (L397 * 0.5) 
+                                                      -> return (D * Vis) * F;
+-------|-------|-------Func: SpecularGGX(End)
+
  408:     mul r12.xyz, r3.wwww, r14.xyzx              -> L244 * (~) 
+                                                      -> NoL * SpecularGGX_returnVal 
+                                                      -> Lighting.Specular = AreaLight.FalloffColor * (Falloff * NoL) * 
+                                                      SpecularGGX( GBuffer.Roughness, GBuffer.Anisotropy, GBuffer.SpecularColor, Context, NoL, AreaLight );
+                                                      -> 推测 AreaLight.FalloffColor 和 Falloff 都是常数 1 
+
+ 409:     mov r13.xyz, l(0, 0, 0, 0)                  -> Set to 0
+                                                      -> Lighting.Transmission = 0; 
+ -------|-------Func: DefaultLitBxDF(End) 
 
 
- 409:     mov r13.xyz, l(0, 0, 0, 0)
  410:     break
  411:     case l(2)
 
@@ -1941,11 +2181,14 @@ ps_5_0
 1736:     mov r11.yzw, l(0, 0, 0, 0)
 1737:     break
 1738:     default
-1739:     mov r11.yzw, l(0, 0, 0, 0)
-1740:     mov r12.xyz, l(0, 0, 0, 0)
-1741:     mov r13.xyz, l(0, 0, 0, 0)
+
+1739:     mov r11.yzw, l(0, 0, 0, 0)      -> Diffuse
+1740:     mov r12.xyz, l(0, 0, 0, 0)      -> Specular
+1741:     mov r13.xyz, l(0, 0, 0, 0)      -> Transmission
+
 1742:     break
 1743:     endswitch
+
 1744:     mul r0.xyz, r12.xyzx, cb1[5].wwww
 1745:     mul r1.xyz, r4.xxxx, cb1[4].xyzx
 1746:     eq r0.w, cb0[200].z, l(0)
