@@ -1013,6 +1013,8 @@ ps_5_0
  568:     mad r0.y, r0.y, r1.x, r2.w
  569:     mul r13.xyz, r14.xyzx, r0.yyyy
  570:     break
+
+
  571:     case l(3)
  572:     dp3 r0.y, r5.yzwy, r10.xyzx
  573:     dp3 r1.x, r5.yzwy, -r3.xyzx
@@ -1160,6 +1162,8 @@ ps_5_0
  715:     sample_l(texture2d)(float,float,float,float) r14.xyz, r14.xyxx, t0.xyzw, s0, l(0)
  716:     mul r13.xyz, r9.xyzx, r14.xyzx
  717:     break
+
+ 
  718:     case l(4)
  719:     max r0.y, r6.z, l(0.0200)
  720:     dp3 r9.x, r5.yzwy, r10.xyzx
@@ -1582,10 +1586,13 @@ ps_5_0
 1137:     mul r12.xyz, r3.wwww, r9.xyzx
 1138:     mov r13.xyz, l(0, 0, 0, 0)
 1139:     break
+
+
+-------|-------Func: TwoSidedBxDF(Start) 
 1140:     case l(6)
-1141:     dp3 r0.y, r5.yzwy, r10.xyzx
-1142:     dp3 r1.x, r5.yzwy, -r3.xyzx
-1143:     dp3 r2.w, -r3.xyzx, r10.xyzx
+1141:     dp3 r0.y, r5.yzwy, r10.xyzx                 -> Dot(normalize(Normal), normalize(cb1[5].xyz)) -> dot(N, L)
+1142:     dp3 r1.x, r5.yzwy, -r3.xyzx                 -> Dot(normalize(Normal), normalize(-ViewDirWS)) -> dot(N, V)
+1143:     dp3 r2.w, -r3.xyzx, r10.xyzx                -> Dot(normalize(-ViewDirWS), normalize(cb1[5].xyz)) -> dot(V, L) 
 1144:     lt r9.x, l(0), r7.w
 1145:     if_nz r9.x
 1146:       mad r9.y, -r7.w, r7.w, l(1.0000)
@@ -1722,18 +1729,31 @@ ps_5_0
 1277:     mul r1.x, r1.x, l(0.5000)
 1278:     mul r9.xyz, r9.xyzx, r1.xxxx
 1279:     mul r12.xyz, r3.wwww, r9.xyzx
-1280:     mul r9.xyz, r6.yzwy, r6.yzwy
-1281:     add r0.y, -r0.y, l(0.5000)
-1282:     mul_sat r0.y, r0.y, l(0.4444)
-1283:     mov_sat r2.w, -r2.w
-1284:     mul r1.x, r2.w, r2.w
-1285:     mad r1.x, r1.x, l(-0.6400), l(1.0000)
-1286:     mul r1.x, r1.x, r1.x
+
+
+1280:     mul r9.xyz, r6.yzwy, r6.yzwy                -> CustomData.rgb^2
+                                                      -> float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
+1281:     add r0.y, -r0.y, l(0.5000)                  -> 0.5 - dot(N, L) 
+1282:     mul_sat r0.y, r0.y, l(0.4444)               -> saturate(0.5 - dot(N, L) + 0.4444)  -> 0.4444 = 1/(1.5^2) 
+                                                      -> float WrapNoL = saturate( ( -dot(N, L) + Wrap ) / Square( 1 + Wrap ) ); 
+
+-------|-------|-------Func: D_GGX(Start)                                        
+                                                      -> float Scatter = D_GGX( 0.6*0.6, saturate( -VoL ) );
+1283:     mov_sat r2.w, -r2.w                         -> saturate(-VoL) 
+1284:     mul r1.x, r2.w, r2.w                        -> NoH^2 
+1285:     mad r1.x, r1.x, l(-0.6400), l(1.0000)       -> NoH^2 * (a2-1) + 1
+                                                      -> float d = ( NoH * a2 - NoH ) * NoH + 1;
+1286:     mul r1.x, r1.x, r1.x      
 1287:     mul r1.x, r1.x, l(3.1416)
-1288:     div r1.x, l(0.3600), r1.x
-1289:     mul r0.y, r0.y, r1.x
-1290:     mul r13.xyz, r9.xyzx, r0.yyyy
+1288:     div r1.x, l(0.3600), r1.x                   -> return a2 / ( PI*d*d );    
+-------|-------|-------Func: D_GGX(End)
+
+1289:     mul r0.y, r0.y, r1.x                        -> WrapNoL * Scatter 
+1290:     mul r13.xyz, r9.xyzx, r0.yyyy               -> Lighting.Transmission = WrapNoL * Scatter * SubsurfaceColor;                   
 1291:     break
+-------|-------Func: TwoSidedBxDF(End)
+
+
 1292:     case l(7)
 1293:     max r0.y, r0.z, l(0.0039)
 1294:     min r0.y, r0.y, l(1.0000)
@@ -1877,19 +1897,26 @@ ps_5_0
 1432:     mov r12.xyz, l(0, 0, 0, 0)
 1433:     mov r13.xyz, -r13.xyzx
 1434:     break
+
+
+-------|-------Func: ClothBxDF(Start)
 1435:     case l(8)
-1436:     mul r0.yzw, r6.yyzw, r6.yyzw
-1437:     mov_sat r6.x, r6.x
-1438:     dp3 r1.x, r5.yzwy, r10.xyzx
-1439:     dp3 r2.w, r5.yzwy, -r3.xyzx
-1440:     dp3 r6.y, -r3.xyzx, r10.xyzx
-1441:     lt r8.x, l(0), r7.w
+1436:     mul r0.yzw, r6.yyzw, r6.yyzw                -> CustomData.rgb^2
+                                                      -> float3 FuzzColor = ExtractSubsurfaceColor(GBuffer);
+1437:     mov_sat r6.x, r6.x                          -> const float Cloth = saturate(GBuffer.CustomData.a);
+
+1438:     dp3 r1.x, r5.yzwy, r10.xyzx                 -> dot(N, L);
+1439:     dp3 r2.w, r5.yzwy, -r3.xyzx                 -> dot(N, V);
+1440:     dp3 r6.y, -r3.xyzx, r10.xyzx                -> dot(V, L); 
+
+-------|-------|-------Func: SphereMaxNoH(Start)
+1441:     lt r8.x, l(0), r7.w                         -> AreaLight.SphereSinAlpha > 0 ? 
 1442:     if_nz r8.x
-1443:       mad r8.y, -r7.w, r7.w, l(1.0000)
-1444:       sqrt r8.y, r8.y
-1445:       dp2 r8.z, r2.wwww, r1.xxxx
-1446:       add r9.x, -r6.y, r8.z
-1447:       ge r9.y, r9.x, r8.y
+1443:       mad r8.y, -r7.w, r7.w, l(1.0000)          
+1444:       sqrt r8.y, r8.y                           -> float CosAlpha = sqrt(1 - Pow2(SinAlpha));
+1445:       dp2 r8.z, r2.wwww, r1.xxxx                -> 2 * Context.NoL * Context.NoV
+1446:       add r9.x, -r6.y, r8.z                     -> float RoL = 2 * Context.NoL * Context.NoV - Context.VoL; 
+1447:       ge r9.y, r9.x, r8.y                       -> if (RoL >= CosAlpha) ? 
 1448:       if_nz r9.y
 1449:         mov r9.y, l(1.0000)
 1450:         mov r9.z, abs(r2.w)
@@ -1946,19 +1973,25 @@ ps_5_0
 1501:         mad r9.x, r8.y, l(2.0000), l(2.0000)
 1502:         rsq r9.x, r9.x
 1503:         add r8.z, r2.w, r8.z
-1504:         mul_sat r9.y, r9.x, r8.z
-1505:         mad_sat r9.z, r9.x, r8.y, r9.x
+1504:         mul_sat r9.y, r9.x, r8.z                -> Context.NoH = saturate((Context.NoL + Context.NoV) * InvLenH);
+1505:         mad_sat r9.z, r9.x, r8.y, r9.x          -> Context.VoH = saturate(InvLenH + InvLenH * Context.VoL);
 1506:       endif
 1507:     else
 1508:       mad r8.y, r6.y, l(2.0000), l(2.0000)
 1509:       rsq r8.y, r8.y
 1510:       add r1.x, r1.x, r2.w
-1511:       mul_sat r9.y, r8.y, r1.x
-1512:       mad_sat r9.z, r8.y, r6.y, r8.y
+1511:       mul_sat r9.y, r8.y, r1.x                  -> Context.NoH = saturate(Context.NoL * Context.NoV * VoL2);
+1512:       mad_sat r9.z, r8.y, r6.y, r8.y            -> Context.VoH = saturate(Context.VoL * VoL2 + VoL2);
 1513:     endif
-1514:     add r1.x, abs(r2.w), l(0.0000)
-1515:     min r1.x, r1.x, l(1.0000)
-1516:     mul r2.w, r5.x, r5.x
+-------|-------|-------Func: SphereMaxNoH(End)
+
+1514:     add r1.x, abs(r2.w), l(0.0000)              -> abs(Context.NoV) + 1e-5
+1515:     min r1.x, r1.x, l(1.0000)                   -> Context.NoV = saturate(~);
+
+-------|-------|-------Func: SpecularGGX(Start)
+1516:     mul r2.w, r5.x, r5.x                        -> float a2 = Pow4(Roughness); -> 其中r5.x == Pow2(Roughtness)
+
+-------|-------|-------|-------Func: EnergyNormalization(Start)
 1517:     lt r6.y, l(0), r11.x
 1518:     mul r8.y, r11.x, r11.x
 1519:     mad r8.z, r9.z, l(3.6000), l(0.4000)
@@ -1990,23 +2023,36 @@ ps_5_0
 1545:     div r8.y, r9.x, r8.y
 1546:     add r8.y, r8.y, r8.x
 1547:     div r8.x, r8.x, r8.y
-1548:     sqrt r8.x, r8.x
+1548:     sqrt r8.x, r8.x                             -> sqrt(Sphere_a2 / Line_a2);
 1549:     mul r8.x, r8.x, r8.z
-1550:     movc r6.y, r6.y, r8.x, r8.z
+1550:     movc r6.y, r6.y, r8.x, r8.z                 -> if (AreaLight.LineCosSubtended < 1) Energy *= sqrt(Sphere_a2 / Line_a2); else Keep 
+                                                      -> float Energy = return Energy; 
+-------|-------|-------|-------Func: EnergyNormalization(End)     
+
+-------|-------|-------|-------Func: D_GGX(Start) 
 1551:     mad r8.x, r9.y, r14.x, -r9.y
 1552:     mad r8.x, r8.x, r9.y, l(1.0000)
 1553:     mul r8.x, r8.x, r8.x
 1554:     mul r8.x, r8.x, l(3.1416)
-1555:     div r8.x, r14.x, r8.x
-1556:     mul r6.y, r6.y, r8.x
+1555:     div r8.x, r14.x, r8.x                       -> return a2 / (PI * d * d);
+-------|-------|-------|-------Func: D_GGX(End)  
+
+
+1556:     mul r6.y, r6.y, r8.x                        -> float D = D_GGX(a2, Context.NoH) * Energy;
+
+-------|-------|-------|-------Func: Vis_SmithJointApprox(Start) 
 1557:     sqrt r8.x, r14.x
 1558:     add r8.y, -r8.x, l(1.0000)
 1559:     mad r8.z, r1.x, r8.y, r8.x
 1560:     mad r8.x, r3.w, r8.y, r8.x
 1561:     mul r8.x, r1.x, r8.x
 1562:     mad r8.x, r3.w, r8.z, r8.x
-1563:     rcp r8.x, r8.x
-1564:     mul r6.y, r6.y, r8.x
+1563:     rcp r8.x, r8.x                              -> float Vis = return 0.5 * rcp(Vis_SmithV + Vis_SmithL);  注:0.5之后会补乘 
+-------|-------|-------|-------Func: Vis_SmithJointApprox(End)
+
+1564:     mul r6.y, r6.y, r8.x                        -> D * Vis
+
+-------|-------|-------|-------Func: F_Schlick(Start) 
 1565:     add r8.x, -r9.z, l(1.0000)
 1566:     mul r8.y, r8.x, r8.x
 1567:     mul r8.y, r8.y, r8.y
@@ -2014,37 +2060,62 @@ ps_5_0
 1569:     mul_sat r9.x, r2.y, l(50.0000)
 1570:     mad r8.x, -r8.y, r8.x, l(1.0000)
 1571:     mul r2.xyz, r2.xyzx, r8.xxxx
-1572:     mad r2.xyz, r9.xxxx, r8.zzzz, r2.xyzx
+1572:     mad r2.xyz, r9.xxxx, r8.zzzz, r2.xyzx       -> float3 F = F_Schlick(SpecularColor, Context.VoH);
+-------|-------|-------|-------Func: F_Schlick(End)
+
 1573:     mul r6.y, r6.y, l(0.5000)
-1574:     mul r2.xyz, r2.xyzx, r6.yyyy
-1575:     mul r2.xyz, r2.xyzx, r3.wwww
-1576:     mad r6.y, -r2.w, r9.y, r9.y
+1574:     mul r2.xyz, r2.xyzx, r6.yyyy                -> return (D * Vis) * F;
+-------|-------|-------Func: SpecularGGX(End)
+
+1575:     mul r2.xyz, r2.xyzx, r3.wwww                -> float3 Spec1 = NoL * SpecularGGX(...);
+
+-------|-------|-------Func: D_InvGGX(Start)
+1576:     mad r6.y, -r2.w, r9.y, r9.y                 -> NoH - a2 * NoH 
 1577:     mad r6.y, r6.y, r9.y, r2.w
 1578:     mul r8.y, r2.w, l(4.0000)
 1579:     mad r9.x, r2.w, l(4.0000), l(1.0000)
 1580:     mul r9.x, r9.x, l(3.1416)
-1581:     rcp r9.x, r9.x
-1582:     mul r2.w, r2.w, r8.y
+1581:     rcp r9.x, r9.x                              -> rcp( PI * (1 + 4*a2) )
+1582:     mul r2.w, r2.w, r8.y 
 1583:     mul r6.y, r6.y, r6.y
 1584:     div r2.w, r2.w, r6.y
 1585:     add r2.w, r2.w, l(1.0000)
-1586:     mul r2.w, r2.w, r9.x
+1586:     mul r2.w, r2.w, r9.x                        -> rcp( PI * (1 + A*a2) ) * ( 1 + 4 * a2*a2 / ( d*d ) );
+                                                      -> float D2 = D_InvGGX( Pow4( GBuffer.Roughness ), Context.NoH );
+-------|-------|-------Func: D_InvGGX(End)
+
+-------|-------|-------Func: Vis_Cloth(Start)
 1587:     add r6.y, r1.x, r3.w
 1588:     mad r1.x, -r3.w, r1.x, r6.y
 1589:     mul r1.x, r1.x, l(4.0000)
-1590:     rcp r1.x, r1.x
+1590:     rcp r1.x, r1.x                              -> return rcp( 4 * ( NoL + NoV - NoL * NoV ) );
+                                                      -> float Vis2 = Vis_Cloth( Context.NoV, NoL );
+-------|-------|-------Func: Vis_Cloth(End)
+
+-------|-------|-------Func: F_Schlick(Start)
 1591:     mul r6.y, r0.z, l(50.0000)
-1592:     min r6.y, r6.y, l(1.0000)
+1592:     min r6.y, r6.y, l(1.0000)                   -> saturate( 50.0 * SpecularColor.g )
 1593:     mul r0.yzw, r0.yyzw, r8.xxxx
-1594:     mad r0.yzw, r6.yyyy, r8.zzzz, r0.yyzw
-1595:     mul r1.x, r1.x, r2.w
-1596:     mul r1.x, r1.x, r3.w
-1597:     mul r8.xyz, r3.wwww, r7.xyzx
-1598:     mul r11.yzw, r8.xxyz, l(0.0000, 0.3183, 0.3183, 0.3183)
-1599:     mad r0.yzw, r1.xxxx, r0.yyzw, -r2.xxyz
-1600:     mad r12.xyz, r6.xxxx, r0.yzwy, r2.xyzx
-1601:     mov r13.xyz, l(0, 0, 0, 0)
+1594:     mad r0.yzw, r6.yyyy, r8.zzzz, r0.yyzw       -> return saturate( 50.0 * SpecularColor.g ) * Fc + (1 - Fc) * SpecularColor;
+                                                      -> float3 F2 = F_Schlick( FuzzColor, Context.VoH );
+-------|-------|-------Func: F_Schlick(End)
+
+1595:     mul r1.x, r1.x, r2.w                        -> Vis2 * D2
+1596:     mul r1.x, r1.x, r3.w                        -> NoL * (Vis2 * D2) 
+
+1597:     mul r8.xyz, r3.wwww, r7.xyzx                -> NoL * GBuffer.DiffuseColor
+1598:     mul r11.yzw, r8.xxyz, l(0.0000, 0.3183, 0.3183, 0.3183)       -> Lighting.Diffuse = NoL * (GBuffer.DiffuseColor / PI)
+                                                      -> Lighting.Diffuse =  NoL * Diffuse_Lambert( GBuffer.DiffuseColor );
+
+1599:     mad r0.yzw, r1.xxxx, r0.yyzw, -r2.xxyz      -> NoL * (Vis2 * D2) * F2 - Spec1 = Spec2 - Spec1
+1600:     mad r12.xyz, r6.xxxx, r0.yzwy, r2.xyzx      -> Cloth * (Spec2 - Spec1) + Spec1 
+                                                      -> Lighting.Specular = lerp( Spec1, Spec2, Cloth );
+1601:     mov r13.xyz, l(0, 0, 0, 0)                  -> Lighting.Transmission = 0; 
 1602:     break
+-------|-------Func: ClothBxDF(End)
+
+
+
 1603:     case l(9)
 1604:     mad r0.yz, r6.zzwz, l(0.0000, 2.0000, 2.0000, 0.0000), l(0.0000, -1.0000, -1.0000, 0.0000)
 1605:     dp2 r0.w, l(1.0000, 1.0000, 0.0000, 0.0000), abs(r0.yzyy)
