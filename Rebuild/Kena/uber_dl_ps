@@ -19,8 +19,9 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t3         Comp        Metallic[R8] DieletricSpec[G8] Rough[B8] Flag[A8] 
       dcl_resource_texture2d (float,float,float,float) t4         Albedo      BaseCol[R8G8B8]   AO[A8] 
       dcl_resource_texture2d (float,float,float,float) t5         Comp        Extra_Albedo[R8G8B8]    Spec_Intensity[A8] 
-                                                                              [Note1] 对植被，人物衣着等增补额外的Albedo基础色 
-                                                                              [Note2] 对头发 -> FresnelPow[R8] Rough[B8] 
+                                                                              [Note1] 对植被 -> SubsurfaceColor[R8G8B8] 
+                                                                              [Note2] 对头发 -> FresnelPow[R8] Rough[B8] ?? 
+                                                                              [Note3] 对皮肤 -> SubsurfaceProfile[R8] 
       dcl_resource_texture2d (float,float,float,float) t6         SSAO        AO_Intensity[R8]
       dcl_resource_texture2d (float,float,float,float) t7         LightAtten  Whole scene directional light shadows [R8]
                                                                               Whole scene directional light SSS shadows [G8]
@@ -361,7 +362,7 @@ ps_5_0
 
  177:     and r0.w, r0.w, l(16)                       -> raw_Flag & uint(16) 
                                                       -> 木墙 == true，其他 == false -> SKIP_CUSTOMDATA_MASK
- 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否跳过Custom_Data ? r6(0) : r6(tex5.wxyz) 
+ 178:     movc r6.xyzw, r0.wwww, l(0, 0, 0, 0), r6.wxyz     -> 是否跳过Custom_Data ? r6(0) : r6(tex5.wxyz) <- 注意，这里是wxyz 
                                                       -> GBuffer.CustomData = !(GBuffer.SelectiveOutputMask & SKIP_CUSTOMDATA_MASK) ? InGBufferD : 0; 
  179:     movc r0.w, r5.x, l(0), r0.x                 -> 是否为眼睛 ? r0.w(0) : r0.w(Tex3.x=Metallic)
                                                       -> if( GBuffer.ShadingModelID == SHADINGMODELID_EYE ) GBuffer.Metallic = 0.0;
@@ -1391,11 +1392,13 @@ ps_5_0
  942:     mad r12.xyz, r14.zzzz, l(0.5000, 0.5000, 0.5000, 0.0000), r9.xyzx
  943:     mov r13.xyz, l(0, 0, 0, 0)
  944:     break
+
+-------|-------Func: SubsurfaceProfileBxDF(Start) 
  945:     case l(5)
- 946:     dp3 r0.y, r5.yzwy, r10.xyzx
- 947:     dp3 r1.x, r5.yzwy, -r3.xyzx
- 948:     dp3 r2.w, -r3.xyzx, r10.xyzx
- 949:     lt r9.x, l(0), r7.w
+ 946:     dp3 r0.y, r5.yzwy, r10.xyzx                 -> Dot(normalize(Normal), normalize(cb1[5].xyz)) -> dot(N, L)
+ 947:     dp3 r1.x, r5.yzwy, -r3.xyzx                 -> Dot(normalize(Normal), normalize(-ViewDirWS)) -> dot(N, V)
+ 948:     dp3 r2.w, -r3.xyzx, r10.xyzx                -> Dot(normalize(-ViewDirWS), normalize(cb1[5].xyz)) -> dot(V, L) 
+ 949:     lt r9.x, l(0), r7.w                         -> SinAlpha > 0 ? 
  950:     if_nz r9.x
  951:       mad r9.y, -r7.w, r7.w, l(1.0000)
  952:       sqrt r9.y, r9.y
@@ -1458,31 +1461,34 @@ ps_5_0
 1009:         mad r12.w, r9.y, l(2.0000), l(2.0000)
 1010:         rsq r12.w, r12.w
 1011:         add r9.z, r1.x, r9.z
-1012:         mul_sat r13.w, r12.w, r9.z
-1013:         mad_sat r14.x, r12.w, r9.y, r12.w
+1012:         mul_sat r13.w, r12.w, r9.z              -> Context.NoH = saturate( ( Context.NoL + Context.NoV ) * InvLenH );
+1013:         mad_sat r14.x, r12.w, r9.y, r12.w       -> Context.VoH = saturate( InvLenH + InvLenH * Context.VoL ); 
 1014:       endif
 1015:     else
 1016:       mad r9.y, r2.w, l(2.0000), l(2.0000)
 1017:       rsq r9.y, r9.y
 1018:       add r0.y, r0.y, r1.x
-1019:       mul_sat r13.w, r9.y, r0.y
-1020:       mad_sat r14.x, r9.y, r2.w, r9.y
+1019:       mul_sat r13.w, r9.y, r0.y                 -> Context.NoH
+1020:       mad_sat r14.x, r9.y, r2.w, r9.y           -> Context.VoH 
 1021:     endif
+
 1022:     add r0.y, abs(r1.x), l(0.0000)
-1023:     min r0.y, r0.y, l(1.0000)
-1024:     mul r1.x, r6.x, l(10.0000)
-1025:     mad r2.w, r6.y, l(255.0000), l(0.5000)
-1026:     ftou r15.y, r2.w
-1027:     mov r15.xzw, l(5, 0, 0, 0)
-1028:     ld_indexable(texture2d)(float,float,float,float) r14.yzw, r15.xyzw, t8.wxyz
-1029:     dp2_sat r2.w, r14.yyyy, r0.zzzz
-1030:     max r2.w, r2.w, l(0.0200)
-1031:     dp2_sat r9.y, r14.zzzz, r0.zzzz
-1032:     mov_sat r1.x, r1.x
+1023:     min r0.y, r0.y, l(1.0000)                   -> Context.NoV = saturate( abs( Context.NoV ) + 1e-5 );
+
+1024:     mul r1.x, r6.x, l(10.0000)                  -> CustomData.r * 10 == Tex5.a * 10 
+1025:     mad r2.w, r6.y, l(255.0000), l(0.5000)      -> BufferData.CustomData.g == Tex5.r 
+1026:     ftou r15.y, r2.w                            -> return uint(BufferData.CustomData.g * 255.0f + 0.5f);
+1027:     mov r15.xzw, l(5, 0, 0, 0)                  -> SSSS_DUAL_SPECULAR_OFFSET == 5
+1028:     ld_indexable(texture2d)(float,float,float,float) r14.yzw, r15.xyzw, t8.wxyz 
+                                                      -> float3 Data = LOAD_TEXTURE2D(_LUT, uint2(SSSS_DUAL_SPECULAR_OFFSET, 64 - SubsurfaceProfileInt)).xyz;
+1029:     dp2_sat r2.w, r14.yyyy, r0.zzzz             -> saturate(GBuffer.Roughness * Data.x * 2)
+1030:     max r2.w, r2.w, l(0.0200)                   -> float Lobe0Roughness = max(saturate(AverageRoughness * AverageToRoughness0), 0.02f);
+1031:     dp2_sat r9.y, r14.zzzz, r0.zzzz             -> float Lobe1Roughness = saturate(GBuffer.Roughness * Data.y * 2)
+1032:     mov_sat r1.x, r1.x                          -> float Opacity = GBuffer.CustomData.x * 10.0;
 1033:     add r2.w, r2.w, l(-1.0000)
-1034:     mad r2.w, r1.x, r2.w, l(1.0000)
+1034:     mad r2.w, r1.x, r2.w, l(1.0000)             -> Lobe0Roughness = lerp(1.0f, Lobe0Roughness, saturate(Opacity * 10.0f));
 1035:     add r9.y, r9.y, l(-1.0000)
-1036:     mad r1.x, r1.x, r9.y, l(1.0000)
+1036:     mad r1.x, r1.x, r9.y, l(1.0000)             -> Lobe1Roughness = lerp(1.0f, Lobe1Roughness, saturate(Opacity * 10.0f));
 1037:     mul r9.y, r14.x, r14.x
 1038:     dp2 r9.y, r9.yyyy, r0.zzzz
 1039:     add r9.y, r9.y, l(-0.5000)
@@ -1586,7 +1592,7 @@ ps_5_0
 1137:     mul r12.xyz, r3.wwww, r9.xyzx
 1138:     mov r13.xyz, l(0, 0, 0, 0)
 1139:     break
-
+-------|-------Func: SubsurfaceProfileBxDF(End) 
 
 -------|-------Func: TwoSidedBxDF(Start) 
 1140:     case l(6)
@@ -1756,78 +1762,107 @@ ps_5_0
 
 1292:     case l(7)
 1293:     max r0.y, r0.z, l(0.0039)
-1294:     min r0.y, r0.y, l(1.0000)
-1295:     dp3 r0.z, -r3.xyzx, r10.xyzx
-1296:     dp3 r1.x, r5.yzwy, r10.xyzx
-1297:     dp3 r2.w, r5.yzwy, -r3.xyzx
+1294:     min r0.y, r0.y, l(1.0000)                   -> float ClampedRoughness = clamp(GBuffer.Roughness, 1/255.0f, 1.0f);
+1295:     dp3 r0.z, -r3.xyzx, r10.xyzx                -> const float VoL       = dot(V,L);
+1296:     dp3 r1.x, r5.yzwy, r10.xyzx                 -> const float SinThetaL = dot(N,L);
+1297:     dp3 r2.w, r5.yzwy, -r3.xyzx                 -> const float SinThetaV = dot(N,V);
+
 1298:     mad r9.x, abs(r2.w), l(-0.1566), l(1.5708)
 1299:     add r9.y, -abs(r2.w), l(1.0000)
 1300:     sqrt r9.y, r9.y
 1301:     mul r9.z, r9.y, r9.x
 1302:     ge r10.w, r2.w, l(0)
-1303:     mad r9.x, -r9.x, r9.y, l(3.1416)
-1304:     movc r9.x, r10.w, r9.z, r9.x
+1303:     mad r9.x, -r9.x, r9.y, l(3.1416)      
+1304:     movc r9.x, r10.w, r9.z, r9.x                -> acosFast(SinThetaV)
+
 1305:     mad r9.y, abs(r1.x), l(-0.1566), l(1.5708)
 1306:     add r9.z, -abs(r1.x), l(1.0000)
 1307:     sqrt r10.w, r9.z
 1308:     mul r12.w, r9.y, r10.w
 1309:     ge r13.w, r1.x, l(0)
 1310:     mad r9.y, -r9.y, r10.w, l(3.1416)
-1311:     movc r9.y, r13.w, r12.w, r9.y
-1312:     add r9.xy, -r9.xyxx, l(1.5708, 1.5708, 0.0000, 0.0000)
+1311:     movc r9.y, r13.w, r12.w, r9.y               -> acosFast(SinThetaL)
+
+1312:     add r9.xy, -r9.xyxx, l(1.5708, 1.5708, 0.0000, 0.0000) -> asinFast() = (0.5 * PI) - acosFast(x);
+
 1313:     add r9.x, -r9.y, r9.x
-1314:     mul r9.x, abs(r9.x), l(0.5000)
-1315:     sincos null, r9.x, r9.x
-1316:     mad r14.xyz, -r1.xxxx, r5.yzwy, r10.xyzx
-1317:     mad r15.xyz, -r2.wwww, r5.yzwy, -r3.xyzx
+1314:     mul r9.x, abs(r9.x), l(0.5000)              -> 0.5 * abs( asinFast( SinThetaV ) - asinFast( SinThetaL ) )
+1315:     sincos null, r9.x, r9.x                     -> float CosThetaD = cos( 0.5 * abs( asinFast( SinThetaV ) - asinFast( SinThetaL ) ) );
+
+1316:     mad r14.xyz, -r1.xxxx, r5.yzwy, r10.xyzx    -> const float3 Lp = L - SinThetaL * N;
+1317:     mad r15.xyz, -r2.wwww, r5.yzwy, -r3.xyzx    -> const float3 Vp = V - SinThetaV * N;
+
 1318:     dp3 r9.y, r14.xyzx, r15.xyzx
 1319:     dp3 r10.w, r14.xyzx, r14.xyzx
 1320:     dp3 r12.w, r15.xyzx, r15.xyzx
 1321:     mad r10.w, r10.w, r12.w, l(0.0001)
 1322:     rsq r10.w, r10.w
-1323:     mul r9.y, r9.y, r10.w
+1323:     mul r9.y, r9.y, r10.w                       -> const float CosPhi = dot(Lp,Vp) * rsqrt( dot(Lp,Lp) * dot(Vp,Vp) + 1e-4 );
+
 1324:     mad r14.xyz, r9.yyyy, l(0.5000, -3.6500, 17.0000, 0.0000), l(0.5000, -3.9800, -16.7800, 0.0000)
+
 1325:     mov_sat r14.x, r14.x
-1326:     sqrt r10.w, r14.x
-1327:     div r14.xw, l(1.1900, 0.0000, 0.0000, 0.8000), r9.xxxx
-1328:     mad r13.w, r9.x, l(0.3600), r14.x
-1329:     mul r0.y, r0.y, r0.y
+1326:     sqrt r10.w, r14.x                           -> const float CosHalfPhi = sqrt( saturate( 0.5 + 0.5 * CosPhi ) );
+
+1327:     div r14.xw, l(1.1900, 0.0000, 0.0000, 0.8000), r9.xxxx -> 1.19 / CosThetaD, 0.8 / CosThetaD
+
+1328:     mad r13.w, r9.x, l(0.3600), r14.x           -> float n_prime = 1.19 / CosThetaD + 0.36 * CosThetaD; 
+
+1329:     mul r0.y, r0.y, r0.y                        -> Pow2( ClampedRoughness )
 1330:     mul r16.xyz, r0.yyyy, l(0.5000, 1.2533, 5.0133, 0.0000)
-1331:     add r14.x, r0.y, r0.y
-1332:     mul r15.w, r10.w, l(0.9976)
-1333:     mad r16.w, -r2.w, r2.w, l(1.0000)
+
+1331:     add r14.x, r0.y, r0.y                       -> Pow2( ClampedRoughness ) * 2
+
+1332:     mul r15.w, r10.w, l(0.9976)                 -> CosHalfPhi * ca
+                                                      -> const float ca = cos( Alpha[0] ) == 0.9976
+1333:     mad r16.w, -r2.w, r2.w, l(1.0000)           -> 1 - Pow2( SinThetaV )
 1334:     sqrt r16.w, r16.w
 1335:     mul r17.x, r2.w, l(-0.0699)
-1336:     mad r15.w, r15.w, r16.w, r17.x
-1337:     mul r0.y, r10.w, r0.y
+1336:     mad r15.w, r15.w, r16.w, r17.x              -> float Shift = 2*sa* ( ca * CosHalfPhi * sqrt( 1 - SinThetaV * SinThetaV ) + 
+                                                      sa * SinThetaV );
+                                                      -> 2*sa 在 L1340 处用 -0.1399 替代了 
+1337:     mul r0.y, r10.w, r0.y                       -> CosHalfPhi * Pow2( ClampedRoughness )
 1338:     mul r17.xy, r0.yyyy, l(1.4142, 3.5449, 0.0000, 0.0000)
-1339:     add r0.y, r1.x, r2.w
-1340:     mad r1.x, -r15.w, l(-0.1399), r0.y
+                                                      -> r17.x = {sqrt(2.0)} * B[0] * CosHalfPhi -> 入参B
+                                                      -> r17.y = {sqrt(2*PI)*sqrt(2.0)} * B[0] * CosHalfPhi -> sqrt(2*PI) * 入参B 
+1339:     add r0.y, r1.x, r2.w                        -> SinThetaL + SinThetaV
+1340:     mad r1.x, -r15.w, l(-0.1399), r0.y          -> SinThetaL + SinThetaV - Shift
+
 1341:     mul r1.x, r1.x, r1.x
 1342:     mul r1.x, r1.x, l(-0.5000)
 1343:     mul r2.w, r17.x, r17.x
 1344:     div r1.x, r1.x, r2.w
 1345:     mul r1.x, r1.x, l(1.4427)
 1346:     exp r1.x, r1.x
-1347:     div r1.x, r1.x, r17.y
-1348:     mul r1.x, r10.w, r1.x
+1347:     div r1.x, r1.x, r17.y                       -> float Hair_g( float B, float Theta )
+                                                      -> float Mp = Hair_g( B[0] * sqrt(2.0) * CosHalfPhi, SinThetaL + SinThetaV - Shift );
+
+1348:     mul r1.x, r10.w, r1.x                       -> CosHalfPhi * Mp
+
 1349:     mad_sat r0.z, r0.z, l(0.5000), l(0.5000)
-1350:     sqrt r0.z, r0.z
+1350:     sqrt r0.z, r0.z                             -> sqrt( saturate( 0.5 + 0.5 * VoL ) ) -> 入参 CosTheta
+
 1351:     add r0.z, -r0.z, l(1.0000)
 1352:     mul r2.w, r0.z, r0.z
 1353:     mul r2.w, r2.w, r2.w
 1354:     mul r0.z, r0.z, r2.w
-1355:     mad r0.z, r0.z, l(0.9535), l(0.0465)
-1356:     mul r0.z, r1.x, r0.z
-1357:     mul r0.z, r8.w, r0.z
-1358:     add r17.xy, r0.yyyy, l(-0.0350, -0.1400, 0.0000, 0.0000)
-1359:     mul r17.xy, r17.xyxx, r17.xyxx
+1355:     mad r0.z, r0.z, l(0.9535), l(0.0465)        -> float Hair_F( float CosTheta )
+                                                      -> float Fp = Hair_F( sqrt( saturate( 0.5 + 0.5 * VoL ) ) ); 
+
+1356:     mul r0.z, r1.x, r0.z                        -> Mp * Np * Fp (缺*0.25) 
+1357:     mul r0.z, r8.w, r0.z                        -> Mp * Np * Fp * ( GBuffer.Specular) (缺*0.5) 
+
+1358:     add r17.xy, r0.yyyy, l(-0.0350, -0.1400, 0.0000, 0.0000) -> r0.y = SinThetaL + SinThetaV
+1359:     mul r17.xy, r17.xyxx, r17.xyxx              -> r17.x = Theta = 入参2 
 1360:     mul r17.xy, r17.xyxx, l(-0.5000, -0.5000, 0.0000, 0.0000)
-1361:     mul r0.y, r16.x, r16.x
+                                                      -> r17x = -0.5 * Pow2( Theta )
+1361:     mul r0.y, r16.x, r16.x                      -> r16.x = B[1] = 入参1
 1362:     div r0.y, r17.x, r0.y
 1363:     mul r0.y, r0.y, l(1.4427)
 1364:     exp r0.y, r0.y
-1365:     div r0.y, r0.y, r16.y
+1365:     div r0.y, r0.y, r16.y                       -> float Hair_g( float B, float Theta )
+                                                      -> float Mp = Hair_g( B[1], SinThetaL + SinThetaV - Alpha[1] );
+
 1366:     div r1.x, l(1.0000, 1.0000, 1.0000, 1.0000), r13.w
 1367:     mad r2.w, -r9.y, l(0.8000), l(0.6000)
 1368:     mad r2.w, r1.x, r2.w, l(1.0000)
