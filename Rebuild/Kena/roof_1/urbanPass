@@ -291,7 +291,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
   log r7.w, r7.w 											              -> r7.w = LOG(X) -> 小于0的数 
   mul r7.w, r7.w, cb0[8].w 									        -> LOG(X) * 0.7 
   exp r7.w, r7.w 											              -> exp(LOG(X) * 0.7) -> X^0.7 
-  
+
   add r12.w, -r7.w, l(1.000000) 
   mad r7.w, cb0[1].w, r12.w, r7.w 							    -> (1 - X^0.7) * 0 + X^0.7 -> lerp 
 
@@ -483,6 +483,7 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
     min r10.xyz, -r10.xyzx, l(0, 0, 0, 0)  					  -> min(-新R10颜色, 0) -> 结合下面乘 -π -> 抹去负数 
     mul r15.xyz, r10.xyzx, l(-3.141593, -3.141593, -3.141593, 0)  -> R15颜色 = π * R10颜色 
                                                       -> 这里的π一般认为是着色点附近半球域光强度积分后的强度值 
+                                                      -> Func:HairShading() Done 
   endif 
 
   ieq r1.x, r7.x, l(8) 							                  -> 是否是 #8 渲染通道  

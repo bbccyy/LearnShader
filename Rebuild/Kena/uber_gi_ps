@@ -315,12 +315,15 @@ ps_5_0
  188:     dp3 r1.x, r18.xyzx, r18.xyzx
  189:     rsq r1.x, r1.x
  190:     mul r18.xyz, r1.xxxx, r18.xyzx                          -> float3 V = -normalize(mul(float4(ScreenPosition, 1, 0), View.ScreenToWorld).xyz);
- 
- 191:     dp3 r1.x, -r18.xyzx, r6.xyzx
+
+ 191:     dp3 r1.x, -r18.xyzx, r6.xyzx                            -> dot(V, N) 其中 r6.xyz=GBuffer.WorldNormal 
+
  192:     mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx
  193:     dp3 r1.y, r19.xyzx, r19.xyzx
  194:     rsq r5.z, r1.y
- 195:     mul r17.xyz, r5.zzzz, r19.xyzx
+ 195:     mul r17.xyz, r5.zzzz, r19.xyzx                          -> float3 L = normalize(V - N * dot(V, N)); 
+                                                                  -> SkyLightingNormal = L 这个分支会替换 SkyLightingNormal 的值 
+------------Func:HairShading() Start------------
  196:     max r5.z, r3.w, l(0.0039)
  197:     min r5.z, r5.z, l(1.0000)
  198:     dp3 r12.w, -r18.xyzx, r17.xyzx
@@ -421,11 +424,17 @@ ps_5_0
  293:     sqrt r10.xyz, r10.xyzx
  294:     mad r10.xyz, r10.xyzx, r1.xxxx, r18.xyzx
  295:     min r10.xyz, -r10.xyzx, l(0, 0, 0, 0)
- 296:     mul r15.xyz, r10.xyzx, l(-3.1416, -3.1416, -3.1416, 0.0000)
+ 296:     mul r15.xyz, r10.xyzx, l(-3.1416, -3.1416, -3.1416, 0)  -> DiffuseColor = PI * 
+                                                                  HairShading(GBuffer, L, V, N, 1, TransmittanceData, 0, 0.2, uint2(0, 0), bEvalMultiScatter); 
+------------Func:HairShading() End------------ 
  297:   endif
- 298:   ieq r1.x, r7.x, l(8)
- 299:   mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx
- 300:   movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx
+
+ 298:   ieq r1.x, r7.x, l(8)                                      -> if (GBuffer.ShadingModelID == SHADINGMODELID_CLOTH) 
+
+ 299:   mad r10.xyz, r16.xyzx, r5.wwww, r15.xyzx                  -> float3 ClothFuzz = ExtractSubsurfaceColor(GBuffer);
+                                                                  -> DiffuseColor += ClothFuzz * GBuffer.CustomData.a;
+ 300:   movc r10.xyz, r1.xxxx, r10.xyzx, r15.xyzx                 -> if ... else ... 
+
  301:   mov r17.w, l(1.0000)
  302:   dp4 r15.x, cb1[181].xyzw, r17.xyzw
  303:   dp4 r15.y, cb1[182].xyzw, r17.xyzw
@@ -438,23 +447,42 @@ ps_5_0
  310:   mad r1.x, r17.x, r17.x, -r1.x
  311:   add r15.xyz, r15.xyzx, r18.xyzx
  312:   mad r15.xyz, cb1[187].xyzx, r1.xxxx, r15.xyzx
- 313:   max r15.xyz, r15.xyzx, l(0, 0, 0, 0)
- 314:   mul r15.xyz, r15.xyzx, cb1[180].xyzx
- 315:   mul r1.x, r11.w, r7.w
- 316:   add r1.y, -r7.w, l(1.0000)
- 317:   mul r16.xyz, r1.yyyy, cb0[1].xyzx
- 318:   mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx
- 319:   mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx
- 320:   mul r10.xyz, r10.xyzx, cb1[134].yyyy
- 321:   eq r1.x, cb1[200].z, l(0)
- 322:   dp3 r1.y, r10.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
- 323:   and r1.y, r1.y, r1.x
+ 313:   max r15.xyz, r15.xyzx, l(0, 0, 0, 0)                      -> GetSkySHDiffuse(SkyLightingNormal)
+ 314:   mul r15.xyz, r15.xyzx, cb1[180].xyzx                      -> float3 DiffuseLookup = GetSkySHDiffuse(SkyLightingNormal) * View.SkyLightColor.rgb;
+
+ 315:   mul r1.x, r11.w, r7.w                                     -> DotProductFactor * SkyVisibility
+ 316:   add r1.y, -r7.w, l(1.0000)                                -> (1 - SkyVisibility)
+ 317:   mul r16.xyz, r1.yyyy, cb0[1].xyzx                         -> (1 - SkyVisibility) * OcclusionTintAndMinOcclusion.xyz 
+ 318:   mad r15.xyz, r1.xxxx, r15.xyzx, r16.xyzx                  -> DiffuseLookup * DotProductFactor * ScalarFactors + 
+                                                                        (1 - SkyVisibility) * OcclusionTintAndMinOcclusion.xyz 
+                                                                  -> 注意，前半式中出现的 ScalarFactors == SkyVisibility 
+ 319:   mad r10.xyz, r15.xyzx, r10.xyzx, r14.xyzx                 -> Lighting += DiffuseColor * (~) 
+
+                                                                  -> Lighting += DiffuseIrradiance * GBuffer.DiffuseColor * (GBuffer.GBufferAO * AmbientOcclusion);
+                                                                  -> 这部分代码因为 DiffuseIrradiance == 0 的情况，被抹去了对应DXBC 
+
+ 320:   mul r10.xyz, r10.xyzx, cb1[134].yyyy                      -> Lighting *= View.PreExposure;  其中 View.PreExposure=1 
+
+ 321:   eq r1.x, cb1[200].z, l(0)                                 -> cb1[200].z=1 ~= 0 -> false 
+ 322:   dp3 r1.y, r10.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)     -> Ret.a = Luminance(In.ScatterableLight);
+ 323:   and r1.y, r1.y, r1.x                                      -> ?
  324:   and r1.y, r1.y, r7.y
- 325:   and o0.w, r1.y, r1.x
+ 325:   and o0.w, r1.y, r1.x                                      -> alpha = 0 
  326: else
- 327:   mov r10.xyz, l(0, 0, 0, 0)
- 328:   mov o0.w, l(0)
+ 327:   mov r10.xyz, l(0, 0, 0, 0)                                -> Lighting = 0 
+ 328:   mov o0.w, l(0)                                            -> alpha = 0 
  329: endif
+
+
+
+
+
+
+
+
+
+
+
  330: ine r1.xy, r7.xxxx, l(0, 7, 0, 0)
  331: and r1.x, r1.y, r1.x
  332: if_nz r1.x
