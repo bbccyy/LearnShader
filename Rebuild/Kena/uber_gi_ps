@@ -22,8 +22,8 @@ ps_5_0
       dcl_resource_texturecube (float,float,float,float) t0                   -> 天空 
       dcl_resource_texturecube (float,float,float,float) t1                   -> cubemap 几乎全黑 
       dcl_resource_texturecubearray (float,float,float,float) t2              -> IBL cubemap，有 57 张 
-      dcl_resource_buffer (uint,uint,uint,uint) t3                            -> No use
-      dcl_resource_buffer (uint,uint,uint,uint) t4                            -> No use
+      dcl_resource_buffer (uint,uint,uint,uint) t3                            -> No use 
+      dcl_resource_buffer (uint,uint,uint,uint) t4                            -> No use 
       dcl_resource_texture2d (float,float,float,float) t5                     -> BRDF LUT 
       dcl_resource_texture2d (float,float,float,float) t6                     -> [NormalWS.xyz, DepthWS] 看起来像被模糊过，且分辨率减半 
       dcl_resource_texture2d (float,float,float,float) t7                     -> Depth01 (R通道) 
@@ -41,93 +41,139 @@ ps_5_0
       dcl_output o0.xyzw
       dcl_temps 20
 
-   0: mul r0.xy, v0.xyxx, cb1[131].zwzz
-   1: add r0.zw, v0.xxxy, -cb1[129].xxxy
+   0: mul r0.xy, v0.xyxx, cb1[131].zwzz                                       -> float2 BufferUV = SvPositionToBufferUV(SvPosition);
+
+   1: add r0.zw, v0.xxxy, -cb1[129].xxxy                                      -> float2 PixelPos = SvPosition.xy - View.ViewRectMin.xy;   
    2: mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.5000, -0.5000, 0.0000, 0.0000)
    3: mul r1.xy, r1.xyxx, v0.wwww
-   4: mul r1.xy, r1.xyxx, l(2.0000, -2.0000, 0.0000, 0.0000)
-   5: sample_l(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0)
-   6: sample_l(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0)
-   7: sample_l(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0)
-   8: sample_l(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0)
-   9: sample_l(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0)
+   4: mul r1.xy, r1.xyxx, l(2.0000, -2.0000, 0.0000, 0.0000)                  -> float4 SvPositionToScreenPosition(float4 SvPosition)
+
+------------Func:DecodeGBufferData() Start------------
+   5: sample_l(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0)     -> Normal
+   6: sample_l(texture2d)(float,float,float,float) r3.xyzw, r0.xyxx, t9.xywz, s0, l(0)    -> Comp_M_D_R_F -> 注意输出通道顺序为 xywz 
+   7: sample_l(texture2d)(float,float,float,float) r4.xyzw, r0.xyxx, t10.xyzw, s0, l(0)   -> Albedo
+   8: sample_l(texture2d)(float,float,float,float) r5.xyzw, r0.xyxx, t11.xyzw, s0, l(0)   -> Comp_F_R_X_I -> CustomData 
+   9: sample_l(texture2d)(float,float,float,float) r1.z, r0.xyxx, t7.yzxw, s0, l(0)       -> Depth
+
   10: mad r1.w, r1.z, cb1[65].x, cb1[65].y
   11: mad r1.z, r1.z, cb1[65].z, -cb1[65].w
   12: div r1.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.z
-  13: add r1.z, r1.z, r1.w
+  13: add r1.z, r1.z, r1.w                                        -> float SceneDepth = ConvertFromDeviceZ(DeviceZ);
+
   14: mul r6.xy, r0.xyxx, cb1[131].xyxx
-  15: ftou r6.xy, r6.xyxx
-  16: ftou r1.w, cb1[151].x
+  15: ftou r6.xy, r6.xyxx                                         -> uint2 PixelPos = uint2(UVSceneColor * View.BufferSizeAndInvSize.xy);
+
+  16: ftou r1.w, cb1[151].x                                       -> uint TemporalAASampleIndex = View.TemporalAAParams.x;
   17: iadd r2.w, r6.y, r6.x
   18: iadd r1.w, r1.w, r2.w
-  19: and r1.w, r1.w, l(1)
-  20: mad r2.xyz, r2.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)
+  19: and r1.w, r1.w, l(1)                                        -> return (PixelPos.x + PixelPos.y + TemporalAASampleIndex) % 2;
+                                                                  -> CheckerFromSceneColorUV(UV)
+
+  20: mad r2.xyz, r2.xyzx, l(2, 2, 2, 0), l(-1, -1, -1, 0)
   21: dp3 r2.w, r2.xyzx, r2.xyzx
   22: rsq r2.w, r2.w
-  23: mul r6.xyz, r2.wwww, r2.xyzx
-  24: mul r7.xy, r3.zyzz, l(255.0000, 0.0800, 0.0000, 0.0000)
+  23: mul r6.xyz, r2.wwww, r2.xyzx                                -> GBuffer.WorldNormal = normalize(DecodeNormal( InGBufferA.xyz )); 
+
+  24: mul r7.xy, r3.zyzz, l(255.0000, 0.0800, 0, 0)
   25: round_ne r6.w, r7.x
   26: ftou r6.w, r6.w
-  27: and r7.xz, r6.wwww, l(15, 0, 16, 0)
-  28: movc r5.xyzw, r7.zzzz, l(0, 0, 0, 0), r5.xyzw
-  29: ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)
-  30: movc r6.w, r8.x, l(0), r3.x
-  31: mad r9.xyz, -r3.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r4.xyzx
-  32: mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy
-  33: or r7.y, r8.x, r8.y
-  34: lt r7.z, l(0), cb1[155].x
-  35: lt r7.w, l(0), cb1[200].z
-  36: and r7.z, r7.w, r7.z
+  27: and r7.xz, r6.wwww, l(15, 0, 16, 0)                         -> GBuffer.ShadingModelID = DecodeShadingModelId(InGBufferB.a);               -> r7.x
+                                                                  -> GBuffer.SelectiveOutputMask = DecodeSelectiveOutputMask(InGBufferB.a);     -> r7.z
+
+  28: movc r5.xyzw, r7.zzzz, l(0, 0, 0, 0), r5.xyzw               -> GBuffer.CustomData = !(GBuffer.SelectiveOutputMask & SKIP_CUSTOMDATA_MASK) ? InGBufferD : 0; 
+  29: ieq r8.xyz, r7.xxxx, l(9, 5, 4, 0)                          -> Eye=9, Skin=5, ClearCoat=4
+
+  30: movc r6.w, r8.x, l(0), r3.x                                 -> if(GBuffer.ShadingModelID == SHADINGMODELID_EYE) GBuffer.Metallic=0; else GBuffer.Metallic=Comp_M_D_R_F.x; 
+
+  31: mad r9.xyz, -r3.yyyy, l(0.08, 0.08, 0.08, 0), r4.xyzx 
+  32: mad r9.xyz, r6.wwww, r9.xyzx, r7.yyyy                       -> return lerp(DielectricSpecularToF0(Specular).xxx, BaseColor, Metallic.xxx);
+                                                                  -> GBuffer.SpecularColor = ComputeF0(GBuffer.Specular, GBuffer.BaseColor, GBuffer.Metallic);
+
+  33: or r7.y, r8.x, r8.y                                         -> UseSubsurfaceProfile(GBuffer.ShadingModelID) -> Skin or Eye 
+  34: lt r7.z, l(0), cb1[155].x                                   -> View.bSubsurfacePostprocessEnabled=1 > 0                 -> true
+  35: lt r7.w, l(0), cb1[200].z                                   -> View.bCheckerboardSubsurfaceProfileRendering=1 > 0       -> true
+  36: and r7.z, r7.w, r7.z                                        -> const bool bCheckerboardRequired = both (~) 
+
   37: ne r7.w, l(0, 0, 0, 0), cb1[155].x
-  38: movc r8.xyw, r7.wwww, l(1.0000, 1.0000, 0.0000, 1.0000), r4.xyxz
-  39: movc r10.xy, r1.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
-  40: mul r11.xyz, r9.xyzx, r10.yyyy
-  41: mul r11.w, r3.y, r10.y
-  42: movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx
-  43: mov r9.w, r3.y
-  44: movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw
-  45: mov r10.w, r11.w
+  38: movc r8.xyw, r7.wwww, l(1.0000, 1.0000, 0, 1), r4.xyxz      -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
+
+  39: movc r10.xy, r1.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)          -> r10.x=bChecker;  r10.y=!bChecker; 
+  40: mul r11.xyz, r9.xyzx, r10.yyyy                              -> SpecularColor *= !bChecker;
+  41: mul r11.w, r3.y, r10.y                                      -> Specular *= !bChecker
+
+  42: movc r10.xyz, r7.zzzz, r10.xxxx, r8.xywx                    -> if (bCheckerboardRequired) set GBuffer.BaseColor
+
+  43: mov r9.w, r3.y                                              -> SpecularColor.w = Specular
+
+  44: movc r11.xyzw, r7.zzzz, r11.xyzw, r9.xyzw                   -> if (bCheckerboardRequired) set SpecularColor+Specular
+
+  45: mov r10.w, r11.w                                            -> BaseColor.w = Specular
+                                                                  -> AdjustBaseColorAndSpecularColorForSubsurfaceProfileLighting(...) Done 
   46: mov r12.xyz, r4.xyzx
-  47: mov r12.w, r9.w
-  48: movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw
-  49: mul r4.xy, r1.zzzz, r1.xyxx
+  47: mov r12.w, r9.w                                             -> r12 = Old_BaseColor + Specular
+
+  48: movc r10.xyzw, r7.yyyy, r10.xyzw, r12.xyzw                  -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) set BaseColor_New else set BaseColor 
+------------Func:DecodeGBufferData() Partially End------------
+
+
+------------Func:RemapClearCoatDiffuseAndSpecularColor() Start------------
+  49: mul r4.xy, r1.zzzz, r1.xyxx                                 -> SceneDepth * ScreenPosition 
   50: mul r8.xyw, r4.yyyy, cb1[49].xyxz
   51: mad r4.xyz, r4.xxxx, cb1[48].xyzx, r8.xywx
   52: mad r4.xyz, r1.zzzz, cb1[50].xyzx, r4.xyzx
-  53: add r4.xyz, r4.xyzx, cb1[51].xyzx
+  53: add r4.xyz, r4.xyzx, cb1[51].xyzx                           -> float3 WorldPosition = mul(
+                                                                        float4(ScreenPosition * GBuffer.Depth, GBuffer.Depth, 1), 
+                                                                        View.ScreenToWorld
+                                                                        ).xyz;
+
   54: add r8.xyw, r4.xyxz, -cb1[67].xyxz
   55: dp3 r1.w, r8.xywx, r8.xywx
   56: rsq r1.w, r1.w
-  57: mul r8.xyw, r1.wwww, r8.xyxw
+  57: mul r8.xyw, r1.wwww, r8.xyxw                                -> float3 CameraToPixel = normalize(WorldPosition - View.WorldCameraOrigin);
+
   58: dp3 r1.w, r6.xyzx, -r8.xywx
-  59: mov_sat r3.x, r1.w
+  59: mov_sat r3.x, r1.w                                          -> float NoV = saturate(dot(GBuffer.WorldNormal, V));
+
   60: mad r7.z, r3.x, l(0.5000), l(0.5000)
   61: mad r7.z, r7.z, r3.x, l(-1.0000)
   62: mad_sat r7.w, -r3.w, l(1.2500), l(1.2500)
   63: mul r9.w, r7.w, r7.z
-  64: mad r7.z, r7.z, r7.w, l(1.0000)
-  65: mul r12.xyz, r10.xyzx, l(1.1111, 1.1111, 1.1111, 0.0000)
+  64: mad r7.z, r7.z, r7.w, l(1.0000)                             -> float RefractionScale = ((NoV * 0.5 + 0.5) * NoV - 1) * saturate(1.25 - 1.25 * GBuffer.Roughness) + 1;
+
+  65: mul r12.xyz, r10.xyzx, l(1.1111, 1.1111, 1.1111, 0.0000)    -> float3 AbsorptionColor = GBuffer.BaseColor * (1 / MetalSpec); 其中 float MetalSpec = 0.9;
+
   66: add r7.w, r3.x, l(-1.0000)
   67: mul r7.w, r7.w, l(0.8500)
   68: mad r13.xyz, r12.xyzx, r12.xyzx, -r12.xyzx
   69: mad r13.xyz, r13.xyzx, l(-0.7800, -0.7800, -0.7800, 0.0000), r12.xyzx
   70: add r13.xyz, -r13.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
   71: mad r13.xyz, r7.wwww, r13.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  72: mul r12.xyz, r12.xyzx, r13.xyzx
-  73: add r7.w, -r3.x, l(1.0000)
+  72: mul r12.xyz, r12.xyzx, r13.xyzx          -> float3 Absorption = AbsorptionColor * ((NoV - 1) * 0.85 * (1 - lerp(AbsorptionColor, Square(AbsorptionColor), -0.78)) + 1);
+
+  73: add r7.w, -r3.x, l(1.0000)                                  -> 1 - NoV 
   74: mul r11.w, r7.w, r7.w
   75: mul r11.w, r11.w, r11.w
-  76: mul r12.w, r7.w, r11.w
-  77: mad r7.w, -r11.w, r7.w, l(1.0000)
-  78: mad r7.w, r7.w, l(0.0400), r12.w
-  79: mad r7.w, r5.x, -r7.w, l(1.0000)
-  80: mul r13.xyz, r7.wwww, r10.xyzx
+  76: mul r12.w, r7.w, r11.w                                      -> float Fc = Pow5(1 - NoV);
+
+  77: mad r7.w, -r11.w, r7.w, l(1.0000)                           -> (1 - Fc)
+  78: mad r7.w, r7.w, l(0.0400), r12.w                            -> float F = Fc + (1 - Fc) * F0;
+
+  79: mad r7.w, r5.x, -r7.w, l(1.0000)                            -> r5.x = float ClearCoat = GBuffer.CustomData.x; 
+  80: mul r13.xyz, r7.wwww, r10.xyzx                              -> (1 - ClearCoat * F) * GBuffer.BaseColor
+                                                                  -> float LayerAttenuation = lerp(1, (1 - F), ClearCoat);
+                                                                  -> (GBuffer.BaseColor * LayerAttenuation) 
   81: mul r12.xyz, r7.zzzz, r12.xyzx
-  82: mul r7.z, r5.x, r6.w
+  82: mul r7.z, r5.x, r6.w                                        -> LerpRate = GBuffer.Metallic * ClearCoat
   83: mad r12.xyz, r12.xyzx, l(0.9000, 0.9000, 0.9000, 0.0000), -r13.xyzx
-  84: mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx
-  85: sample_l(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0)
-  86: mad r13.xy, -cb1[129].xyxx, cb1[131].zwzz, r0.xyxx
+  84: mad r12.xyz, r7.zzzz, r12.xyzx, r13.xyzx                    -> float3 BaseColor = lerp(GBuffer.BaseColor * LayerAttenuation, 
+                                                                        MetalSpec * Absorption * RefractionScale, GBuffer.Metallic * ClearCoat);
+------------Func:RemapClearCoatDiffuseAndSpecularColor() Partially End------------
+
+  85: sample_l(texture2d)(float,float,float,float) r7.z, r0.xyxx, t13.yzxw, s7, l(0)      -> SSAO 
+                                                                  -> float AmbientOcclusion = AmbientOcclusionTexture.SampleLevel(AmbientOcclusionSampler, BufferUV, 0).r; 
+
+                                                                  -> UpsampleDFAO(...)
+  86: mad r13.xy, -cb1[129].xyxx, cb1[131].zwzz, r0.xyxx          -> 
   87: min r13.xy, r13.xyxx, cb0[6].xyxx
   88: mul r13.zw, cb1[131].xxxy, l(0.0000, 0.0000, 0.5000, 0.5000)
   89: round_ni r13.zw, r13.zzzw
@@ -167,40 +213,69 @@ ps_5_0
  123: mul_sat r11.w, r11.w, cb0[3].x
  124: mov r14.xyz, -r6.xyzx
  125: mad r13.xyz, r13.xyzx, r7.wwww, r14.xyzx
- 126: mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx
- 127: if_nz r7.x
- 128:   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx
- 129:   mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx
- 130:   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx
- 131:   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx
+ 126: mad r13.xyz, r11.wwww, r13.xyzx, r6.xyzx                    ->
+                                                                  -> BentNormal = UpsampleDFAO(BufferUV, GBuffer.Depth, GBuffer.WorldNormal);
+
+ 127: if_nz r7.x                                                  -> if (ShadingModelID != SHADINGMODELID_UNLIT) 
+
+------------Func:DecodeGBufferData() Partially Start------------
+ 128:   mad r15.xyz, -r10.xyzx, r6.wwww, r10.xyzx                 -> GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic;
+ 129:   mad r15.xyz, r15.xyzx, cb1[135].wwww, cb1[135].xyzx       -> (BaseColor - BaseColor * Metallic) * (cb1[135].w=1) + (cb1[135].xyz=0) 
+                                                                  -> GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
+------------Func:DecodeGBufferData() Partially End------------
+
+
+------------Func:RemapClearCoatDiffuseAndSpecularColor() Partially Start------------                                                               
+ 130:   mad r16.xyz, -r12.xyzx, r6.wwww, r12.xyzx                 -> DiffuseColor = BaseColor - BaseColor * GBuffer.Metallic;
+ 131:   movc r15.xyz, r8.zzzz, r16.xyzx, r15.xyzx                 -> if (GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT) set DiffuseColor else ...
+------------Func:RemapClearCoatDiffuseAndSpecularColor() Partially End------------  
+
+
+------------Func:SkyLightDiffuse() Start------------
  132:   dp3 r7.w, r13.xyzx, r13.xyzx
- 133:   sqrt r7.w, r7.w
+ 133:   sqrt r7.w, r7.w                                           -> SkyVisibility = length(BentNormal);
  134:   max r11.w, r7.w, l(0.0000)
- 135:   div r16.xyz, r13.xyzx, r11.wwww
- 136:   mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx
- 137:   mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx
+ 135:   div r16.xyz, r13.xyzx, r11.wwww                           -> float3 NormalizedBentNormal = BentNormal / (max(SkyVisibility, .00001f));
+
+ 136:   mad r17.xyz, r2.xyzx, r2.wwww, -r16.xyzx 
+ 137:   mad r17.xyz, r7.wwww, r17.xyzx, r16.xyzx                  -> float BentNormalWeightFactor = SkyVisibility;
+                                                                  -> SkyLightingNormal = lerp(NormalizedBentNormal, GBuffer.WorldNormal, BentNormalWeightFactor); 
  138:   dp3 r11.w, r16.xyzx, r6.xyzx
  139:   add r12.w, -r11.w, l(1.0000)
- 140:   mad r11.w, r7.w, r12.w, r11.w
+ 140:   mad r11.w, r7.w, r12.w, r11.w                             -> DotProductFactor = lerp(dot(NormalizedBentNormal, GBuffer.WorldNormal), 1, BentNormalWeightFactor);
+
  141:   mad r7.w, r7.w, l(10.0000), l(-5.0000)
- 142:   mul r7.w, r7.w, -cb0[8].x
+ 142:   mul r7.w, r7.w, -cb0[8].x                                 -> cb0[8].x=0.01f ~ ContrastAndNormalizeMulAdd 
  143:   mul r7.w, r7.w, l(1.4427)
  144:   exp r7.w, r7.w
  145:   add r7.w, r7.w, l(1.0000)
- 146:   div r7.w, l(1.0000, 1.0000, 1.0000, 1.0000), r7.w
- 147:   mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z
+ 146:   div r7.w, l(1.0000, 1.0000, 1.0000, 1.0000), r7.w         -> float ContrastCurve = 1 / (1 + exp(-ContrastAndNormalizeMulAdd.x * (SkyVisibility * 10 - 5))); 
+
+ 147:   mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z                    -> SkyVisibility = 
+                                                                        saturate(ContrastCurve * ContrastAndNormalizeMulAdd.y + ContrastAndNormalizeMulAdd.z);
+                                                                  -> cb0_v8[0.01, 40.00843, -19.50422, 0.70]            
  148:   log r7.w, r7.w
- 149:   mul r7.w, r7.w, cb0[8].w
- 150:   exp r7.w, r7.w
- 151:   add r12.w, -r7.w, l(1.0000)
- 152:   mad r7.w, cb0[1].w, r12.w, r7.w
- 153:   eq r12.w, cb0[9].x, l(0)
+ 149:   mul r7.w, r7.w, cb0[8].w                                  -> OcclusionExponent=0.7f 
+ 150:   exp r7.w, r7.w                                            -> SkyVisibility = pow(SkyVisibility, OcclusionExponent);
+
+ 151:   add r12.w, -r7.w, l(1.0000)                               -> OcclusionTintAndMinOcclusion.w=0 
+ 152:   mad r7.w, cb0[1].w, r12.w, r7.w                           -> SkyVisibility = lerp(SkyVisibility, 1, OcclusionTintAndMinOcclusion.w);
+
+ 153:   eq r12.w, cb0[9].x, l(0)                                  -> if (OcclusionCombineMode == 0) -> cb0[9].x=1 -> false 
+
  154:   min r13.w, r4.w, r7.z
- 155:   min r15.w, r7.w, r13.w
- 156:   mul r7.w, r7.w, r13.w
- 157:   movc r7.w, r12.w, r15.w, r7.w
- 158:   ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7)
- 159:   if_nz r16.x
+ 155:   min r15.w, r7.w, r13.w                                    -> SkyVisibility = min(SkyVisibility, min(GBuffer.GBufferAO, AmbientOcclusion));
+                                                                  -> Combine with min 
+
+ 156:   mul r7.w, r7.w, r13.w                                     -> SkyVisibility = SkyVisibility * min(GBuffer.GBufferAO, AmbientOcclusion);
+                                                                  -> Combine with mul -> AO效果会比较强 
+
+ 157:   movc r7.w, r12.w, r15.w, r7.w                             -> if (OcclusionCombineMode == 0) SkyVisibility=... else ...
+
+ 158:   ieq r16.xyzw, r7.xxxx, l(6, 2, 3, 7)                      ->TWOSIDED_FOLIAGE=6，SUBSURFACE=2，PREINTEGRATED_SKIN=3，HAIR=7
+
+ 159:   if_nz r16.x                                               -> if (GBuffer.ShadingModelID == SHADINGMODELID_TWOSIDED_FOLIAGE) 
+
  160:     mov r14.w, l(1.0000)
  161:     dp4 r18.x, cb1[181].xyzw, r14.xyzw
  162:     dp4 r18.y, cb1[182].xyzw, r14.xyzw
@@ -213,25 +288,34 @@ ps_5_0
  169:     mad r12.w, r6.x, r6.x, -r12.w
  170:     add r14.xyz, r18.xyzx, r19.xyzx
  171:     mad r14.xyz, cb1[187].xyzx, r12.wwww, r14.xyzx
- 172:     max r14.xyz, r14.xyzx, l(0, 0, 0, 0)
- 173:     mul r14.xyz, r14.xyzx, cb1[180].xyzx
- 174:     mul r18.xyz, r5.xyzx, r5.xyzx
+ 172:     max r14.xyz, r14.xyzx, l(0, 0, 0, 0)                    -> return max(0, Intermediate0 + Intermediate1 + Intermediate2);
+                                                                  -> GetSkySHDiffuse(-GBuffer.WorldNormal) 
+
+ 173:     mul r14.xyz, r14.xyzx, cb1[180].xyzx                    -> vfloat3 SubsurfaceLookup = GetSkySHDiffuse(-GBuffer.WorldNormal) * View.SkyLightColor.rgb;
+
+ 174:     mul r18.xyz, r5.xyzx, r5.xyzx                           -> Square(BufferData.CustomData.rgb)
+                                                                  -> float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
+
  175:     mul r14.xyz, r7.wwww, r14.xyzx
- 176:     mul r14.xyz, r18.xyzx, r14.xyzx
+ 176:     mul r14.xyz, r18.xyzx, r14.xyzx                         -> Lighting += ScalarFactors * SubsurfaceLookup * SubsurfaceColor;
  177:   else
- 178:     mov r14.xyz, l(0, 0, 0, 0)
+ 178:     mov r14.xyz, l(0, 0, 0, 0)                              -> Lighting = 0
  179:   endif
- 180:   or r12.w, r16.z, r16.y
+
+ 180:   or r12.w, r16.z, r16.y            -> if (GBuffer.ShadingModelID == SHADINGMODELID_SUBSURFACE || GBuffer.ShadingModelID == SHADINGMODELID_PREINTEGRATED_SKIN)
  181:   mul r16.xyz, r5.xyzx, r5.xyzx
- 182:   mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx
- 183:   movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx
- 184:   if_nz r16.w
+ 182:   mad r18.xyz, r5.xyzx, r5.xyzx, r15.xyzx                   -> float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
+                                                                  -> DiffuseColor += SubsurfaceColor;
+ 183:   movc r15.xyz, r12.wwww, r18.xyzx, r15.xyzx                -> if ... else ... 
+
+ 184:   if_nz r16.w                                               -> if (GBuffer.ShadingModelID == SHADINGMODELID_HAIR)
  185:     mul r18.xyz, r1.yyyy, cb1[49].xyzx
  186:     mad r18.xyz, r1.xxxx, cb1[48].xyzx, r18.xyzx
  187:     add r18.xyz, r18.xyzx, cb1[50].xyzx
  188:     dp3 r1.x, r18.xyzx, r18.xyzx
  189:     rsq r1.x, r1.x
- 190:     mul r18.xyz, r1.xxxx, r18.xyzx
+ 190:     mul r18.xyz, r1.xxxx, r18.xyzx                          -> float3 V = -normalize(mul(float4(ScreenPosition, 1, 0), View.ScreenToWorld).xyz);
+ 
  191:     dp3 r1.x, -r18.xyzx, r6.xyzx
  192:     mad r19.xyz, -r6.xyzx, r1.xxxx, -r18.xyzx
  193:     dp3 r1.y, r19.xyzx, r19.xyzx

@@ -194,7 +194,8 @@ mul r12.w, r7.w, r11.w 						      -> R12.w = (1 - NdotV)^5 -> Fresnel_Term
 mad r7.w, -r11.w, r7.w, l(1.000000)   
 mad r7.w, r7.w, l(0.040000), r12.w  		-> lerp((1 - NdotV)^5, 1, 0.04) 
 mad r7.w, r5.x, -r7.w, l(1.000000) 			-> 1 - Fresnel_Term * T11.x(frxx.x) -> 取反色(且屏蔽了除人和草叶以外的物件) 
-mul r13.xyz, r7.wwww, r10.xyzx 				  -> R13 = R10颜色 * (1 - Fresnel_Term) -> (R10颜色) * (类似 NoV 效果的乘子) 
+mul r13.xyz, r7.wwww, r10.xyzx 				  -> R13 = R10颜色 * (1 - Fresnel_Term) -> (R10颜色) * (类似 NoV 效果的乘子)
+
 mul r12.xyz, r7.zzzz, r12.xyzx 				  -> R12颜色 * NoV_nearOne -> (NoV_nearOne: NoV关联项，但比原始NoV亮)  
 mul r7.z, r5.x, r6.w 						        -> r7.z = T11.x * factor_RoughOrZero -> 2个遮罩叠加后 -> 突出了人物 
 mad r12.xyz, r12.xyzx, l(0.90, 0.90, 0.90, 0.0), -r13.xyzx  -> R12 = 0.9 * R12颜色 - R13颜色 -> 用减号形成Fresnel现象 
@@ -286,10 +287,11 @@ if_nz r7.x  	                                            -> 对于 #1 ~ #15 号�
   exp r7.w, r7.w 											              -> exp((5 - 10*模长) / 100) 	-> 这里假设 exp 实际上是 exp2 
   add r7.w, r7.w, l(1.000000) 								      -> exp((5 - 10*模长) / 100) + 1 
   div r7.w, l(1,1,1,1), r7.w                        -> 1 / [exp((5 - 10*模长) / 100) + 1] 
-  mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z 					  -> saturate(40.0/[exp((5 - 10*模长) / 100) + 1] - 19.5) -> 记为X 
+  mad_sat r7.w, r7.w, cb0[8].y, cb0[8].z 					  -> saturate(40.0/[exp((5 - 10*模长) / 100) + 1] - 19.5) -> 记为X -> SkyVisibility
   log r7.w, r7.w 											              -> r7.w = LOG(X) -> 小于0的数 
   mul r7.w, r7.w, cb0[8].w 									        -> LOG(X) * 0.7 
   exp r7.w, r7.w 											              -> exp(LOG(X) * 0.7) -> X^0.7 
+  
   add r12.w, -r7.w, l(1.000000) 
   mad r7.w, cb0[1].w, r12.w, r7.w 							    -> (1 - X^0.7) * 0 + X^0.7 -> lerp 
 
