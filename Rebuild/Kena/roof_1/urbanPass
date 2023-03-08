@@ -651,6 +651,7 @@ if_nz r1.x
   mad r1.w, -r1.w, l(1.200000), l(1.000000) 			    -> 1 - 1.2 * ln(roughness) 
   add r4.w, cb1[188].z, l(-1.000000) 					        -> 7 - 1 
   add r5.z, -r1.w, r4.w 								              -> 6 - (1 - 1.2 * ln(roughness)) -> 采样IBL贴图使用的 lod lv 
+
   mov r2.x, l(0) 										
   mov r8.xyw, l(0,0,0,0)
   mov r5.w, r1.x  										                -> r5.w = 高反射率纹理a通道值 * saturate( R0Y - 1 ) -> spec_AOwthRoughNoise 
@@ -665,6 +666,7 @@ if_nz r1.x
     if_nz r7.w 											                  -> 相当于 if (r5.w < 0.001) then break 
       break 
     endif 
+    
     iadd r7.w, r0.z, r6.w 								            -> r0.z 也是基于'屏幕像素'和'距离对数' 从T3 buffer直接获取 -> 可为[0,1,..7]
     ld_indexable(buffer)(uint,uint,uint,uint) r7.w, r7.wwww, t4.yzwx 	-> 使用 uint4 查看 T4 buffer 数据，这是张映射表 -> 使用ushort4格式采样可以得到返回值"6"  
     add r14.xyz, r4.xyzx, -cb4[r7.w + 0].xyzx 		    -> 当前点世界空间坐标 - cb4[0-49] -> cb4前50组数据记录的是IBL探针的[posWS, 半径R] 
