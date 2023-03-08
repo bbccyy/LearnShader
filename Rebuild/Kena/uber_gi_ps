@@ -695,29 +695,41 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
  484:     endif
  485:     mad r7.xyz, r14.xyzx, r1.yyyy, r7.xyzx                  -> ExtraIndirectSpecular += SkyLighting * IndirectSpecularOcclusion; 
  486:   endif
- 
- 487:   mul r2.xyz, r5.wwww, r7.xyzx
- 488:   mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx
- 489:   mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx
- 490:   if_nz r8.z
- 491:     mov r3.y, r3.w
+
+ 487:   mul r2.xyz, r5.wwww, r7.xyzx                              -> ImageBasedReflections.a * ExtraIndirectSpecular
+ 488:   mad r2.xyz, r8.xywx, cb1[156].xyzx, r2.xyzx               -> ImageBasedReflections * 1 + ImageBasedReflections.a * ExtraIndirectSpecular
+ 489:   mad r2.xyz, cb1[134].yyyy, r2.xyzx, r12.xyzx              -> 1 * (~) + Color      ->       PreExposure == 1
+                                                                  -> Color.rgb += PreExposure * GatherRadiance(Color.a, WorldPosition, R, GBuffer.Roughness, BentNormal, IndirectIrradiance, GBuffer.ShadingModelID, NumCulledReflectionCaptures, DataStartIndex);
+
+ 490:   if_nz r8.z                                                if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT)
+ 491:     mov r3.y, r3.w                                          -> GBuffer.Roughness
  492:     sample_l(texture2d)(float,float,float,float) r1.yw, r3.xyxx, t5.zxwy, s4, l(0)
+                                                                  -> float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
  493:     mul_sat r2.w, r9.y, l(50.0000)
  494:     mul r1.w, r1.w, r2.w
  495:     add r2.w, -r5.x, l(1.0000)
  496:     mul r1.w, r1.w, r2.w
  497:     mad r7.xyz, r9.xyzx, r1.yyyy, r1.wwww
- 498:     mul r7.xyz, r2.xyzx, r7.xyzx
- 499:     mov r3.z, r5.y
+ 498:     mul r7.xyz, r2.xyzx, r7.xyzx                            -> Color.rgb *= 
+                                                                  SpecularColor * AB.x + AB.y * saturate( 50 * SpecularColor.g ) * (1 - ClearCoat);
+
+ 499:     mov r3.z, r5.y                                          -> const float ClearCoatRoughness   = GBuffer.CustomData.y;
  500:     sample_l(texture2d)(float,float,float,float) r1.yw, r3.xzxx, t5.zxwy, s4, l(0)
- 501:     mad r1.y, r1.y, l(0.0400), r1.w
- 502:     mul r1.w, r5.x, r1.y
- 503:     mad r1.y, -r1.y, r5.x, l(1.0000)
- 504:     mul r5.xzw, r1.wwww, r6.xxyz
- 505:     mad r5.xzw, r7.xxyz, r1.yyyy, r5.xxzw
- 506:     mul r0.x, r0.x, r1.w
- 507:     mul r0.x, r0.y, r0.x
- 508:     if_nz r1.z
+                                                                  -> float2 AB = Texture2DSampleLevel( PreIntegratedGF, PreIntegratedGFSampler, float2( NoV, ClearCoatRoughness ), 0 ).rg;
+
+ 501:     mad r1.y, r1.y, l(0.0400), r1.w                         -> SpecularColor * AB.x + (saturate(50 * 0.04)=1) * AB.y
+                                                                  -> float F = EnvBRDF( 0.04, ClearCoatRoughness, NoV ).x;
+
+ 502:     mul r1.w, r5.x, r1.y                                    -> ClearCoat * F =  F'
+ 503:     mad r1.y, -r1.y, r5.x, l(1.0000)                        -> 1 - ClearCoat * F = LayerAttenuation
+ 504:     mul r5.xzw, r1.wwww, r6.xxyz                            -> SSR.rgb * F'
+ 505:     mad r5.xzw, r7.xxyz, r1.yyyy, r5.xxzw                   -> Color.rgb = LayerAttenuation * Color.rgb + SSR.rgb * F'
+
+ 506:     mul r0.x, r0.x, r1.w                                    -> Color.a *= F'  ->  注，此处忽略了 Color.a *= 1 - SSR.a; 因为 Color.a 默认就 = 1 - SSR.a
+ 507:     mul r0.x, r0.y, r0.x                                    -> Color.a *= SpecularOcclusion;
+
+------------Func:GetDistanceFieldAOSpecularOcclusion() Start------------
+ 508:     if_nz r1.z                                              -> if (ApplyBentNormalAO > 0) 
  509:       dp3 r0.y, r13.xyzx, r13.xyzx
  510:       sqrt r0.y, r0.y
  511:       if_nz cb1[189].x
