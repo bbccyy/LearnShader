@@ -506,7 +506,7 @@ ps_5_0
                                                                   -> R = GetOffSpecularPeakReflectionDir(N, R, GBuffer.Roughness);  
 
  349:   sample_indexable(texture2d)(float,float,float,float) r6.xyzw, r0.xyxx, t12.xyzw, s6     -> ScreenSpaceReflectionsTexture
- 350:   add r0.x, -r6.w, l(1.0000)                                -> Color.a = 1 - SSR.a;
+ 350:   add r0.x, -r6.w, l(1.0000)                                -> Color.a = 1 - SSR.a; 
  351:   mad r12.xyzw, r6.xyzw, l(1, 1, 1, -1), l(0, 0, 0, 1)      -> Color.rgb = SSR.rgb;
                                                                      Color.a = 1 - SSR.a; 
  352:   add r14.xyzw, -r12.xyzw, l(0, 0, 0, 1)
@@ -532,8 +532,8 @@ ps_5_0
  365:   mul r1.y, r1.y, cb3[3].z
  366:   max r1.y, r1.y, l(0)
  367:   ftou r1.y, r1.y    -> uint ZSlice = (uint)(max(0, log2(SceneDepth * GridData.LightGridZParams.x + GridData.LightGridZParams.y) * GridData.LightGridZParams.z));
- 368:   iadd r1.z, cb3[1].z, l(-1)
- 369:   umin r1.y, r1.z, r1.y                                     -> ZSlice = min(ZSlice, (uint)(GridData.CulledGridSize.z - 1));
+ 368:   iadd r1.z, cb3[1].z, l(-1) 
+ 369:   umin r1.y, r1.z, r1.y                                     -> ZSlice = min(ZSlice, (uint)(GridData.CulledGridSize.z - 1)); -> CulledGridSize=[27, 15, 32, 32]
  370:   ushr r0.zw, r0.zzzw, cb3[2].xxxx                          -> PixelPos >> GridData.LightGridPixelSizeShift=6
                                                                   -> uint3 GridCoordinate = uint3(PixelPos >> GridData.LightGridPixelSizeShift, ZSlice);
  371:   imad r0.w, r1.y, cb3[1].y, r0.w                           -> GridCoordinate.z * GridData.CulledGridSize.y + GridCoordinate.y
@@ -548,7 +548,7 @@ ps_5_0
 
 GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...) 
  379:   ieq r1.y, r7.x, l(6)                                      -> if (bTwoSidedFoliage) 
- 380:   lt r1.z, l(0), cb0[0].x                                   -> if (ApplyBentNormalAO > 0) 
+ 380:   lt r1.z, l(0), cb0[0].x                                   -> if (ApplyBentNormalAO=1 > 0) 
  381:   if_nz r1.z
  382:     dp3 r1.w, r13.xyzx, r13.xyzx
  383:     sqrt r1.w, r1.w                                         -> float BentNormalLength = length(BentNormalAO);
@@ -557,8 +557,8 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
 
  385:       if_z r1.y                                             -> if (!bTwoSidedFoliage) 
  386:         max r1.y, r3.w, l(0.1000)
- 387:         mul r4.w, r1.w, cb0[0].y
- 388:         mul r5.z, r4.w, l(3.1416)
+ 387:         mul r4.w, r1.w, cb0[0].y                            -> BentNormalLength * InvSkySpecularOcclusionStrength=1 
+ 388:         mul r5.z, r4.w, l(3.1416)                           -> float UnoccludedAngle = BentNormalLength * PI * InvSkySpecularOcclusionStrength;
  389:         dp3 r5.w, r13.xyzx, r2.yzwy
  390:         max r6.w, r1.w, l(0.0010)                           -> float ReflectionConeAngle = max(Roughness, .1f) * PI;  还缺个 * PI，后面会补上 
  391:         div r5.w, r5.w, r6.w
@@ -731,15 +731,18 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
 ------------Func:GetDistanceFieldAOSpecularOcclusion() Start------------
  508:     if_nz r1.z                                              -> if (ApplyBentNormalAO > 0) 
  509:       dp3 r0.y, r13.xyzx, r13.xyzx
- 510:       sqrt r0.y, r0.y
- 511:       if_nz cb1[189].x
- 512:         max r1.y, r5.y, l(0.1000)
+ 510:       sqrt r0.y, r0.y                                       -> float BentNormalLength = length(BentNormalAO);
+
+ 511:       if_nz cb1[189].x                                      -> if (View.DistanceFieldAOSpecularOcclusionMode != 0)
+
+ 512:         max r1.y, r5.y, l(0.1000)                           -> float ReflectionConeAngle = max(ClearCoatRoughness, .1f) * PI;  注，PI在后面乘的 
  513:         mul r1.z, r0.y, cb0[0].y
- 514:         mul r1.w, r1.z, l(3.1416)
- 515:         dp3 r2.w, r13.xyzx, r11.yzwy
- 516:         max r3.y, r0.y, l(0.0010)
- 517:         div r2.w, r2.w, r3.y
- 518:         add r3.y, -abs(r2.w), l(1.0000)
+ 514:         mul r1.w, r1.z, l(3.1416)                           -> float UnoccludedAngle = BentNormalLength * PI * InvSkySpecularOcclusionStrength=1;
+ 515:         dp3 r2.w, r13.xyzx, r11.yzwy                        -> dot(BentNormalAO, ReflectionVector)
+ 516:         max r3.y, r0.y, l(0.0010)                           -> max(BentNormalLength, .001f)
+ 517:         div r2.w, r2.w, r3.y                                -> acos(入参=r2.w)
+
+ 518:         add r3.y, -abs(r2.w), l(1.0000)                     -> acos start here 
  519:         sqrt r3.y, r3.y
  520:         mad r3.z, abs(r2.w), l(-0.0187), l(0.0743)
  521:         mad r3.z, r3.z, abs(r2.w), l(-0.2121)
@@ -748,31 +751,44 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
  524:         mad r6.x, r6.x, l(-2.0000), l(3.1416)
  525:         lt r2.w, r2.w, -r2.w
  526:         and r2.w, r2.w, r6.x
- 527:         mad r2.w, r3.z, r3.y, r2.w
- 528:         mad r3.y, r1.y, l(3.1416), -r1.w
- 529:         add r2.w, r2.w, -abs(r3.y)
- 530:         mad r1.y, r1.y, l(3.1416), r1.w
- 531:         add r1.y, -abs(r3.y), r1.y
+ 527:         mad r2.w, r3.z, r3.y, r2.w                          -> float AngleBetween = acos (dot(BentNormalAO, ReflectionVector) / max(BentNormalLength, .001f));
+
+ 528:         mad r3.y, r1.y, l(3.1416), -r1.w                    -> ReflectionConeAngle - UnoccludedAngle -> ArcLength0 - ArcLength1
+                                                                  -> float AngleDifference = abs(ArcLength0 - ArcLength1);
+ 529:         add r2.w, r2.w, -abs(r3.y)                          -> AngleBetweenCones - AngleDifference
+
+ 530:         mad r1.y, r1.y, l(3.1416), r1.w                     -> ArcLength0 + ArcLength1
+ 531:         add r1.y, -abs(r3.y), r1.y                          -> ArcLength0 + ArcLength1 - AngleDifference
  532:         div_sat r1.y, r2.w, r1.y
- 533:         add r1.y, -r1.y, l(1.0000)
- 534:         mad r1.w, r1.y, l(-2.0000), l(3.0000)
- 535:         mul r1.y, r1.y, r1.y
- 536:         mul r1.y, r1.y, r1.w
- 537:         mad r1.z, r1.z, l(3.1416), l(-0.1000)
- 538:         mul_sat r1.z, r1.z, l(5.0000)
- 539:         mul r0.y, r1.y, r1.z
+ 533:         add r1.y, -r1.y, l(1.0000)                          -> 1.0 - saturate((AngleBetweenCones - AngleDifference) / (ArcLength0 + ArcLength1 - AngleDifference))
+                                                                  -> 作为 smoothstop(src0, src1, rate) 中的 rate 
+
+ 534:         mad r1.w, r1.y, l(-2.0000), l(3.0000)               -> smoothstop start here
+ 535:         mul r1.y, r1.y, r1.y                                -> rate^2
+ 536:         mul r1.y, r1.y, r1.w                                -> rate^2 * (3-2*rate)
+                                                                  -> smoothstop done
+                                                                  -> IndirectSpecularOcclusion = ApproximateConeConeIntersection(ReflectionConeAngle, UnoccludedAngle, AngleBetween);
+
+ 537:         mad r1.z, r1.z, l(3.1416), l(-0.1000)               -> UnoccludedAngle - 0.1
+ 538:         mul_sat r1.z, r1.z, l(5.0000)                       -> saturate((UnoccludedAngle - .1f) / .2f)
+ 539:         mul r0.y, r1.y, r1.z                                -> IndirectSpecularOcclusion = lerp(0, IndirectSpecularOcclusion, saturate((UnoccludedAngle - .1f) / .2f)); 
  540:       endif
- 541:       add r1.y, -r0.y, l(1.0000)
- 542:       mad r0.y, cb0[1].w, r1.y, r0.y
+
+ 541:       add r1.y, -r0.y, l(1.0000)                            -> 1 - IndirectSpecularOcclusion
+ 542:       mad r0.y, cb0[1].w, r1.y, r0.y                        -> IndirectSpecularOcclusion = lerp(IndirectSpecularOcclusion, 1, OcclusionTintAndMinOcclusion.w=0);
+
  543:       add r1.y, -r0.y, l(1.0000)
- 544:       mul r1.yzw, r1.yyyy, cb0[1].xxyz
- 545:     else
- 546:       mov r1.yzw, l(0, 0, 0, 0)
- 547:       mov r0.y, l(1.0000)
+ 544:       mul r1.yzw, r1.yyyy, cb0[1].xxyz                      -> ExtraIndirectSpecular = (1 - IndirectSpecularOcclusion) * OcclusionTintAndMinOcclusion.xyz;
+ 
+ 545:     else                                                    -> if (ApplyBentNormalAO <= 0) 
+ 546:       mov r1.yzw, l(0, 0, 0, 0)                             -> ExtraIndirectSpecular = 0
+ 547:       mov r0.y, l(1.0000)                                   -> IndirectSpecularOcclusion = 0
  548:     endif
- 549:     log r2.w, r5.y
+
+ 549:     log r2.w, r5.y                                          -> CompositeReflectionCapturesAndSkylight starts here 
  550:     mad r2.w, -r2.w, l(1.2000), l(1.0000)
- 551:     add r3.y, -r2.w, r4.w
+ 551:     add r3.y, -r2.w, r4.w                                   -> float Mip = ComputeReflectionCaptureMipFromRoughness(Roughness, View.ReflectionCubemapMaxMip);
+
  552:     mov r11.x, l(0)
  553:     mov r6.xyz, l(0, 0, 0, 0)
  554:     mov r3.z, r0.x
@@ -818,6 +834,7 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
  594:       endif
  595:       iadd r4.w, r4.w, l(1)
  596:     endloop
+
  597:     if_nz r1.x
  598:       add r0.x, -r2.w, cb2[0].x
  599:       add r0.x, r0.x, l(-1.0000)
@@ -832,18 +849,26 @@ GatherRadiance(...) -> GetDistanceFieldAOSpecularOcclusion(...)
  608:       mad r1.yzw, r4.xxyz, r0.yyyy, r1.yyzw
  609:     endif
  610:     mul r0.xyz, r1.yzwy, r3.zzzz
- 611:     mad r0.xyz, r6.xyzx, cb1[156].xyzx, r0.xyzx
- 612:     mad r0.xyz, cb1[134].yyyy, r0.xyzx, r5.xzwx
+ 611:     mad r0.xyz, r6.xyzx, cb1[156].xyzx, r0.xyzx             -> GatherRadiance && CompositeReflectionCapturesAndSkylight Finish here 
+
+ 612:     mad r0.xyz, cb1[134].yyyy, r0.xyzx, r5.xzwx             -> Color.rgb += PreExposure * GatherRadiance(Color.a, WorldPosition, TopLayerR, ClearCoatRoughness, BentNormal, 
+                                                                        IndirectIrradiance, GBuffer.ShadingModelID, NumCulledReflectionCaptures, DataStartIndex);
+
  613:   else
- 614:     sample_l(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0)
+ 614:     sample_l(texture2d)(float,float,float,float) r1.xy, r3.xwxx, t5.xyzw, s4, l(0)  -> PreIntegratedGFSampler
  615:     mul_sat r0.w, r9.y, l(50.0000)
  616:     mul r0.w, r1.y, r0.w
  617:     mad r1.xyz, r9.xyzx, r1.xxxx, r0.wwww
- 618:     mul r0.xyz, r1.xyzx, r2.xyzx
+ 618:     mul r0.xyz, r1.xyzx, r2.xyzx                            -> Color.rgb *= EnvBRDF( SpecularColor, GBuffer.Roughness, NoV );
  619:   endif
- 620:   min r0.xyz, -r0.xyzx, l(0, 0, 0, 0)
- 621:   add o0.xyz, -r0.xyzx, r10.xyzx
- 622: else
- 623:   mov o0.xyz, r10.xyzx
+
+ 620:   min r0.xyz, -r0.xyzx, l(0, 0, 0, 0)                       -> return -min(-Color.rgb, 0.0);    注意，第一个负号在后面会补上 
+                                                                  -> ReflectionEnvironment Finishs here 
+
+ 621:   add o0.xyz, -r0.xyzx, r10.xyzx                            -> OutColor.xyz += ReflectionEnvironment(GBuffer, AmbientOcclusion, BufferUV, 
+                                                                        ScreenPosition, SvPosition, BentNormal, SpecularColor);
+
+ 622: else                                                        -> if (ShadingModelID != SHADINGMODELID_UNLIT && ShadingModelID != SHADINGMODELID_HAIR) -> false 时进入
+ 623:   mov o0.xyz, r10.xyzx                                      -> OutColor.xyz = 不含有 ReflectionEnvironment 的 OutColor.xyz  
  624: endif
  625: ret
