@@ -15,7 +15,7 @@ vs_5_0                                                -> vertex shader, shader m
    2: mad r0.xy, v0.xyxx, cb1[0].xyxx, cb1[0].zwzz    -> apply scale(screenPixel.xy) and offset(0)
    3: mul r0.xy, r0.xyxx, cb1[2].xyxx                 -> eventually r0.xy = v0.xy = PosObj.xy
    4: mad r0.xy, r0.xyxx, l(2,2,0,0), l(-1,-1,0,0)    -> pos.xy * 2 - 1
-   5: mul r0.xy, r0.xyxx, l(1, -1, 0, 0)              -> y轴方向上下颠倒 
+   5: mul r0.xy, r0.xyxx, l(1, -1, 0, 0)              -> y轴方向上下颠倒 不然三角形图元的朝向会出错 
    6: mul r1.xyz, r0.yyyy, cb0[53].xyzx               -> M.2ndCol * pos.y
    7: mad r1.xyz, r0.xxxx, cb0[52].xyzx, r1.xyzx      -> r1.xyz = M.2ndCol * pos.yyy + M.1stCol * pos.xxx
    8: mov o2.xy, r0.xyxx                              -> o2.xy = pos.xy * 2 - 1

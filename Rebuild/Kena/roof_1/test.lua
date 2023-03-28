@@ -18,5 +18,5 @@ end
 
 local s = math.sqrt(0.51555^2 + 0.29836^2 + 0.80324^2)
 print((0x1FBD1DF5))
-print(12960^(1/2))
+print(2^(16))
 print("DONE")
