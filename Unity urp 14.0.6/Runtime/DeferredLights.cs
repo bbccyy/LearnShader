@@ -102,7 +102,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             "Deferred Directional Light (SimpleLit)",
             "ClearStencilPartial",
             "Fog",
-            "SSAOOnly"
+            "SSAOOnly",
+            "KenaDirLight"  //这是Kena直接光pass 
             //TODO: 在此后追加 Kena_Uber 若干pass 
         };
 
@@ -115,7 +116,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             DirectionalSimpleLit,
             ClearStencilPartial,
             Fog,
-            SSAOOnly
+            SSAOOnly,
+            KenaDL
         };
 
         static readonly ushort k_InvalidLightOffset = 0xFFFF;
@@ -139,10 +141,13 @@ namespace UnityEngine.Rendering.Universal.Internal
         // Shadow Mask can change at runtime. Because of this it needs to come after the non-changing buffers.
         internal int GBufferShadowMask { get { return UseShadowMask ? GBufferLightingIndex + (UseRenderPass ? 1 : 0) + (UseRenderingLayers ? 1 : 0) + 1 : -1; } }
         // Color buffer count (not including dephStencil).
-        internal int GBufferSliceCount { get { return 4 + (UseRenderPass ? 1 : 0) + (UseShadowMask ? 1 : 0) + (UseRenderingLayers ? 1 : 0); } }
+        internal int GBufferKenaExtraAIndex { get { return UseKenaGBufferA ? GBufferLightingIndex + (UseRenderPass ? 1 : 0) + (UseRenderingLayers ? 1 : 0) + (UseShadowMask ? 1 : 0) + 1 : -1; } }
+        internal int GBufferKenaExtraBIndex { get { return UseKenaGBufferB ? GBufferLightingIndex + (UseRenderPass ? 1 : 0) + (UseRenderingLayers ? 1 : 0) + (UseShadowMask ? 1 : 0) + (UseKenaGBufferA ? 1 : 0) + 1 : -1; } }
+        //internal int GBufferSliceCount { get { return 4 + (UseRenderPass ? 1 : 0) + (UseShadowMask ? 1 : 0) + (UseRenderingLayers ? 1 : 0); } }
+        internal int GBufferSliceCount { get { return 4 + (UseRenderPass ? 1 : 0) + (UseShadowMask ? 1 : 0) + (UseRenderingLayers ? 1 : 0) + (UseKenaGBufferA ? 1 : 0) + (UseKenaGBufferB ? 1 : 0); } }
 
         internal GraphicsFormat GetGBufferFormat(int index)
-        {
+        {  
             if (index == GBufferAlbedoIndex) // sRGB albedo, materialFlags
                 return QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferSpecularMetallicIndex) // sRGB specular, [unused]
@@ -157,11 +162,18 @@ namespace UnityEngine.Rendering.Universal.Internal
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferRenderingLayers) // Optional: rendering layers is outputed when light layers are enabled (subset of rendering layers)
                 return RenderingLayerUtils.GetFormat(RenderingLayerMaskSize);
+            else if (index == GBufferKenaExtraAIndex)
+                return GraphicsFormat.R8G8B8A8_UNorm;
+            else if (index == GBufferKenaExtraBIndex)
+                return GraphicsFormat.R32_SFloat; //TODO 
             else
-                return GraphicsFormat.None;
+                return GraphicsFormat.None; 
         }
 
         // This may return different values depending on what lights are rendered for a given frame.
+        internal bool UseKenaGBufferA { get { return true; } }  //用于追加GBuffer对象 
+        internal bool UseKenaGBufferB { get { return false; } } 
+
         internal bool UseShadowMask { get { return this.MixedLightingSetup != MixedLightingSetup.None; } }
         //
         internal bool UseRenderingLayers { get { return UseLightLayers || UseDecalLayers; } }
@@ -260,7 +272,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             m_StencilDeferredMaterial = initParams.stencilDeferredMaterial;
 
-            m_StencilDeferredPasses = new int[k_StencilDeferredPassNames.Length];
+            m_StencilDeferredPasses = new int[k_StencilDeferredPassNames.Length];    
             InitStencilDeferredMaterial();
 
             this.AccurateGbufferNormals = true;
@@ -314,11 +326,10 @@ namespace UnityEngine.Rendering.Universal.Internal
                     CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.MixedLightingSubtractive, isSubtractive); // Backward compatibility
                     // This should be moved to a more global scope when framebuffer fetch is introduced to more passes
                     CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.RenderPassEnabled, this.UseRenderPass && renderingData.cameraData.cameraType == CameraType.Game);
-                    CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.LightLayers, UseLightLayers);
+                    CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.LightLayers, UseLightLayers);    
 
                     RenderingLayerUtils.SetupProperties(cmd, RenderingLayerMaskSize);
                 }
-
                 context.ExecuteCommandBuffer(cmd);
                 cmd.Clear();
             }
@@ -386,7 +397,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         internal void CreateGbufferResources()
         {
-            int gbufferSliceCount = this.GBufferSliceCount;
+            int gbufferSliceCount = this.GBufferSliceCount;  
             if (this.GbufferRTHandles == null || this.GbufferRTHandles.Length != gbufferSliceCount)
             {
                 ReleaseGbufferResources();
@@ -410,6 +421,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             this.DeferredInputAttachments[1] = this.GbufferAttachments[1];
             this.DeferredInputAttachments[2] = this.GbufferAttachments[2];
             this.DeferredInputAttachments[3] = this.GbufferAttachments[4];  // GbufferDepthIndex == 4 注意，4张中仅此纹理不是Transient
+            
         }
 
         internal bool IsRuntimeSupportedThisFrame()
@@ -443,10 +455,10 @@ namespace UnityEngine.Rendering.Universal.Internal
             {
                 this.DeferredInputAttachments = new RTHandle[4]
                 {
-                    GbufferAttachments[0], GbufferAttachments[1], GbufferAttachments[2], GbufferAttachments[4],  //加上Idx==3的colorAttachment，一个5张 
+                    GbufferAttachments[0], GbufferAttachments[1], GbufferAttachments[2], GbufferAttachments[4]  //加上Idx==3的colorAttachment，一个5张 
                 };
 
-                this.DeferredInputIsTransient = new bool[4]
+                this.DeferredInputIsTransient = new bool[4] 
                 {
                     true, true, true, false //Depth那张纹理不是Transient 
                 };
@@ -732,14 +744,67 @@ namespace UnityEngine.Rendering.Universal.Internal
                 NativeArray<VisibleLight> visibleLights = renderingData.lightData.visibleLights;
 
                 if (HasStencilLightsOfType(LightType.Directional))
-                    RenderStencilDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    //RenderStencilDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                 if (HasStencilLightsOfType(LightType.Point))
                     RenderStencilPointLights(cmd, ref renderingData, visibleLights);
                 if (HasStencilLightsOfType(LightType.Spot))
                     RenderStencilSpotLights(cmd, ref renderingData, visibleLights);
+
+                //alway execute customed pass:
+                //RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
             }
 
             Profiler.EndSample();
+        }
+
+        void RenderKenaDirectionalLights(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        {
+            if (m_FullscreenMesh == null)
+                m_FullscreenMesh = CreateFullscreenMesh();
+
+            cmd.EnableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+
+            for (int soffset = m_stencilVisLightOffsets[(int)LightType.Directional]; soffset < m_stencilVisLights.Length; ++soffset)
+            {
+                ushort visLightIndex = m_stencilVisLights[soffset];
+                ref VisibleLight vl = ref visibleLights.UnsafeElementAtMutable(visLightIndex);
+                if (vl.lightType != LightType.Directional)
+                    break;
+                if (visLightIndex != mainLightIndex)
+                    continue;
+
+                // Avoid light find on every access.
+                Light light = vl.light;
+
+                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+
+                int lightFlags = 0;
+
+                var additionalLightData = light.GetUniversalAdditionalLightData();
+                uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
+
+                // Setup shadow paramters:
+                // - for the main light, they have already been setup globally, so nothing to do.
+                bool hasDeferredShadows = light && light.shadows != LightShadows.None;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.AdditionalLightShadows, false);
+
+                bool hasSoftShadow = hasDeferredShadows && renderingData.shadowData.supportsSoftShadows && light.shadows == LightShadows.Soft;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.SoftShadows, hasSoftShadow);
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings._DEFERRED_MAIN_LIGHT, visLightIndex == mainLightIndex); // main directional light use different uniform constants from additional directional lights
+
+                cmd.SetGlobalVector(ShaderConstants._LightColor, lightColor); // VisibleLight.finalColor already returns color in active color space
+                cmd.SetGlobalVector(ShaderConstants._LightDirection, lightDir);
+                cmd.SetGlobalInt(ShaderConstants._LightFlags, lightFlags);
+                cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
+
+                // Lighting pass.
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaDL]);
+
+            }
+
+            cmd.DisableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
         }
 
         void RenderStencilDirectionalLights(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)

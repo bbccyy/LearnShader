@@ -66,10 +66,10 @@ namespace UnityEngine.Rendering.Universal.Internal
         }
 
         public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
-        {
+        {   //当被UniversalRenderer::EnqueueDeferred()唤起本方法时，注意是不带有cmd实例的 
             RTHandle[] gbufferAttachments = m_DeferredLights.GbufferAttachments;
-
-            if (cmd != null)
+            
+            if (cmd != null) //只有在上层ScriptableRenderer::Execute()方法内唤起的本方法，才会待有关cmd实例，进入下面分支 
             {
                 var allocateGbufferDepth = true;
                 if (m_DeferredLights.UseRenderPass && (m_DeferredLights.DepthCopyTexture != null && m_DeferredLights.DepthCopyTexture.rt != null))
@@ -93,7 +93,12 @@ namespace UnityEngine.Rendering.Universal.Internal
                         continue;
 
                     // No need to setup temporaryRTs if we are using input attachments as they will be Memoryless
-                    if (m_DeferredLights.UseRenderPass && i != m_DeferredLights.GBufferShadowMask && i != m_DeferredLights.GBufferRenderingLayers && (i != m_DeferredLights.GbufferDepthIndex && !m_DeferredLights.HasDepthPrepass))
+                    if (m_DeferredLights.UseRenderPass 
+                        && i != m_DeferredLights.GBufferShadowMask 
+                        && i != m_DeferredLights.GBufferRenderingLayers
+                        && i != m_DeferredLights.GBufferKenaExtraAIndex
+                        && i != m_DeferredLights.GBufferKenaExtraBIndex
+                        && (i != m_DeferredLights.GbufferDepthIndex && !m_DeferredLights.HasDepthPrepass))
                         continue;
 
                     //下面用于创建不是Memoryless的纹理，主要是LightLayer，或ShadowMask等
