@@ -397,7 +397,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         internal void CreateGbufferResources()
         {
-            int gbufferSliceCount = this.GBufferSliceCount;  
+            int gbufferSliceCount = this.GBufferSliceCount;    
             if (this.GbufferRTHandles == null || this.GbufferRTHandles.Length != gbufferSliceCount)
             {
                 ReleaseGbufferResources();

@@ -103,6 +103,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         return output;
     }
 
+    TEXTURE2D_X(_SSAO);
+
     TEXTURE2D_X(_CameraDepthTexture);   //借用截帧数据测试期间不使用，全仿真是使用  //对应InputAttachment_3 
     TEXTURE2D_X_HALF(_GBuffer0);        //Normal
     TEXTURE2D_X_HALF(_GBuffer1);        //Albedo
@@ -113,8 +115,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     //TEXTURE2D_X_HALF(_GBuffer4);
     TEXTURE2D_X_HALF(_GBuffer5);        //Comp_Custom_F_R_X_I 
 
-//#if _RENDER_PASS_ENABLED  //TODO: 为何C#断点查看此Key是设置为True的，但是实际上Shader内读取的是False？ 
-#if 1
+#if _RENDER_PASS_ENABLED  //TODO: 为何C#断点查看此Key是设置为True的，但是实际上Shader内读取的是False？ -> 没加 #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+//#if 1
     #define GBUFFER0 0
     #define GBUFFER1 1
     #define GBUFFER2 2
@@ -145,7 +147,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     float3 _LightPosWS;
     half3 _LightColor;
     half4 _LightAttenuation; // .xy are used by DistanceAttenuation - .zw are used by AngleAttenuation *for SpotLights)
-    half3 _LightDirection;   // directional/spotLights support
+    half3 _LightDirection;   // directional/spotLights support 
     half4 _LightOcclusionProbInfo;
     int _LightFlags;
     int _ShadowLightIndex;
@@ -377,8 +379,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
         float2 screen_uv = (input.screenUV.xy / input.screenUV.z);
 
-        //#if _RENDER_PASS_ENABLED
-        #if 1
+        #if _RENDER_PASS_ENABLED 
+        //#if 1
         float d        = LOAD_FRAMEBUFFER_INPUT(GBUFFER3, input.positionCS.xy).x;  //这是CopyDepthTexture对应的深度 
         half4 gbuffer0 = LOAD_FRAMEBUFFER_INPUT(GBUFFER0, input.positionCS.xy);
         half4 gbuffer1 = LOAD_FRAMEBUFFER_INPUT(GBUFFER1, input.positionCS.xy);
@@ -386,7 +388,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #else
         // Using SAMPLE_TEXTURE2D is faster than using LOAD_TEXTURE2D on iOS platforms (5% faster shader).
         // Possible reason: HLSLcc upcasts Load() operation to float, which doesn't happen for Sample()?
-        float d        = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, screen_uv, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
+        float d        = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, screen_uv, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
         half4 gbuffer0 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, screen_uv, 0);
         half4 gbuffer1 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, screen_uv, 0);
         half4 gbuffer2 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, screen_uv, 0);
@@ -394,8 +396,9 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
         //half  gbuffer4 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, screen_uv, 0).x;
         half4 gbuffer5 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer5, my_point_clamp_sampler, screen_uv, 0);
-         
-        return d; 
+        //test _SSAO
+        half  ssao_data = SAMPLE_TEXTURE2D_X_LOD(_SSAO, my_point_clamp_sampler, screen_uv, 0).x;
+        return ssao_data; 
     }
 
     ENDHLSL
@@ -740,6 +743,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             #pragma target 4.5
 
             #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
 
             #pragma vertex Vertex
             #pragma fragment FragKenaDL 

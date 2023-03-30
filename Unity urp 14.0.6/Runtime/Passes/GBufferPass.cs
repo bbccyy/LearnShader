@@ -30,7 +30,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         public GBufferPass(RenderPassEvent evt, RenderQueueRange renderQueueRange, LayerMask layerMask, StencilState stencilState, int stencilReference, DeferredLights deferredLights)
         {
             base.profilingSampler = new ProfilingSampler(nameof(GBufferPass));
-            base.renderPassEvent = evt;
+            base.renderPassEvent = evt;    
             m_PassData = new PassData();
 
             m_DeferredLights = deferredLights;
@@ -98,7 +98,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                         && i != m_DeferredLights.GBufferRenderingLayers
                         && i != m_DeferredLights.GBufferKenaExtraAIndex
                         && i != m_DeferredLights.GBufferKenaExtraBIndex
-                        && (i != m_DeferredLights.GbufferDepthIndex && !m_DeferredLights.HasDepthPrepass))
+                        && (i != m_DeferredLights.GbufferDepthIndex && !m_DeferredLights.HasDepthPrepass)) //TODO:最后这个判断条件有点古怪
                         continue;
 
                     //下面用于创建不是Memoryless的纹理，主要是LightLayer，或ShadowMask等
@@ -168,7 +168,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             context.DrawRenderers(renderingData.cullResults, ref data.drawingSettings, ref data.filteringSettings, s_ShaderTagUniversalMaterialType, false, tagValues, stateBlocks);
 
-            tagValues.Dispose();
+            tagValues.Dispose(); 
             stateBlocks.Dispose();
 
             // Render objects that did not match any shader pass with error shader

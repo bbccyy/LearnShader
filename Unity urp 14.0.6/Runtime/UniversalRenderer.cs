@@ -1267,7 +1267,7 @@ namespace UnityEngine.Rendering.Universal
             // Need to call Configure for both of these passes to setup input attachments as first frame otherwise will raise errors
             if (useRenderPassEnabled && m_DeferredLights.UseRenderPass)
             {
-                m_GBufferPass.Configure(null, renderingData.cameraData.cameraTargetDescriptor);
+                m_GBufferPass.Configure(null, renderingData.cameraData.cameraTargetDescriptor); //初始化Configure，后续在ScriptableRenderer执行Execute之前还会再次Configure的 
                 m_DeferredPass.Configure(null, renderingData.cameraData.cameraTargetDescriptor);
             }
 
