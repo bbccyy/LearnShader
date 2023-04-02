@@ -109,10 +109,6 @@ GameObject prefab
 从prefab实例化出一个obj，设置obj.prototype 
 
 
-
-
-
-
 Animation-Instancing 
 
 
