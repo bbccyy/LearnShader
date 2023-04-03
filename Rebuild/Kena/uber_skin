@@ -1,5 +1,6 @@
 SetupIndirectCS -> Shaders\Private\PostProcessSubsurface.usf
 Shader hash 6bb788c7-18abcca6-c234fe19-484d4f22
+DC -> 18384
 
 cs_5_0
       dcl_globalFlags refactoringAllowed
@@ -9,12 +10,12 @@ cs_5_0
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
+      dcl_resource_texture2d (float,float,float,float) t0         depth
+      dcl_resource_texture2d (float,float,float,float) t1         Comp_M_D_R_F
+      dcl_resource_texture2d (float,float,float,float) t2         Color 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0
       dcl_uav_typed_buffer (uint,uint,uint,uint) u1
-      dcl_uav_typed_texture2d (float,float,float,float) u2
+      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4> SetupTexture;
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy
       dcl_input vThreadID.xy
@@ -96,6 +97,7 @@ cs_5_0
   62: endif
 ----------Func:SetupSubsurfaceForOnePixel() End X 2---------- 
 
+----------Func:SetupSubsurfaceForOnePixel() Start X 3----------
   63: mad r4.xyzw, cb0[28].zwzw, l(0.5000, -0.5000, -0.5000, -0.5000), r0.yzyz
   64: min r4.xyzw, r4.xyzw, cb0[34].zwzw
   65: sample_l(texture2d)(float,float,float,float) r0.w, r4.xyxx, t1.xyzw, s0, l(0)
@@ -124,6 +126,9 @@ cs_5_0
   88: else
   89:   mov r5.xyzw, l(0, 0, 0, 0)
   90: endif
+  ----------Func:SetupSubsurfaceForOnePixel() End X 3---------- 
+
+----------Func:SetupSubsurfaceForOnePixel() Start X 4----------
   91: sample_l(texture2d)(float,float,float,float) r0.w, r4.zwzz, t1.xyzw, s0, l(0)
   92: mul r0.w, r0.w, l(255.0000)
   93: round_ne r0.w, r0.w
@@ -150,6 +155,9 @@ cs_5_0
  114: else
  115:   mov r4.xyzw, l(0, 0, 0, 0)
  116: endif
+----------Func:SetupSubsurfaceForOnePixel() End X 4----------
+
+
  117: add r6.xyzw, r2.xyzw, r3.xyzw
  118: add r7.xyzw, r4.xyzw, r5.xyzw
  119: add r6.xyzw, r6.xyzw, r7.xyzw
