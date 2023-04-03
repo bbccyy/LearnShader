@@ -1,6 +1,6 @@
 Shader "Universal Render Pipeline/Lit"
 {
-    Properties 
+    Properties
     {
         // Specular vs Metallic workflow
         _WorkflowMode("WorkflowMode", Float) = 1.0

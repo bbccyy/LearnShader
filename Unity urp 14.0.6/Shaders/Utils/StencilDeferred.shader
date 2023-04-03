@@ -24,6 +24,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         _ClearStencilRef ("ClearStencilRef", Int) = 0
         _ClearStencilReadMask ("ClearStencilReadMask", Int) = 0
         _ClearStencilWriteMask ("ClearStencilWriteMask", Int) = 0
+
+        [NoScaleOffset] _LUT("LUT", 2D)	 = "white" {}
     }
 
     HLSLINCLUDE
@@ -32,6 +34,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Deferred.hlsl"
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
     #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRendering.hlsl"
+    
+    #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaDeferredCommon.hlsl"
 
     struct Attributes
     {
@@ -44,6 +48,9 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     {
         float4 positionCS : SV_POSITION;
         float3 screenUV : TEXCOORD1;
+#if defined(_NEED_REBUILD_POSWS)
+        float3 viewDirWS : TEXCOORD2;
+#endif 
         UNITY_VERTEX_INPUT_INSTANCE_ID
         UNITY_VERTEX_OUTPUT_STEREO
     };
@@ -100,10 +107,15 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         output.screenUV.xy = output.screenUV.xy * 0.5 + 0.5 * output.screenUV.z;
         #endif
 
+        #if defined(_NEED_REBUILD_POSWS)
+        float2 ndc_xy = output.screenUV.xy * 2 - 0.75;      //放到[-1,1]区间 -> TODO: 为何这里用"-0.75"看起来比"-1"效果好？ 
+		ndc_xy = ndc_xy * float2(1.0, 1.0);                 //TODO -> 经过研究，Unity里无需 Revers-Y 
+        output.viewDirWS = mul((float3x3)Matrix_Inv_VP, float3(ndc_xy.xy, 1)); 
+        #endif 
+
         return output;
     }
 
-    TEXTURE2D_X(_SSAO);
 
     TEXTURE2D_X(_CameraDepthTexture);   //借用截帧数据测试期间不使用，全仿真是使用  //对应InputAttachment_3 
     TEXTURE2D_X_HALF(_GBuffer0);        //Normal
@@ -112,7 +124,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
     //GB3 == colorAttachment
     //GB4 == _CameraDepthTexture
-    //TEXTURE2D_X_HALF(_GBuffer4);
+    TEXTURE2D_X_HALF(_GBuffer4);
     TEXTURE2D_X_HALF(_GBuffer5);        //Comp_Custom_F_R_X_I 
 
 #if _RENDER_PASS_ENABLED  //TODO: 为何C#断点查看此Key是设置为True的，但是实际上Shader内读取的是False？ -> 没加 #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
@@ -373,6 +385,10 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         return half4(0.0, 0.0, 0.0, occlusion);
     }
 
+    //TEXTURE2D_X(_SSAO); 
+    //TEXTURE2D_X_HALF(_BentNorm);
+    //TEXTURE2D_X_HALF(_SSR);
+
     half4 FragKenaDL(Varyings input) : SV_Target
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
@@ -387,8 +403,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         half4 gbuffer2 = LOAD_FRAMEBUFFER_INPUT(GBUFFER2, input.positionCS.xy);
         #else
         // Using SAMPLE_TEXTURE2D is faster than using LOAD_TEXTURE2D on iOS platforms (5% faster shader).
-        // Possible reason: HLSLcc upcasts Load() operation to float, which doesn't happen for Sample()?
-        float d        = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, screen_uv, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
+        // Possible reason: HLSLcc upcasts Load() operation to float, which doesn't happen for Sample()? _CameraDepthTexture
+        float d        = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, screen_uv, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
         half4 gbuffer0 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, screen_uv, 0);
         half4 gbuffer1 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, screen_uv, 0);
         half4 gbuffer2 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, screen_uv, 0);
@@ -397,8 +413,15 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         //half  gbuffer4 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, screen_uv, 0).x;
         half4 gbuffer5 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer5, my_point_clamp_sampler, screen_uv, 0);
         //test _SSAO
-        half  ssao_data = SAMPLE_TEXTURE2D_X_LOD(_SSAO, my_point_clamp_sampler, screen_uv, 0).x;
-        return ssao_data; 
+        //half  ssao_data = SAMPLE_TEXTURE2D_X_LOD(_SSAO, my_point_clamp_sampler, screen_uv, 0).x;
+
+        //test _BentNorm
+        //half4  bentNorm = SAMPLE_TEXTURE2D_X_LOD(_BentNorm, my_point_clamp_sampler, screen_uv, 0).xyzw;
+
+        //test _SSR
+        //half4  ssr = SAMPLE_TEXTURE2D_X_LOD(_SSR, my_point_clamp_sampler, screen_uv, 0).xyzw;
+
+        return gbuffer5; 
     }
 
     ENDHLSL
@@ -747,6 +770,34 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
             #pragma vertex Vertex
             #pragma fragment FragKenaDL 
+            //#pragma enable_d3d11_debug_symbols
+
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "KenaTest"
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
+            Blend One Zero 
+            //BlendOp Add, Add
+
+            HLSLPROGRAM
+
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaUberDirLight.hlsl"
+
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #pragma multi_compile _NEED_REBUILD_POSWS 
+
+            #pragma vertex Vertex
+            #pragma fragment FragKenaTest 
             //#pragma enable_d3d11_debug_symbols
 
             ENDHLSL

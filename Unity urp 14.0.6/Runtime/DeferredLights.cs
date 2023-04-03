@@ -7,6 +7,7 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using static Unity.Mathematics.math;
+using UnityEditor;
 //#define URP_HAS_BURST
 
 // TODO SimpleLit material, make sure when variant is !defined(_SPECGLOSSMAP) && !defined(_SPECULAR_COLOR), specular is correctly silenced.
@@ -103,7 +104,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             "ClearStencilPartial",
             "Fog",
             "SSAOOnly",
-            "KenaDirLight"  //这是Kena直接光pass 
+            "KenaDirLight",  //这是Kena直接光pass 
+            "KenaTest"
             //TODO: 在此后追加 Kena_Uber 若干pass 
         };
 
@@ -117,7 +119,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             ClearStencilPartial,
             Fog,
             SSAOOnly,
-            KenaDL
+            KenaDL,
+            KenaTest
         };
 
         static readonly ushort k_InvalidLightOffset = 0xFFFF;
@@ -744,7 +747,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 NativeArray<VisibleLight> visibleLights = renderingData.lightData.visibleLights;
 
                 if (HasStencilLightsOfType(LightType.Directional))
-                    RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    RenderKenaTest(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    //RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                     //RenderStencilDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                 if (HasStencilLightsOfType(LightType.Point))
                     RenderStencilPointLights(cmd, ref renderingData, visibleLights);
@@ -756,6 +760,57 @@ namespace UnityEngine.Rendering.Universal.Internal
             }
 
             Profiler.EndSample();
+        }
+
+        void RenderKenaTest(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        {
+            if (m_FullscreenMesh == null)
+                m_FullscreenMesh = CreateFullscreenMesh();
+
+            cmd.EnableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+
+            for (int soffset = m_stencilVisLightOffsets[(int)LightType.Directional]; soffset < m_stencilVisLights.Length; ++soffset)
+            {
+                ushort visLightIndex = m_stencilVisLights[soffset];
+                ref VisibleLight vl = ref visibleLights.UnsafeElementAtMutable(visLightIndex);
+                if (vl.lightType != LightType.Directional)
+                    break;
+                if (visLightIndex != mainLightIndex)
+                    continue;
+
+                // Avoid light find on every access.
+                Light light = vl.light;
+
+                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+
+                int lightFlags = 0;
+
+                var additionalLightData = light.GetUniversalAdditionalLightData();
+                uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
+
+                // Setup shadow paramters:
+                // - for the main light, they have already been setup globally, so nothing to do.
+                bool hasDeferredShadows = light && light.shadows != LightShadows.None;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.AdditionalLightShadows, false);
+
+                bool hasSoftShadow = hasDeferredShadows && renderingData.shadowData.supportsSoftShadows && light.shadows == LightShadows.Soft;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.SoftShadows, hasSoftShadow);
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings._DEFERRED_MAIN_LIGHT, visLightIndex == mainLightIndex); // main directional light use different uniform constants from additional directional lights
+                CoreUtils.SetKeyword(cmd, "_NEED_REBUILD_POSWS", true);
+
+                cmd.SetGlobalVector(ShaderConstants._LightColor, lightColor); // VisibleLight.finalColor already returns color in active color space
+                cmd.SetGlobalVector(ShaderConstants._LightDirection, lightDir);
+                cmd.SetGlobalInt(ShaderConstants._LightFlags, lightFlags);
+                cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
+
+                // Lighting pass.
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaTest]);
+
+            }
+
+            cmd.DisableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+            cmd.DisableShaderKeyword("_NEED_REBUILD_POSWS");
         }
 
         void RenderKenaDirectionalLights(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
@@ -1049,6 +1104,10 @@ namespace UnityEngine.Rendering.Universal.Internal
             // Pass indices can not be hardcoded because some platforms will strip out some passes, offset the index of later passes.
             for (int pass = 0; pass < k_StencilDeferredPassNames.Length; ++pass)
                 m_StencilDeferredPasses[pass] = m_StencilDeferredMaterial.FindPass(k_StencilDeferredPassNames[pass]);
+
+            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr"); //TODO: 找个更加合适的地方设置LUT 
+            if (lut != null)
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut);
 
             m_StencilDeferredMaterial.SetFloat(ShaderConstants._StencilRef, (float)StencilUsage.MaterialUnlit);
             m_StencilDeferredMaterial.SetFloat(ShaderConstants._StencilReadMask, (float)StencilUsage.MaterialMask);

@@ -490,7 +490,7 @@ namespace UnityEngine.Rendering.Universal
                 pass.m_InputAttachmentIndices[i] = FindAttachmentDescriptorIndexInList(pass.m_InputAttachments[i], m_ActiveColorAttachmentDescriptors);
                 if (pass.m_InputAttachmentIndices[i] == -1)
                 {
-                    Debug.LogWarning("RenderPass Input attachment not found in the current RenderPass");
+                    Debug.LogWarning("RenderPass Input attachment not found in the current RenderPass"); 
                     continue;
                 }
 

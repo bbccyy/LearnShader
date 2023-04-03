@@ -62,6 +62,7 @@ namespace UnityEngine.Rendering.Universal
         MotionBlur m_MotionBlur;
         PaniniProjection m_PaniniProjection;
         Bloom m_Bloom;
+        Subsurface m_Subsurface;
         LensDistortion m_LensDistortion;
         ChromaticAberration m_ChromaticAberration;
         Vignette m_Vignette;
@@ -224,7 +225,7 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="enableSRGBConversion"></param>
         /// <param name="hasExternalPostPasses"></param>
         public void Setup(in RenderTextureDescriptor baseDescriptor, in RTHandle source, bool resolveToScreen, in RTHandle depth, in RTHandle internalLut, in RTHandle motionVectors, bool hasFinalPass, bool enableSRGBConversion)
-        {
+        {   //UniversalRenderer调用 
             m_Descriptor = baseDescriptor;
             m_Descriptor.useMipMap = false;
             m_Descriptor.autoGenerateMips = false;
@@ -252,7 +253,7 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="enableSRGBConversion"></param>
         /// <param name="hasExternalPostPasses"></param>
         public void Setup(in RenderTextureDescriptor baseDescriptor, in RTHandle source, RTHandle destination, in RTHandle depth, in RTHandle internalLut, bool hasFinalPass, bool enableSRGBConversion)
-        {
+        {   //Render2D调用 
             m_Descriptor = baseDescriptor;
             m_Descriptor.useMipMap = false;
             m_Descriptor.autoGenerateMips = false;
@@ -304,6 +305,7 @@ namespace UnityEngine.Rendering.Universal
             m_MotionBlur = stack.GetComponent<MotionBlur>();
             m_PaniniProjection = stack.GetComponent<PaniniProjection>();
             m_Bloom = stack.GetComponent<Bloom>();
+            m_Subsurface = stack.GetComponent<Subsurface>();  //加入自定义Post，用于计算次表面材质 
             m_LensDistortion = stack.GetComponent<LensDistortion>();
             m_ChromaticAberration = stack.GetComponent<ChromaticAberration>();
             m_Vignette = stack.GetComponent<Vignette>();
@@ -370,6 +372,7 @@ namespace UnityEngine.Rendering.Universal
             bool useSubPixeMorpAA = cameraData.antialiasing == AntialiasingMode.SubpixelMorphologicalAntiAliasing && SystemInfo.graphicsDeviceType != GraphicsDeviceType.OpenGLES2;
             var dofMaterial = m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian ? m_Materials.gaussianDepthOfField : m_Materials.bokehDepthOfField;
             bool useDepthOfField = m_DepthOfField.IsActive() && !isSceneViewCamera && dofMaterial != null;
+            bool useSubsurface = m_Subsurface.IsActive();
             bool useLensFlare = !LensFlareCommonSRP.Instance.IsEmpty();
             bool useMotionBlur = m_MotionBlur.IsActive() && !isSceneViewCamera;
             bool usePaniniProjection = m_PaniniProjection.IsActive() && !isSceneViewCamera;
@@ -431,6 +434,12 @@ namespace UnityEngine.Rendering.Universal
 
             // Setup projection matrix for cmd.DrawMesh()
             cmd.SetGlobalMatrix(ShaderConstants._FullscreenProjMat, GL.GetGPUProjectionMatrix(Matrix4x4.identity, true));
+
+            if (useSubsurface)
+            {
+                Blitter.BlitCameraTexture(cmd, GetSource(), GetDestination(), RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurface, 0);
+                Swap(ref renderer);
+            }
 
             // Optional NaN killer before post-processing kicks in
             // stopNaN may be null on Adreno 3xx. It doesn't support full shader level 3.5, but SystemInfo.graphicsShaderLevel is 35.
@@ -1495,9 +1504,11 @@ namespace UnityEngine.Rendering.Universal
             public readonly Material uber;
             public readonly Material finalPass;
             public readonly Material lensFlareDataDriven;
+            public readonly Material subsurface;
 
             public MaterialLibrary(PostProcessData data)
             {
+                subsurface = Load(Shader.Find("Custom/Subsurface"));
                 stopNaN = Load(data.shaders.stopNanPS);
                 subpixelMorphologicalAntialiasing = Load(data.shaders.subpixelMorphologicalAntialiasingPS);
                 gaussianDepthOfField = Load(data.shaders.gaussianDepthOfFieldPS);
@@ -1542,6 +1553,7 @@ namespace UnityEngine.Rendering.Universal
                 CoreUtils.Destroy(easu);
                 CoreUtils.Destroy(uber);
                 CoreUtils.Destroy(finalPass);
+                CoreUtils.Destroy(subsurface);
             }
         }
 

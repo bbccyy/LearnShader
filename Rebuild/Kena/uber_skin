@@ -34,7 +34,9 @@ cs_5_0
    8: mul r0.yz, r0.yyzy, cb0[49].zzwz                -> float2 BufferUV = ConvertGridPos2UV(Pos);
 
    9: mad r2.xyzw, cb0[28].zwzw, l(-0.5000, 0.5000, 0.5000, 0.5000), r0.yzyz  -> BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse
+                                                      -> cb0[28].zw = [0.00059, 0.00104] 
   10: min r2.xyzw, r2.xyzw, cb0[34].zwzw              -> UVSceneColor = min((~), SubsurfaceInput0_UVViewportBilinearMax)
+                                                      -> cb0[34] = [1.00, 1.00, 0.99912, 0.99948] 
 
 ----------Func:SetupSubsurfaceForOnePixel() Start X 1----------
   11: sample_l(texture2d)(float,float,float,float) r0.w, r2.xyxx, t1.xyzw, s0, l(0)
