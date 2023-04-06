@@ -16,7 +16,10 @@ for key, val in ipairs(data) do
 	print(names[key] .. "\t\t\t" .. val .. "\t->\t" .. tmp .. "\t" .. tmp1 .. "\t" .. tostring(tmp2) .. "\tand32=" .. and32 .. "\tand64=" .. and64)
 end
 
-local s = math.sqrt(0.51555^2 + 0.29836^2 + 0.80324^2)
+local v1 = {0.66584, 0.71339, 0.10459}
+local v2 = {0.40088, 0.46729, 0.01075}
+local s = math.sqrt(v1[1]^2 + v1[2]^2 + v1[3]^2)
 print((0x1FBD1DF5))
 print(2^(16))
+print(v1[1]^(2))
 print("DONE")
