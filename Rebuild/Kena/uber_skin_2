@@ -1,0 +1,95 @@
+uber_skin_2
+
+Shader hash f6928891-4d09da32-97f0d582-0831ca6d
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[36], immediateIndexed
+      dcl_constantbuffer cb1[152], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_sampler s2, mode_default
+      dcl_sampler s3, mode_default
+      dcl_sampler s4, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_resource_texture2d (float,float,float,float) t1
+      dcl_resource_texture2d (float,float,float,float) t2
+      dcl_resource_texture2d (float,float,float,float) t3
+      dcl_resource_texture2d (float,float,float,float) t4
+      dcl_resource_texture2d (float,float,float,float) t5
+      dcl_resource_texture2d (float,float,float,float) t6
+      dcl_input_ps linear noperspective v0.xy
+      dcl_output o0.xyzw
+      dcl_temps 8
+   0: sample_l(texture2d)(float,float,float,float) r0.x, v0.xyxx, t1.wxyz, s1, l(0)
+   1: mul r0.x, r0.x, l(255.0000)
+   2: round_ne r0.x, r0.x
+   3: ftou r0.x, r0.x
+   4: and r0.y, r0.x, l(15)
+   5: ieq r0.yz, r0.yyyy, l(0, 5, 9, 0)
+   6: or r0.y, r0.z, r0.y
+   7: if_z r0.y
+   8:   sample_indexable(texture2d)(float,float,float,float) o0.xyzw, v0.xyxx, t5.xyzw, s4
+   9:   ret
+  10: endif
+  11: sample_l(texture2d)(float,float,float,float) r0.yzw, v0.xyxx, t2.wxyz, s2, l(0)
+  12: sample_l(texture2d)(float,float,float,float) r1.xy, v0.xyxx, t3.xwyz, s3, l(0)
+  13: and r0.x, r0.x, l(16)
+  14: movc r1.xy, r0.xxxx, l(0, 0, 0, 0), r1.xyxx
+  15: sample_l(texture2d)(float,float,float,float) r0.x, v0.xyxx, t0.xyzw, s0, l(0)
+  16: mad r1.z, r0.x, cb1[65].x, cb1[65].y
+  17: mad r0.x, r0.x, cb1[65].z, -cb1[65].w
+  18: div r0.x, l(1.0000, 1.0000, 1.0000, 1.0000), r0.x
+  19: add r0.x, r0.x, r1.z
+  20: div r0.x, cb0[27].x, r0.x
+  21: mul r0.x, r0.x, l(1024.0000)
+  22: mul r2.x, r1.y, l(10.0000)
+  23: mad r1.x, r1.x, l(255.0000), l(0.5000)
+  24: ftou r1.y, r1.x
+  25: mov r1.xzw, l(33, 0, 0, 0)
+  26: ld_indexable(texture2d)(float,float,float,float) r1.x, r1.xyzw, t4.wxyz
+  27: mul r0.x, r0.x, r1.x
+  28: mul r0.x, r0.x, l(3.0000)
+  29: mul r1.x, cb0[35].z, l(0.5000)
+  30: div r0.x, r0.x, r1.x
+  31: add_sat r0.x, r0.x, l(-4.0000)
+  32: mov_sat r2.x, r2.x
+  33: mul r0.x, r0.x, r2.x
+  34: sample_indexable(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t6.xyzw, s4
+  35: max r1.x, r2.w, l(0.0000)
+  36: div r2.xyz, r2.xyzx, r1.xxxx
+  37: mul r1.xz, v0.xxyx, cb1[131].xxyx
+  38: ftou r1.xz, r1.xxzx
+  39: ftou r2.w, cb1[151].x
+  40: iadd r1.x, r1.z, r1.x
+  41: iadd r1.x, r2.w, r1.x
+  42: sample_l(texture2d)(float,float,float,float) r3.xyz, v0.xyxx, t5.xyzw, s4, l(0)
+  43: sample_l(1,0,0)(texture2d)(float,float,float,float) r4.xyz, v0.xyxx, t5.xyzw, s4, l(0)
+  44: sample_l(-1,0,0)(texture2d)(float,float,float,float) r5.xyz, v0.xyxx, t5.xyzw, s4, l(0)
+  45: sample_l(0,1,0)(texture2d)(float,float,float,float) r6.xyz, v0.xyxx, t5.xyzw, s4, l(0)
+  46: sample_l(0,-1,0)(texture2d)(float,float,float,float) r7.xyz, v0.xyxx, t5.xyzw, s4, l(0)
+  47: dp3 r1.z, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+  48: dp3 r2.w, r5.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+  49: dp3 r3.w, r6.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+  50: dp3 r4.w, r7.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+  51: add r1.z, r1.z, -r2.w
+  52: add r2.w, r3.w, -r4.w
+  53: add r4.xyz, r4.xyzx, r5.xyzx
+  54: add r5.xyz, r6.xyzx, r7.xyzx
+  55: lt r1.z, abs(r2.w), abs(r1.z)
+  56: and r1.xz, r1.xxzx, l(0.0000, 0.0000, 1.0000, 0.0000)
+  57: add r5.xyz, -r4.xyzx, r5.xyzx
+  58: mad r4.xyz, r1.zzzz, r5.xyzx, r4.xyzx
+  59: mul r5.xyz, r4.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000)
+  60: movc r1.x, r1.x, l(1.0000), l(0)
+  61: mad r6.xyz, -r4.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), r3.xyzx
+  62: mad r5.xyz, r1.xxxx, r6.xyzx, r5.xyzx
+  63: mad r4.xyz, r4.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), -r3.xyzx
+  64: mad r3.xyz, r1.xxxx, r4.xyzx, r3.xyzx
+  65: ld_indexable(texture2d)(float,float,float,float) r1.xyz, r1.wyww, t4.xyzw
+  66: mul r1.xyz, r0.xxxx, r1.xyzx
+  67: add r2.xyz, r2.xyzx, -r5.xyzx
+  68: mad r1.xyz, r1.xyzx, r2.xyzx, r5.xyzx
+  69: mad o0.xyz, r1.xyzx, r0.yzwy, r3.xyzx
+  70: mov o0.w, l(0)
+  71: ret

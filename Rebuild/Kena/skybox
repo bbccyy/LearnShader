@@ -1,0 +1,706 @@
+skybox
+
+Shader hash 9e699de0-d69083f7-09116d6c-2d317ef4
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[143], immediateIndexed
+      dcl_constantbuffer cb1[104], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_sampler s2, mode_default
+      dcl_sampler s3, mode_default
+      dcl_sampler s4, mode_default
+      dcl_sampler s5, mode_default
+      dcl_sampler s6, mode_default
+      dcl_resource_structured t0, 16
+      dcl_resource_texture2d (float,float,float,float) t1
+      dcl_resource_texture2d (float,float,float,float) t2
+      dcl_resource_texture2d (float,float,float,float) t3
+      dcl_resource_texture2d (float,float,float,float) t4
+      dcl_resource_texture2d (float,float,float,float) t5
+      dcl_resource_texture2d (float,float,float,float) t6
+      dcl_resource_texture2d (float,float,float,float) t7
+      dcl_input_ps linear centroid v0.xyz
+      dcl_input_ps linear centroid v1.xyzw
+      dcl_input_ps linear v2.xyzw
+      dcl_input_ps linear v3.xy
+      dcl_input_ps nointerpolation v4.x
+      dcl_input_ps_siv linear noperspective centroid v5.xyzw, position
+      dcl_output o0.xyzw
+      dcl_output o1.xyzw
+      dcl_output o2.xyzw
+      dcl_output o3.xyzw
+      dcl_output o4.xyzw
+      dcl_output oDepthLessEqual
+      dcl_temps 21
+   0: mul r0.xyzw, v0.xyzx, v1.yzxy
+   1: mad r0.xyzw, v1.xyzx, v0.yzxy, -r0.xyzw
+   2: mul r0.xyzw, r0.xyzw, v1.wwww
+   3: mov r1.x, v5.z
+   4: mov r1.yw, l(0.0000, 1.0000, 0.0000, 0.0000)
+   5: mul r1.xy, r1.xyxx, v5.wwww
+   6: mul r2.xyzw, v5.yyyy, cb0[45].xyzw
+   7: mad r2.xyzw, v5.xxxx, cb0[44].xyzw, r2.xyzw
+   8: mad r2.xyzw, v5.zzzz, cb0[46].xyzw, r2.xyzw
+   9: add r2.xyzw, r2.xyzw, cb0[47].xyzw
+  10: div r2.xyz, r2.xyzx, r2.wwww
+  11: dp3 r2.w, -r2.xyzx, -r2.xyzx
+  12: rsq r2.w, r2.w
+  13: mul r3.xyz, r2.wwww, -r2.xyzx
+  14: mad r4.xyz, cb0[137].wwww, l(0.0000, 0.0000, 1.0000, 0.0000), cb0[137].xyzx
+  15: dp3 r2.w, r4.xyzx, r4.xyzx
+  16: rsq r2.w, r2.w
+  17: mul r4.xyz, r2.wwww, r4.xyzx
+  18: mul r0.xyzw, r0.xyzw, r4.yyyy
+  19: mad r0.xyzw, r4.xxxx, v0.zxyz, r0.xyzw
+  20: mad r0.xyzw, r4.zzzz, v1.zxyz, r0.xyzw
+  21: dp3 r2.w, r0.yzwy, r0.yzwy
+  22: rsq r2.w, r2.w
+  23: mul r4.xyz, r0.yzwy, r2.wwww
+  24: add r5.xy, v2.xyxx, l(-0.5000, -0.5000, 0.0000, 0.0000)
+  25: dp2 r3.w, r5.xyxx, r5.xyxx
+  26: sqrt r3.w, r3.w
+  27: mad r4.w, -r3.w, l(2.0000), l(1.0000)
+  28: mul r5.z, r4.w, l(5.5000)
+  29: mul r5.z, r5.z, r5.z
+  30: mul r5.z, r5.z, l(1.4427)
+  31: exp r5.z, r5.z
+  32: div r5.z, l(1.0000, 1.0000, 1.0000, 1.0000), r5.z
+  33: lt r5.w, l(0.0000), abs(r4.w)
+  34: ge r6.x, r4.w, l(0)
+  35: movc r5.z, r6.x, -r5.z, l(-1.0000)
+  36: movc r5.z, r5.w, r5.z, l(-1.0000)
+  37: add r6.yz, r5.zzzz, l(0.0000, 1.0000, 1.3000, 0.0000)
+  38: add r5.z, -r6.y, l(1.0000)
+  39: dp3 r6.w, r3.xyzx, cb1[5].xyzx
+  40: add r6.w, r6.w, l(-1.0000)
+  41: mad r7.x, -abs(r6.w), l(0.5000), l(1.0000)
+  42: max r7.x, r7.x, l(0)
+  43: add r7.yz, r7.xxxx, l(0.0000, 0.2000, -0.7500, 0.0000)
+  44: min r7.y, r7.y, l(1.0000)
+  45: mad r7.y, -r7.y, l(0.8333), l(1.0000)
+  46: mad r7.y, -r7.y, l(0.8000), l(1.0000)
+  47: mad r7.y, -r5.z, r7.y, l(1.0000)
+  48: add r8.xyz, cb1[6].xyzx, -cb1[7].xyzx
+  49: mad r8.xyz, r7.yyyy, r8.xyzx, cb1[7].xyzx
+  50: max r9.xyz, cb1[9].xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)
+  51: log r9.xyz, r9.xyzx
+  52: mul r9.xyz, r9.xyzx, l(1.5000, 1.5000, 1.5000, 0.0000)
+  53: exp r9.xyz, r9.xyzx
+  54: mul r9.xyz, r9.xyzx, cb1[76].zzzz
+  55: mad r7.y, cb0[141].z, cb1[76].w, cb1[77].x
+  56: mul r7.w, r7.y, l(0.0100)
+  57: sincos r10.x, r11.x, r7.w
+  58: mov r12.x, -r10.x
+  59: mov r12.y, r11.x
+  60: dp2 r11.x, r12.yxyy, r5.xyxx
+  61: mov r12.z, r10.x
+  62: dp2 r11.y, r12.zyzz, r5.xyxx
+  63: add r10.xy, r11.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000)
+  64: sample_b(texture2d)(float,float,float,float) r7.w, r10.xyxx, t1.yzwx, s0, cb0[142].y
+  65: mad r8.xyz, r9.xyzx, r7.wwww, r8.xyzx
+  66: mad_sat r6.w, -abs(r6.w), cb1[78].x, l(1.0000)
+  67: mul r9.xyz, r6.wwww, cb1[11].xyzx
+  68: mul r9.xyz, r9.xyzx, cb1[78].zzzz
+  69: mad r6.w, cb0[141].z, cb1[78].w, cb1[77].x
+  70: mul r10.xyzw, r6.wwww, l(0.0130, 0.0040, 0.0005, 0.0200)
+  71: frc r10.xyzw, r10.wxyz
+  72: add r11.xy, -v2.zwzz, v3.xyxx
+  73: mad r11.zw, cb1[79].xxxx, r11.xxxy, v2.zzzw
+  74: add r11.zw, r11.zzzw, l(0.0000, 0.0000, -0.5000, -0.5000)
+  75: dp2 r12.x, r11.zwzz, cb1[12].xyxx
+  76: dp2 r12.y, r11.zwzz, cb1[13].xyxx
+  77: add r11.zw, r12.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000)
+  78: mul r11.zw, r11.zzzw, cb1[80].wwww
+  79: mov r1.z, r10.y
+  80: mad r1.zw, r11.zzzw, l(0.0000, 0.0000, 0.7000, 0.7000), r1.zzzw
+  81: sample_b(texture2d)(float,float,float,float) r12.xy, r1.zwzz, t2.xzyw, s1, cb0[142].y
+  82: mad r12.zw, r11.zzzw, l(0.0000, 0.0000, 0.3500, 0.3500), r10.zzzw
+  83: sample_b(texture2d)(float,float,float,float) r13.xy, r12.zwzz, t2.xyzw, s1, cb0[142].y
+  84: add r4.w, r4.w, r4.w
+  85: mul r4.w, r4.w, r4.w
+  86: mul r4.w, r4.w, l(1.4427)
+  87: exp r4.w, r4.w
+  88: div r4.w, l(1.0000, 1.0000, 1.0000, 1.0000), r4.w
+  89: add r4.w, -r4.w, l(1.0000)
+  90: add r4.w, -r4.w, l(1.0000)
+  91: mul r4.w, r4.w, l(0.1300)
+  92: movc r4.w, r6.x, r4.w, l(0.1300)
+  93: movc r4.w, r5.w, r4.w, l(0.1300)
+  94: mad r5.w, r12.x, r13.y, r4.w
+  95: mov r10.yw, l(0, 0, 0, 0)
+  96: mad r10.xy, r11.zwzz, l(1.2000, 1.2000, 0.0000, 0.0000), r10.xyxx
+  97: sample_b(texture2d)(float,float,float,float) r6.x, r10.xyxx, t3.zxyw, s2, cb0[142].y
+  98: add r6.x, r6.x, l(-0.5000)
+  99: mul r7.w, r6.x, l(0.2500)
+ 100: mad r5.w, r6.x, l(0.1500), r5.w
+ 101: max r6.x, cb1[81].z, l(0.0000)
+ 102: mul r8.w, r6.x, r6.x
+ 103: mad r10.xy, r6.xxxx, r8.wwww, l(-0.1500, -0.1900, 0.0000, 0.0000)
+ 104: add r5.w, r5.w, -r10.x
+ 105: dp2_sat r6.x, r12.yyyy, r13.xxxx
+ 106: max r6.x, r6.x, l(0.0000)
+ 107: mul r8.w, r6.x, r6.x
+ 108: mad r9.w, r8.w, l(0.0500), l(0.0500)
+ 109: div r9.w, l(1.0000, 1.0000, 1.0000, 1.0000), r9.w
+ 110: mul_sat r9.w, r5.w, r9.w
+ 111: mad r12.x, -r9.w, cb1[81].w, l(1.0000)
+ 112: add r7.y, r7.y, l(12.3000)
+ 113: mul r13.xyzw, r7.yyyy, l(0.0130, 0.0040, 0.0005, 0.0200)
+ 114: frc r13.xyzw, r13.wxyz
+ 115: mad r11.xy, cb1[82].xxxx, r11.xyxx, v2.zwzz
+ 116: add r11.xy, r11.xyxx, l(-0.5000, -0.5000, 0.0000, 0.0000)
+ 117: dp2 r14.x, r11.xyxx, cb1[12].xyxx
+ 118: dp2 r14.y, r11.xyxx, cb1[13].xyxx
+ 119: add r11.xy, r14.xyxx, l(0.5000, 12.8000, 0.0000, 0.0000)
+ 120: mul r11.xy, r11.xyxx, cb1[80].wwww
+ 121: mov r10.z, r13.y
+ 122: mad r10.zw, r11.xxxy, l(0.0000, 0.0000, 0.7000, 0.7000), r10.zzzw
+ 123: sample_b(texture2d)(float,float,float,float) r14.xy, r10.zwzz, t2.xzyw, s1, cb0[142].y
+ 124: mad r14.zw, r11.xxxy, l(0.0000, 0.0000, 0.3500, 0.3500), r13.zzzw
+ 125: sample_b(texture2d)(float,float,float,float) r15.xy, r14.zwzz, t2.xyzw, s1, cb0[142].y
+ 126: mad r4.w, r14.x, r15.y, r4.w
+ 127: mov r13.yz, l(0, 0, 0, 0)
+ 128: mad r13.xy, r11.xyxx, l(1.2000, 1.2000, 0.0000, 0.0000), r13.xyxx
+ 129: sample_b(texture2d)(float,float,float,float) r13.x, r13.xyxx, t3.zxyw, s2, cb0[142].y
+ 130: add r13.x, r13.x, l(-0.5000)
+ 131: mul r13.y, r13.x, l(0.2500)
+ 132: mad r4.w, r13.x, l(0.1500), r4.w
+ 133: add r15.yz, -r10.xxyx, r4.wwww
+ 134: dp2_sat r4.w, r14.yyyy, r15.xxxx
+ 135: max r4.w, r4.w, l(0.0000)
+ 136: mul r10.y, r4.w, r4.w
+ 137: mad r13.x, r10.y, l(0.0500), l(0.0500)
+ 138: div r13.x, l(1.0000, 1.0000, 1.0000, 1.0000), r13.x
+ 139: mul_sat r13.x, r13.x, r15.y
+ 140: mad r14.x, -r13.x, cb1[81].w, l(1.0000)
+ 141: mul r15.x, r12.x, r14.x
+ 142: max r15.w, r15.x, l(0.0000)
+ 143: log r16.x, r15.w
+ 144: mul r16.x, r16.x, l(20.0000)
+ 145: exp r16.x, r16.x
+ 146: min r16.x, r16.x, l(1.0000)
+ 147: mad r8.xyz, r9.xyzx, r16.xxxx, r8.xyzx
+ 148: mad r6.x, -r6.x, r6.x, l(1.0000)
+ 149: mad r6.x, -r6.x, l(0.3000), l(1.0000)
+ 150: div r6.x, l(1.0000, 1.0000, 1.0000, 1.0000), r6.x
+ 151: mul_sat r5.w, r5.w, r6.x
+ 152: add r5.w, -r5.w, l(0.5354)
+ 153: max r5.w, r5.w, l(0)
+ 154: add r5.w, r5.w, r5.w
+ 155: max r5.w, r5.w, l(0.0000)
+ 156: mul r5.w, r5.w, r5.w
+ 157: min r5.w, r5.w, l(1.0000)
+ 158: max r6.x, r8.w, l(0.0000)
+ 159: rsq r8.w, r6.x
+ 160: div r8.w, l(1.0000, 1.0000, 1.0000, 1.0000), r8.w
+ 161: mad r8.w, -r8.w, cb1[82].y, l(1.0000)
+ 162: max r5.w, r5.w, l(0.0000)
+ 163: log r9.x, r5.w
+ 164: mul r8.w, r8.w, r9.x
+ 165: exp r8.w, r8.w
+ 166: min r8.w, r8.w, l(1.0000)
+ 167: add r8.w, -r8.w, l(1.0000)
+ 168: max r9.y, cb1[82].z, l(0.0000)
+ 169: log r9.y, r9.y
+ 170: mul r9.y, r9.y, l(2.8644)
+ 171: exp r9.y, r9.y
+ 172: max r9.y, r9.y, l(0.3000)
+ 173: min r9.y, r9.y, l(0.8000)
+ 174: add r9.y, r9.y, cb1[83].x
+ 175: mad r8.w, -r8.w, r9.y, l(1.0000)
+ 176: mul r16.xy, r6.wwww, l(0.0100, 0.0050, 0.0000, 0.0000)
+ 177: frc r16.xy, r16.xyxx
+ 178: mad r11.zw, r11.zzzw, l(0.0000, 0.0000, 0.7000, 0.7000), r16.xxxy
+ 179: sample_b(texture2d)(float,float,float,float) r6.w, r11.zwzz, t2.yzwx, s1, cb0[142].y
+ 180: mad r6.w, -r6.w, l(0.0100), l(0.0350)
+ 181: add r9.z, -abs(cb1[83].w), l(1.0000)
+ 182: sqrt r9.z, r9.z
+ 183: mad r11.z, abs(cb1[83].w), l(-0.0187), l(0.0743)
+ 184: mad r11.z, r11.z, abs(cb1[83].w), l(-0.2121)
+ 185: mad r11.z, r11.z, abs(cb1[83].w), l(1.5707)
+ 186: mul r11.w, r9.z, r11.z
+ 187: mad r11.w, r11.w, l(-2.0000), l(3.1416)
+ 188: lt r16.x, cb1[83].w, -cb1[83].w
+ 189: and r11.w, r11.w, r16.x
+ 190: mad r9.z, r11.z, r9.z, r11.w
+ 191: mul r9.z, r9.z, l(0.9999)
+ 192: dp3 r4.x, cb1[17].xyzx, r4.xyzx
+ 193: mul r16.xyzw, r4.xxxx, cb1[17].zxyz
+ 194: mad r0.xyzw, r0.xyzw, r2.wwww, -r16.xyzw
+ 195: mul r4.yz, r0.zzwz, cb1[17].zzxz
+ 196: mad r0.xw, cb1[17].yyyz, r0.xxxy, -r4.yyyz
+ 197: sincos r16.x, r17.x, r9.z
+ 198: mul r0.xw, r0.xxxw, r16.xxxx
+ 199: mad r0.xy, r0.yzyy, r17.xxxx, r0.xwxx
+ 200: mad r0.xy, cb1[17].xyxx, r4.xxxx, r0.xyxx
+ 201: mad r0.zw, r6.wwww, r0.xxxy, r1.zzzw
+ 202: sample_b(texture2d)(float,float,float,float) r0.z, r0.zwzz, t2.yzxw, s1, cb0[142].y
+ 203: mad r1.zw, r6.wwww, r0.xxxy, r12.zzzw
+ 204: sample_b(texture2d)(float,float,float,float) r0.w, r1.zwzz, t2.xzwy, s1, cb0[142].y
+ 205: mad r1.z, cb1[84].z, l(-0.1300), l(0.1800)
+ 206: add r1.z, -r1.z, r10.x
+ 207: mad r0.z, r0.z, r0.w, -r1.z
+ 208: mul_sat r0.z, r0.z, l(3.3333)
+ 209: max r0.z, r0.z, l(0.0000)
+ 210: rsq r0.z, r0.z
+ 211: div r0.z, l(1.0000, 1.0000, 1.0000, 1.0000), r0.z
+ 212: max r0.w, r7.z, l(0)
+ 213: mul r0.w, r0.w, cb1[78].y
+ 214: dp3 r1.w, r3.xyzx, cb1[20].xyzx
+ 215: add r1.w, r1.w, l(-1.0000)
+ 216: mad r2.w, -abs(r1.w), l(0.5000), l(1.0000)
+ 217: max r2.w, r2.w, l(0)
+ 218: mul r2.w, r2.w, cb1[86].x
+ 219: mul r2.w, r2.w, cb1[86].y
+ 220: mad_sat r4.xy, r2.wwww, cb1[86].wwww, l(-0.8800, -0.5000, 0.0000, 0.0000)
+ 221: mul r4.x, r4.x, l(8.3333)
+ 222: min r4.x, r4.x, l(1.0000)
+ 223: mad r0.w, r0.w, l(4.0000), r4.x
+ 224: add r0.w, -r0.w, l(1.0000)
+ 225: mad r0.z, -r0.z, r0.w, l(1.0000)
+ 226: max r4.x, cb1[87].x, l(0.0000)
+ 227: log r4.x, r4.x
+ 228: mul r4.x, r4.x, l(2.5000)
+ 229: exp r4.x, r4.x
+ 230: min r4.x, r4.x, l(1.0000)
+ 231: add r4.z, -r0.z, l(0.2000)
+ 232: mad r0.z, r4.x, r4.z, r0.z
+ 233: mad r0.z, r0.z, cb1[87].y, r5.z
+ 234: add r4.y, r4.y, r4.y
+ 235: min r4.y, r4.y, l(1.0000)
+ 236: mad r4.y, cb1[78].y, l(0.5000), r4.y
+ 237: mul r0.z, r0.z, r4.y
+ 238: mul r0.z, r0.z, r8.w
+ 239: mul_sat r0.z, r0.z, cb1[82].w
+ 240: add r4.z, r12.y, l(-0.5000)
+ 241: mad_sat r0.z, r4.z, cb1[87].z, r0.z
+ 242: add r12.yzw, cb1[21].xxyz, -cb1[22].xxyz
+ 243: mad r16.xyz, r0.zzzz, r12.yzwy, cb1[22].xyzx
+ 244: add_sat r0.z, r7.x, -cb1[88].x
+ 245: mul_sat r0.z, r0.z, cb1[88].y
+ 246: mad_sat r4.z, r2.w, cb1[86].w, -cb1[88].w
+ 247: mul_sat r4.z, r4.z, cb1[89].x
+ 248: mad r0.z, r0.z, cb1[78].y, r4.z
+ 249: mul r4.z, r0.z, l(30.0000)
+ 250: mul r6.w, r9.x, r4.z
+ 251: exp r6.w, r6.w
+ 252: min r6.w, r6.w, l(1.0000)
+ 253: max r7.z, r0.z, l(0.0000)
+ 254: log r7.z, r7.z
+ 255: mul r7.z, r7.z, l(2.7000)
+ 256: exp r7.z, r7.z
+ 257: mul r6.w, r6.w, r7.z
+ 258: mul r6.w, r6.w, l(80.0000)
+ 259: max r17.xyz, cb1[11].xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 260: mul r17.xyz, r17.xyzx, r17.xyzx
+ 261: mul r18.xyz, r6.wwww, r17.xyzx
+ 262: log r6.x, r6.x
+ 263: mul r6.x, r6.x, l(0.3000)
+ 264: exp r6.x, r6.x
+ 265: mad r16.xyz, r18.xyzx, r6.xxxx, r16.xyzx
+ 266: max r18.xyz, cb1[6].xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 267: rsq r18.xyz, r18.xyzx
+ 268: div r18.xyz, l(1.0000, 1.0000, 1.0000, 1.0000), r18.xyzx
+ 269: mul r6.x, r5.w, r5.w
+ 270: mul r6.x, r6.x, r6.x
+ 271: add r0.z, -r0.z, l(1.0000)
+ 272: mad r5.w, r5.w, r6.x, r0.z
+ 273: max r5.w, r5.w, l(0.0000)
+ 274: mul r6.x, r5.w, r5.w
+ 275: mul r5.w, r5.w, r6.x
+ 276: min r5.w, r5.w, l(1.0000)
+ 277: add r19.xyz, r5.wwww, r18.xyzx
+ 278: min r19.xyz, r19.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+ 279: max r6.xw, cb1[89].yyyz, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 280: mul r9.xz, r6.xxwx, r6.xxwx
+ 281: mul r5.w, r6.x, r9.x
+ 282: min r5.w, r5.w, l(1.0000)
+ 283: add r20.xyz, -r19.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+ 284: mad r19.xyz, r5.wwww, r20.xyzx, r19.xyzx
+ 285: mul r16.xyz, r16.xyzx, r19.xyzx
+ 286: max r16.xyz, r16.xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 287: log r16.xyz, r16.xyzx
+ 288: mul r16.xyz, r16.xyzx, l(1.2000, 1.2000, 1.2000, 0.0000)
+ 289: exp r16.xyz, r16.xyzx
+ 290: mul r19.xyz, r7.wwww, cb1[9].xyzx
+ 291: min r6.x, r9.z, l(1.0000)
+ 292: mul r19.xyz, r6.xxxx, r19.xyzx
+ 293: mad r16.xyz, r19.xyzx, r6.yyyy, r16.xyzx
+ 294: mul r6.w, r6.y, r9.w
+ 295: mul r6.w, r6.w, cb1[81].w
+ 296: mul_sat r7.w, r15.z, l(10.0000)
+ 297: max r7.w, r7.w, l(0.0000)
+ 298: mul r8.w, r7.w, r7.w
+ 299: mul r8.w, r8.w, r8.w
+ 300: mad r7.w, -r7.w, r8.w, l(1.0000)
+ 301: mul r6.w, r6.w, r7.w
+ 302: add r9.xzw, -r8.xxyz, r16.xxyz
+ 303: mad r8.xyz, r6.wwww, r9.xzwx, r8.xyzx
+ 304: mad r4.w, -r4.w, r4.w, l(1.0000)
+ 305: mad r4.w, -r4.w, l(0.3000), l(1.0000)
+ 306: div r4.w, l(1.0000, 1.0000, 1.0000, 1.0000), r4.w
+ 307: mul_sat r4.w, r4.w, r15.y
+ 308: add r4.w, -r4.w, l(0.5354)
+ 309: max r4.w, r4.w, l(0)
+ 310: add r4.w, r4.w, r4.w
+ 311: max r4.w, r4.w, l(0.0000)
+ 312: mul r4.w, r4.w, r4.w
+ 313: min r4.w, r4.w, l(1.0000)
+ 314: max r6.w, r10.y, l(0.0000)
+ 315: rsq r7.w, r6.w
+ 316: div r7.w, l(1.0000, 1.0000, 1.0000, 1.0000), r7.w
+ 317: mad r7.w, -r7.w, cb1[82].y, l(1.0000)
+ 318: max r4.w, r4.w, l(0.0000)
+ 319: log r8.w, r4.w
+ 320: mul r7.w, r7.w, r8.w
+ 321: exp r7.w, r7.w
+ 322: min r7.w, r7.w, l(1.0000)
+ 323: add r7.w, -r7.w, l(1.0000)
+ 324: mad r7.w, -r7.w, r9.y, l(1.0000)
+ 325: mul r9.xy, r7.yyyy, l(0.0100, 0.0050, 0.0000, 0.0000)
+ 326: frc r9.xy, r9.xyxx
+ 327: mad r9.xy, r11.xyxx, l(0.7000, 0.7000, 0.0000, 0.0000), r9.xyxx
+ 328: sample_b(texture2d)(float,float,float,float) r7.y, r9.xyxx, t2.yxzw, s1, cb0[142].y
+ 329: mad r7.y, -r7.y, l(0.0100), l(0.0350)
+ 330: mad r9.xy, r7.yyyy, r0.xyxx, r10.zwzz
+ 331: sample_b(texture2d)(float,float,float,float) r9.x, r9.xyxx, t2.xyzw, s1, cb0[142].y
+ 332: mad r0.xy, r7.yyyy, r0.xyxx, r14.zwzz
+ 333: sample_b(texture2d)(float,float,float,float) r0.x, r0.xyxx, t2.yxzw, s1, cb0[142].y
+ 334: mad r0.x, r9.x, r0.x, -r1.z
+ 335: mul_sat r0.x, r0.x, l(3.3333)
+ 336: max r0.x, r0.x, l(0.0000)
+ 337: rsq r0.x, r0.x
+ 338: div r0.x, l(1.0000, 1.0000, 1.0000, 1.0000), r0.x
+ 339: mad r0.x, -r0.x, r0.w, l(1.0000)
+ 340: add r0.y, -r0.x, l(0.2000)
+ 341: mad r0.x, r4.x, r0.y, r0.x
+ 342: mad r0.x, r0.x, cb1[87].y, r5.z
+ 343: mul r0.x, r4.y, r0.x
+ 344: mul r0.x, r0.x, r7.w
+ 345: mul_sat r0.x, r0.x, cb1[82].w
+ 346: add r0.y, r14.y, l(-0.5000)
+ 347: mad_sat r0.x, r0.y, cb1[87].z, r0.x
+ 348: mad r0.xyw, r0.xxxx, r12.yzyw, cb1[22].xyxz
+ 349: mul r1.z, r4.z, r8.w
+ 350: exp r1.z, r1.z
+ 351: min r1.z, r1.z, l(1.0000)
+ 352: mul r1.z, r7.z, r1.z
+ 353: mul r1.z, r1.z, l(80.0000)
+ 354: mul r4.xyz, r17.xyzx, r1.zzzz
+ 355: log r1.z, r6.w
+ 356: mul r1.z, r1.z, l(0.3000)
+ 357: exp r1.z, r1.z
+ 358: mad r0.xyw, r4.xyxz, r1.zzzz, r0.xyxw
+ 359: mul r1.z, r4.w, r4.w
+ 360: mul r1.z, r1.z, r1.z
+ 361: mad r0.z, r4.w, r1.z, r0.z
+ 362: max r0.z, r0.z, l(0.0000)
+ 363: mul r1.z, r0.z, r0.z
+ 364: mul r0.z, r0.z, r1.z
+ 365: min r0.z, r0.z, l(1.0000)
+ 366: add r4.xyz, r0.zzzz, r18.xyzx
+ 367: min r4.xyz, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+ 368: add r7.yzw, -r4.xxyz, l(0.0000, 1.0000, 1.0000, 1.0000)
+ 369: mad r4.xyz, r5.wwww, r7.yzwy, r4.xyzx
+ 370: mul r0.xyz, r0.xywx, r4.xyzx
+ 371: max r0.xyz, r0.xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 372: log r0.xyz, r0.xyzx
+ 373: mul r0.xyz, r0.xyzx, l(1.2000, 1.2000, 1.2000, 0.0000)
+ 374: exp r0.xyz, r0.xyzx
+ 375: mul r4.xyz, r13.yyyy, cb1[9].xyzx
+ 376: mul r4.xyz, r6.xxxx, r4.xyzx
+ 377: mad r0.xyz, r4.xyzx, r6.yyyy, r0.xyzx
+ 378: mul r0.w, r6.y, r13.x
+ 379: mul r0.w, r0.w, cb1[81].w
+ 380: add r0.xyz, -r8.xyzx, r0.xyzx
+ 381: mad r0.xyz, r0.wwww, r0.xyzx, r8.xyzx
+ 382: mad r0.w, r2.w, cb1[86].w, r7.x
+ 383: mad r1.z, r0.w, l(1.8000), l(2.3000)
+ 384: mul r0.xyz, r0.xyzx, r1.zzzz
+ 385: add r1.z, r0.w, cb1[89].w
+ 386: max r1.z, r1.z, l(0.0000)
+ 387: mul r1.z, r1.z, r1.z
+ 388: min r1.z, r1.z, l(1.0000)
+ 389: mad r4.xyz, r1.zzzz, l(0.3858, 0.2759, 0.1350, 0.0000), l(0.6142, 0.7241, 0.8650, 0.0000)
+ 390: mul r1.z, cb0[141].z, cb1[90].x
+ 391: mul r13.w, r1.z, l(0.0100)
+ 392: mul r5.zw, v2.xxxy, l(0.0000, 0.0000, 0.6000, 1.0000)
+ 393: mad r6.xy, v2.xyxx, l(1.5000, 1.5000, 0.0000, 0.0000), r13.zwzz
+ 394: sample_b(texture2d)(float,float,float,float) r1.z, r6.xyxx, t4.xzyw, s3, cb0[142].y
+ 395: mul r6.xyw, r1.zzzz, cb1[24].xyxz
+ 396: max r6.xyw, r6.xyxw, l(0.0000, 0.0000, 0.0000, 0.0000)
+ 397: mul r6.xyw, r6.xyxw, r6.xyxw
+ 398: mul r6.xyw, r6.xyxw, l(5.0000, 5.0000, 0.0000, 5.0000)
+ 399: mul r1.z, r15.w, r15.w
+ 400: mul r1.z, r1.z, r15.w
+ 401: mul r6.xyw, r1.zzzz, r6.xyxw
+ 402: min r2.w, r6.z, l(1.0000)
+ 403: mul r6.xyz, r2.wwww, r6.xywx
+ 404: mul r6.xyz, r6.xyzx, cb1[90].yyyy
+ 405: mad_sat r2.w, -abs(r1.w), cb1[91].w, l(1.0000)
+ 406: max r2.w, r2.w, l(0.0000)
+ 407: mul r4.w, r2.w, r2.w
+ 408: mul r2.w, r2.w, r4.w
+ 409: mul r2.w, r2.w, cb1[92].x
+ 410: mul r2.w, r2.w, cb1[86].y
+ 411: mul r7.xyz, r2.wwww, cb1[26].xyzx
+ 412: mul r7.xyz, r7.xyzx, cb1[86].xxxx
+ 413: mad r1.w, -abs(r1.w), cb1[92].z, l(1.0000)
+ 414: mul_sat r1.w, r1.w, l(2.5000)
+ 415: add r1.w, -r1.w, l(1.0000)
+ 416: mul r2.w, cb0[141].z, cb1[92].w
+ 417: mad r8.xy, r2.wwww, l(0.0040, 0.0006, 0.0000, 0.0000), r5.zwzz
+ 418: sample_b(texture2d)(float,float,float,float) r4.w, r8.xyxx, t5.xywz, s4, cb0[142].y
+ 419: mul r8.xy, v2.xyxx, l(1.0000, 2.0000, 0.0000, 0.0000)
+ 420: dp2 r9.x, r8.xyxx, l(0.5878, -0.8090, 0.0000, 0.0000)
+ 421: dp2 r9.y, r8.xyxx, l(0.8090, 0.5878, 0.0000, 0.0000)
+ 422: mad r8.xy, r2.wwww, l(-0.0040, -0.0004, 0.0000, 0.0000), r9.xyxx
+ 423: sample_b(texture2d)(float,float,float,float) r6.w, r8.xyxx, t5.xywz, s4, cb0[142].y
+ 424: add r6.w, -r4.w, r6.w
+ 425: mad r4.w, r6.w, l(0.5000), r4.w
+ 426: max r4.w, r4.w, l(0.0000)
+ 427: log r4.w, r4.w
+ 428: mul r4.w, r4.w, l(5.4775)
+ 429: exp r4.w, r4.w
+ 430: mul r4.w, r4.w, l(10.4861)
+ 431: mul r8.xy, r2.wwww, l(0.0200, -0.0145, 0.0000, 0.0000)
+ 432: sincos r8.x, r10.x, r8.x
+ 433: mov r11.x, -r8.x
+ 434: mov r11.y, r10.x
+ 435: dp2 r10.x, r11.yxyy, r5.xyxx
+ 436: mov r11.z, r8.x
+ 437: dp2 r10.y, r11.zyzz, r5.xyxx
+ 438: add r8.xz, r10.xxyx, l(0.5000, 0.0000, 0.5000, 0.0000)
+ 439: sample_b(texture2d)(float,float,float,float) r6.w, r8.xzxx, t6.yzwx, s5, cb0[142].y
+ 440: sincos r8.x, r10.x, r8.y
+ 441: mov r11.x, -r8.x
+ 442: mov r11.y, r10.x
+ 443: dp2 r10.x, r11.yxyy, r5.xyxx
+ 444: mov r11.z, r8.x
+ 445: dp2 r10.y, r11.zyzz, r5.xyxx
+ 446: add r5.xy, r10.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000)
+ 447: sample_b(texture2d)(float,float,float,float) r5.x, r5.xyxx, t6.xyzw, s5, cb0[142].y
+ 448: add r5.x, -r6.w, r5.x
+ 449: mad r5.x, r5.x, l(0.5000), r6.w
+ 450: add r5.y, r5.x, l(-0.5000)
+ 451: mad r8.xy, r5.yyyy, l(0.0050, 0.0050, 0.0000, 0.0000), v2.zwzz
+ 452: div r8.zw, r8.xxxy, cb1[28].xxxy
+ 453: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 454: add r8.zw, r8.zzzw, -cb1[29].xxxy
+ 455: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 456: sample_b(texture2d)(float,float,float,float) r5.y, r8.zwzz, t5.xyzw, s4, cb0[142].y
+ 457: div r8.zw, r8.xxxy, cb1[31].xxxy
+ 458: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 459: add r8.zw, r8.zzzw, -cb1[32].xxxy
+ 460: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 461: sample_b(texture2d)(float,float,float,float) r6.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 462: add r6.w, -r5.y, r6.w
+ 463: mad r5.y, r6.w, l(0.5000), r5.y
+ 464: div r8.zw, r8.xxxy, cb1[34].xxxy
+ 465: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 466: add r8.zw, r8.zzzw, -cb1[35].xxxy
+ 467: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 468: sample_b(texture2d)(float,float,float,float) r6.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 469: div r8.zw, r8.xxxy, cb1[37].xxxy
+ 470: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 471: add r8.zw, r8.zzzw, -cb1[38].xxxy
+ 472: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 473: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 474: add r7.w, -r6.w, r7.w
+ 475: mad r6.w, r7.w, l(0.5000), r6.w
+ 476: add r6.w, -r5.y, r6.w
+ 477: mad r5.y, r6.w, l(0.5000), r5.y
+ 478: div r8.zw, r8.xxxy, cb1[40].xxxy
+ 479: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 480: add r8.zw, r8.zzzw, -cb1[41].xxxy
+ 481: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 482: sample_b(texture2d)(float,float,float,float) r6.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 483: div r8.zw, r8.xxxy, cb1[43].xxxy
+ 484: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 485: add r8.zw, r8.zzzw, -cb1[44].xxxy
+ 486: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 487: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 488: add r7.w, -r6.w, r7.w
+ 489: mad r6.w, r7.w, l(0.5000), r6.w
+ 490: div r8.zw, r8.xxxy, cb1[46].xxxy
+ 491: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 492: add r8.zw, r8.zzzw, -cb1[47].xxxy
+ 493: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 494: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 495: div r8.zw, r8.xxxy, cb1[49].xxxy
+ 496: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 497: add r8.zw, r8.zzzw, -cb1[50].xxxy
+ 498: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0075, 0.0030), r8.zzzw
+ 499: sample_b(texture2d)(float,float,float,float) r8.z, r8.zwzz, t5.xzyw, s4, cb0[142].y
+ 500: add r8.z, -r7.w, r8.z
+ 501: mad r7.w, r8.z, l(0.5000), r7.w
+ 502: add r7.w, -r6.w, r7.w
+ 503: mad r6.w, r7.w, l(0.5000), r6.w
+ 504: add r6.w, -r5.y, r6.w
+ 505: mad r5.y, r6.w, l(0.5000), r5.y
+ 506: max r5.y, r5.y, l(0.0000)
+ 507: log r5.y, r5.y
+ 508: mul r5.y, r5.y, cb1[97].z
+ 509: exp r5.y, r5.y
+ 510: div r8.zw, r8.xxxy, cb1[52].xxxy
+ 511: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 512: add r8.zw, r8.zzzw, -cb1[53].xxxy
+ 513: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 514: sample_b(texture2d)(float,float,float,float) r6.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 515: div r8.zw, r8.xxxy, cb1[55].xxxy
+ 516: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 517: add r8.zw, r8.zzzw, -cb1[56].xxxy
+ 518: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 519: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 520: add r7.w, -r6.w, r7.w
+ 521: mad r6.w, r7.w, l(0.5000), r6.w
+ 522: div r8.zw, r8.xxxy, cb1[58].xxxy
+ 523: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 524: add r8.zw, r8.zzzw, -cb1[59].xxxy
+ 525: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 526: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 527: div r8.zw, r8.xxxy, cb1[61].xxxy
+ 528: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 529: add r8.zw, r8.zzzw, -cb1[62].xxxy
+ 530: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 531: sample_b(texture2d)(float,float,float,float) r8.z, r8.zwzz, t5.xzyw, s4, cb0[142].y
+ 532: add r8.z, -r7.w, r8.z
+ 533: mad r7.w, r8.z, l(0.5000), r7.w
+ 534: add r7.w, -r6.w, r7.w
+ 535: mad r6.w, r7.w, l(0.5000), r6.w
+ 536: div r8.zw, r8.xxxy, cb1[64].xxxy
+ 537: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 538: add r8.zw, r8.zzzw, -cb1[65].xxxy
+ 539: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 540: sample_b(texture2d)(float,float,float,float) r7.w, r8.zwzz, t5.xzwy, s4, cb0[142].y
+ 541: div r8.zw, r8.xxxy, cb1[67].xxxy
+ 542: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 543: add r8.zw, r8.zzzw, -cb1[68].xxxy
+ 544: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 545: sample_b(texture2d)(float,float,float,float) r8.z, r8.zwzz, t5.xzyw, s4, cb0[142].y
+ 546: add r8.z, -r7.w, r8.z
+ 547: mad r7.w, r8.z, l(0.5000), r7.w
+ 548: div r8.zw, r8.xxxy, cb1[70].xxxy
+ 549: add r8.zw, r8.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
+ 550: add r8.zw, r8.zzzw, -cb1[71].xxxy
+ 551: mad r8.zw, r2.wwww, l(0.0000, 0.0000, 0.0180, -0.0100), r8.zzzw
+ 552: sample_b(texture2d)(float,float,float,float) r8.z, r8.zwzz, t5.xzyw, s4, cb0[142].y
+ 553: div r8.xy, r8.xyxx, cb1[73].xyxx
+ 554: add r8.xy, r8.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000)
+ 555: add r8.xy, r8.xyxx, -cb1[74].xyxx
+ 556: mad r8.xy, r2.wwww, l(0.0180, -0.0100, 0.0000, 0.0000), r8.xyxx
+ 557: sample_b(texture2d)(float,float,float,float) r8.x, r8.xyxx, t5.yxzw, s4, cb0[142].y
+ 558: add r8.x, -r8.z, r8.x
+ 559: mad r8.x, r8.x, l(0.5000), r8.z
+ 560: add r8.x, -r7.w, r8.x
+ 561: mad r7.w, r8.x, l(0.5000), r7.w
+ 562: add r7.w, -r6.w, r7.w
+ 563: mad r6.w, r7.w, l(0.5000), r6.w
+ 564: mad r5.y, -r5.y, r6.w, l(1.0000)
+ 565: mad r5.x, r5.x, cb1[101].x, r5.y
+ 566: mad r3.w, -r3.w, l(1.4286), l(1.0000)
+ 567: mul r5.y, r3.w, l(7.0000)
+ 568: mul r5.y, r5.y, r5.y
+ 569: mul r5.y, r5.y, l(1.4427)
+ 570: exp r5.y, r5.y
+ 571: div r5.y, l(1.0000, 1.0000, 1.0000, 1.0000), r5.y
+ 572: lt r6.w, l(0.0000), abs(r3.w)
+ 573: ge r3.w, r3.w, l(0)
+ 574: add r5.y, -r5.y, l(1.0000)
+ 575: and r3.w, r3.w, r5.y
+ 576: and r3.w, r3.w, r6.w
+ 577: mul r3.w, r3.w, r5.x
+ 578: max r3.w, r3.w, l(0.0000)
+ 579: log r3.w, r3.w
+ 580: mul r3.w, r3.w, cb1[101].y
+ 581: exp r3.w, r3.w
+ 582: mul r3.w, r3.w, cb1[101].z
+ 583: mul r3.w, r3.w, r4.w
+ 584: max r3.w, r3.w, l(0.0000)
+ 585: log r3.w, r3.w
+ 586: mul r3.w, r3.w, l(1.2000)
+ 587: exp r3.w, r3.w
+ 588: mul r3.w, r3.w, l(3.7643)
+ 589: mad r2.w, r2.w, l(2.0000), l(9.3888)
+ 590: mad r5.xy, r2.wwww, l(0.0050, 0.0010, 0.0000, 0.0000), r5.zwzz
+ 591: sample_b(texture2d)(float,float,float,float) r4.w, r5.xyxx, t5.xywz, s4, cb0[142].y
+ 592: mad r5.xy, r2.wwww, l(-0.0040, -0.0010, 0.0000, 0.0000), r9.xyxx
+ 593: sample_b(texture2d)(float,float,float,float) r2.w, r5.xyxx, t5.xywz, s4, cb0[142].y
+ 594: mul r2.w, r2.w, r4.w
+ 595: max r2.w, r2.w, l(0.0000)
+ 596: log r2.w, r2.w
+ 597: mul r2.w, r2.w, l(8.4931)
+ 598: exp r2.w, r2.w
+ 599: mul r2.w, r2.w, l(183.0536)
+ 600: max r2.w, r2.w, l(0.0000)
+ 601: log r2.w, r2.w
+ 602: mul r2.w, r2.w, l(0.2052)
+ 603: exp r2.w, r2.w
+ 604: min r5.x, r2.w, l(0.9900)
+ 605: mov r5.y, l(0.5000)
+ 606: sample_b(texture2d)(float,float,float,float) r5.xyz, r5.xyxx, t7.xyzw, s6, cb0[142].y
+ 607: mul r5.xyz, r3.wwww, r5.xyzx
+ 608: mul r5.xyz, r5.xyzx, cb1[101].wwww
+ 609: lt r2.w, l(0.0000), abs(cb1[101].w)
+ 610: ge r3.w, cb1[101].w, l(0)
+ 611: and r5.xyz, r5.xyzx, r3.wwww
+ 612: and r5.xyz, r2.wwww, r5.xyzx
+ 613: mad r2.w, -r12.x, r14.x, l(1.0000)
+ 614: mad r2.w, r2.w, l(0.0100), r15.x
+ 615: mul r5.xyz, r2.wwww, r5.xyzx
+ 616: mad r5.xyz, r6.xyzx, r1.wwww, r5.xyzx
+ 617: min r1.z, r1.z, l(1.0000)
+ 618: mul r6.xyz, r1.zzzz, r7.xyzx
+ 619: mad r5.xyz, r6.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), r5.xyzx
+ 620: mad r0.xyz, r0.xyzx, r4.xyzx, r5.xyzx
+ 621: mul r4.xyz, r0.xyzx, cb1[102].xxxx
+ 622: dp3 r1.z, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+ 623: add_sat r0.w, -r0.w, l(1.0000)
+ 624: max r0.w, r0.w, l(0.0000)
+ 625: mul r0.w, r0.w, r0.w
+ 626: mad r0.w, r0.w, l(0.2500), cb1[102].w
+ 627: max r1.w, cb1[103].x, l(0.0000)
+ 628: log r1.w, r1.w
+ 629: mul r1.w, r1.w, l(16.0000)
+ 630: exp r1.w, r1.w
+ 631: min r1.w, r1.w, l(0.5000)
+ 632: add r0.w, r0.w, r1.w
+ 633: mad r0.xyz, -r0.xyzx, cb1[102].xxxx, r1.zzzz
+ 634: mad r0.xyz, r0.wwww, r0.xyzx, r4.xyzx
+ 635: add r4.xyz, -r0.xyzx, cb1[75].xyzx
+ 636: mad r0.xyz, cb1[103].yyyy, r4.xyzx, r0.xyzx
+ 637: mad r0.w, r15.x, l(300000.0000), r1.y
+ 638: div r0.w, r1.x, r0.w
+ 639: min r0.w, r0.w, v5.z
+ 640: max r0.xyz, r0.xyzx, l(0, 0, 0, 0)
+ 641: lt r1.z, l(0), cb0[139].x
+ 642: if_nz r1.z
+ 643:   add r2.xyz, r2.xyzx, -cb0[70].xyzx
+ 644:   mad r1.x, -r0.w, r1.y, r1.x
+ 645:   div r1.x, r1.x, r0.w
+ 646:   mad r1.xyz, r3.xyzx, r1.xxxx, r2.xyzx
+ 647:   imad r2.xy, v4.xxxx, l(35, 35, 0, 0), l(5, 19, 0, 0)
+ 648:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r2.xzw, r2.x, l(0), t0.xxyz
+ 649:   add r2.xzw, r1.xxyz, -r2.xxzw
+ 650:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r3.xyz, r2.y, l(0), t0.xyzx
+ 651:   add r3.xyz, r3.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+ 652:   lt r2.xyz, r3.xyzx, abs(r2.xzwx)
+ 653:   or r1.w, r2.y, r2.x
+ 654:   or r1.w, r2.z, r1.w
+ 655:   dp3 r1.x, r1.xyzx, l(0.5770, 0.5770, 0.5770, 0.0000)
+ 656:   mul r1.x, r1.x, l(0.0020)
+ 657:   frc r1.x, r1.x
+ 658:   lt r1.x, l(0.5000), r1.x
+ 659:   movc r1.xyz, r1.xxxx, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
+ 660:   movc r0.xyz, r1.wwww, r1.xyzx, r0.xyzx
+ 661: endif
+ 662: mul o0.xyz, r0.xyzx, cb0[134].yyyy
+ 663: mov o0.w, l(0)
+ 664: mov o1.xyzw, l(0, 0, 0, 0)
+ 665: mov o2.xyzw, l(0, 0, 0, 0)
+ 666: mov o3.xyzw, l(0, 0, 0, 0)
+ 667: mov o4.xyzw, l(0, 0, 0, 0)
+ 668: mov oDepthLessEqual, r0.w
+ 669: ret
