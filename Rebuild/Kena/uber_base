@@ -22,10 +22,10 @@ ps_5_0
       dcl_output o0.xyzw
       dcl_temps 13
 
-   0: sample_l(texture2d)(float,float,float,float) r0.xyz, v0.xyxx, t2.xyzw, s0, l(0)           -> get GBuffer 
-   1: sample_l(texture2d)(float,float,float,float) r1.xyzw, v0.xyxx, t3.xyzw, s0, l(0)
-   2: sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s0, l(0)
-   3: sample_l(texture2d)(float,float,float,float) r3.xyz, v0.xyxx, t5.xyzw, s0, l(0)
+   0: sample_l(texture2d)(float,float,float,float) r0.xyz, v0.xyxx, t2.xyzw, s0, l(0)           -> WorldNormal 
+   1: sample_l(texture2d)(float,float,float,float) r1.xyzw, v0.xyxx, t3.xyzw, s0, l(0)          -> Comp_M_D_R_F 
+   2: sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s0, l(0)          -> Albedo 
+   3: sample_l(texture2d)(float,float,float,float) r3.xyz, v0.xyxx, t5.xyzw, s0, l(0)           -> CustomData 
 
    4: mul r4.xy, v0.xyxx, cb1[131].xyxx
    5: ftou r4.xy, r4.xyxx                                         -> uint2 PixelPos = uint2(UVSceneColor * View.BufferSizeAndInvSize.xy); 
@@ -110,46 +110,72 @@ ps_5_0
   63:   add r6.x, cb0[28].w, l(-1.0000)
   64:   add r3.w, -r3.w, r6.x                                     -> return MipCount - 1 - Level;
                                                                   -> half ComputeCubemapMipFromRoughness( half Roughness, half MipCount ) 
-  65:   sample_l(texturecube)(float,float,float,float) r11.xyz, r0.xyzx, t0.xyzw, s1, r3.w
-  66:   mov r1.y, r1.z
+                                          -> float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+
+  65:   sample_l(texturecube)(float,float,float,float) r11.xyz, r0.xyzx, t0.xyzw, s1, r3.w 
+                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
+
+  66:   mov r1.y, r1.z                                            -> r1.z == GBuffer.Roughness
   67:   sample_l(texture2d)(float,float,float,float) r6.yz, r1.xyxx, t1.zxyw, s2, l(0)
-  68:   add r1.y, -r3.x, l(1.0000)
+                                          -> float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
+
+  68:   add r1.y, -r3.x, l(1.0000)                                -> 1 - ClearCoat where ClearCoat == GBuffer.CustomData.x 
   69:   mul r1.y, r1.y, r6.z
   70:   mad r12.xyz, r5.yzwy, r6.yyyy, r1.yyyy
-  71:   mul r11.xyz, r11.xyzx, r12.xyzx
-  72:   log r1.y, r3.y
+  71:   mul r11.xyz, r11.xyzx, r12.xyzx   -> SpecularContribution += SampleColor * ( GBuffer.SpecularColor * AB.x + AB.y * (1 - ClearCoat) );
+
+  72:   log r1.y, r3.y                                            -> r3.y = ClearCoatRoughness = GBuffer.CustomData.y 
   73:   mad r1.y, -r1.y, l(1.1500), l(3.0000)
-  74:   add r1.y, -r1.y, r6.x
+  74:   add r1.y, -r1.y, r6.x             -> float Mip = ComputeCubemapMipFromRoughness( ClearCoatRoughness, AmbientCubemapMipAdjust.w );
+
   75:   sample_l(texturecube)(float,float,float,float) r6.xyz, r9.xyzx, t0.xyzw, s1, r1.y
-  76:   add r1.y, -r1.x, l(1.0000)
+                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R0, Mip ).rgb;
+
+  // F_Schlick                                         
+  76:   add r1.y, -r1.x, l(1.0000) 
   77:   mul r3.w, r1.y, r1.y
   78:   mul r3.w, r3.w, r3.w
-  79:   mul r8.w, r1.y, r3.w
-  80:   mad r1.y, -r1.y, r3.w, l(1.0000)
-  81:   mad r1.y, r1.y, l(0.0400), r8.w
-  82:   mul r3.w, r3.x, r1.y
-  83:   mad r1.y, -r1.y, r3.x, l(1.0000)
-  84:   mul r2.xyz, r1.yyyy, r2.xyzx
-  85:   mul r6.xyz, r3.wwww, r6.xyzx
-  86:   mad r6.xyz, r11.xyzx, r1.yyyy, r6.xyzx
-  87: else
+  79:   mul r8.w, r1.y, r3.w                                      -> float Fc = pow( 1 - NoV, 5 ); 
+  80:   mad r1.y, -r1.y, r3.w, l(1.0000)                          -> 1 - Fc 
+  81:   mad r1.y, r1.y, l(0.0400), r8.w                           -> float F = Fc + (1 - Fc) * F0; 
+  82:   mul r3.w, r3.x, r1.y                                      -> F *= ClearCoat;
+
+  83:   mad r1.y, -r1.y, r3.x, l(1.0000)                          -> float LayerAttenuation = (1 - F);
+
+  84:   mul r2.xyz, r1.yyyy, r2.xyzx                              -> NonSpecularContribution *= LayerAttenuation;
+  85:   mul r6.xyz, r3.wwww, r6.xyzx                              -> SampleColor * F
+  86:   mad r6.xyz, r11.xyzx, r1.yyyy, r6.xyzx                    -> SpecularContribution = SpecularContribution * LayerAttenuation + SampleColor * F; 
+
+  87: else                                                        -> GBuffer.ShadingModelID != SHADINGMODELID_CLEAR_COAT 
   88:   log r1.y, r1.z
   89:   mad r1.y, -r1.y, l(1.1500), l(3.0000)
   90:   add r3.w, cb0[28].w, l(-1.0000)
-  91:   add r1.y, -r1.y, r3.w
+  91:   add r1.y, -r1.y, r3.w             -> float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+
   92:   sample_l(texturecube)(float,float,float,float) r0.xyz, r0.xyzx, t0.xyzw, s1, r1.y
+                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
+  // EnvBRDF                  
   93:   sample_l(texture2d)(float,float,float,float) r1.xy, r1.xzxx, t1.xyzw, s2, l(0)
+                                          float2 AB = Texture2DSampleLevel( PreIntegratedGF, PreIntegratedGFSampler, float2( NoV, Roughness ), 0 ).rg; 
+
   94:   mul_sat r3.w, r5.z, l(50.0000)
   95:   mul r1.y, r1.y, r3.w
-  96:   mad r5.yzw, r5.yyzw, r1.xxxx, r1.yyyy
-  97:   mul r6.xyz, r0.xyzx, r5.yzwy
+  96:   mad r5.yzw, r5.yyzw, r1.xxxx, r1.yyyy                     -> float3 GF = SpecularColor * AB.x + saturate( 50.0 * SpecularColor.g ) * AB.y;
+
+  97:   mul r6.xyz, r0.xyzx, r5.yzwy      -> SpecularContribution += SampleColor * EnvBRDF( GBuffer.SpecularColor, GBuffer.Roughness, NoV );
   98: endif
-  99: if_nz r6.w
- 100:   mad r0.xyz, -r4.xyzx, r0.wwww, -r8.xyzx
+
+
+  99: if_nz r6.w                                                  -> if( GBuffer.ShadingModelID == SHADINGMODELID_HAIR )
+
+ 100:   mad r0.xyz, -r4.xyzx, r0.wwww, -r8.xyzx                   -> V - WorldNormal * dot(N, V)
  101:   dp3 r1.x, r0.xyzx, r0.xyzx
  102:   rsq r1.y, r1.x
- 103:   mul r5.yzw, r0.xxyz, r1.yyyy
+ 103:   mul r5.yzw, r0.xxyz, r1.yyyy                              -> float3 FakeNormal = normalize( V - N * dot(V,N) );
+
  104:   sample_l(texturecube)(float,float,float,float) r9.xyz, r5.yzwy, t0.xyzw, s1, cb0[28].z
+                              -> SpecularContribution = TextureCubeSampleLevel(AmbientCubemap, AmbientCubemapSampler, FakeNormal, AbsoluteDiffuseMip).rgb;
+
  105:   max r1.y, r1.z, l(0.0039)
  106:   min r1.y, r1.y, l(1.0000)
  107:   dp3 r1.z, -r8.xyzx, r5.yzwy
@@ -249,32 +275,39 @@ ps_5_0
  201:   sqrt r1.xyz, r7.xyzx
  202:   mad r0.xyz, r1.xyzx, r0.wwww, r0.xyzx
  203:   min r0.xyz, -r0.xyzx, l(0, 0, 0, 0)
- 204:   mul r0.xyz, -r0.xyzx, r9.xyzx
- 205:   mul r6.xyz, r0.xyzx, l(3.1416, 3.1416, 3.1416, 0.0000)
- 206:   mov r2.xyz, l(0, 0, 0, 0)
+ 204:   mul r0.xyz, -r0.xyzx, r9.xyzx                             -> SpecularContribution * HairShading(~) 
+ 205:   mul r6.xyz, r0.xyzx, l(3.1416, 3.1416, 3.1416, 0.0000)    -> SpecularContribution *= PI * HairShading(~) 
+ 206:   mov r2.xyz, l(0, 0, 0, 0)                                 -> NonSpecularContribution = 0; 
  207: endif
+
+
  208: sample_l(texture2d)(float,float,float,float) r0.x, v0.xyxx, t6.xyzw, s3, l(0)
- 209: mul r0.x, r0.x, r2.w
+                                                -> float SampledAO = * AmbientOcclusionTexture.SampleLevel(AmbientOcclusionSampler, BufferUV, 0).r;
+
+ 209: mul r0.x, r0.x, r2.w                                        -> float AmbientOcclusion = GBuffer.GBufferAO * SampledAO 
+
  210: ieq r0.yz, r5.xxxx, l(0, 2, 3, 0)
  211: or r0.y, r0.z, r0.y
- 212: if_nz r0.y
- 213:   mul r0.yzw, r3.xxyz, r3.xxyz
+ 212: if_nz r0.y        -> if(GBuffer.ShadingModelID == SHADINGMODELID_SUBSURFACE || GBuffer.ShadingModelID == SHADINGMODELID_PREINTEGRATED_SKIN)
+
+ 213:   mul r0.yzw, r3.xxyz, r3.xxyz                              -> float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
  214:   mul r1.xyz, r0.yzwy, r10.xyzx
- 215:   mad r2.xyz, r1.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), r2.xyzx
+ 215:   mad r2.xyz, r1.xyzx, l(0.5, 0.5, 0.5, 0), r2.xyzx         -> update NonSpecularContribution
  216:   add r1.x, cb0[28].z, l(-2.5000)
  217:   sample_l(texturecube)(float,float,float,float) r1.xyz, r8.xyzx, t0.xyzw, s1, r1.x
  218:   mul r0.yzw, r0.yyzw, r1.xxyz
  219:   mul r1.x, r0.x, l(0.5000)
- 220:   mad r6.xyz, r0.yzwy, r1.xxxx, r6.xyzx
+ 220:   mad r6.xyz, r0.yzwy, r1.xxxx, r6.xyzx                     -> update SpecularContribution 
  221: endif
  
- 222: add r0.yzw, r2.xxyz, r6.xxyz
- 223: mul r1.xyz, r0.yzwy, cb0[27].xyzx
- 224: eq r0.y, cb1[200].z, l(0)
- 225: mul r2.xyz, r2.xyzx, cb0[27].xyzx
- 226: dp3 r0.z, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
- 227: and r0.z, r0.z, r0.y
- 228: and r0.z, r0.z, r4.w
+ 222: add r0.yzw, r2.xxyz, r6.xxyz                                -> NonSpecularContribution + SpecularContribution
+ 223: mul r1.xyz, r0.yzwy, cb0[27].xyzx                           -> cb0[27] = [0.14722, 0.17128, 0.2, 0.2] == AmbientCubemapColor.rgb == CommonMultiplier
+                                                                  -> In.TotalLight += (DiffuseTotalLight + SpecularTotalLight=0) * CommonMultiplier; 
+ 224: eq r0.y, cb1[200].z, l(0)                                   -> View.bCheckerboardSubsurfaceProfileRendering=1 == 0  ->  false  
+ 225: mul r2.xyz, r2.xyzx, cb0[27].xyzx                           -> ScatterableLight * CommonMultiplier
+ 226: dp3 r0.z, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)        -> Luminance(ScatterableLight * CommonMultiplier)
+ 227: and r0.z, r0.z, r0.y                                        -> if branch for View.bCheckerboardSubsurfaceProfileRendering == 0 ? 
+ 228: and r0.z, r0.z, r4.w                                        -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) ... 
  229: and r1.w, r0.z, r0.y
  230: mul o0.xyzw, r0.xxxx, r1.xyzw
  231: ret
