@@ -1,4 +1,6 @@
 Base 
+AmbientCubemapComposite.usf -> MainPS 
+
 Shader hash 0f56e293-5a119f49-60429c36-240b0c00
 
 ps_5_0
@@ -9,7 +11,7 @@ ps_5_0
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
       dcl_sampler s3, mode_default
-      dcl_resource_texturecube (float,float,float,float) t0       未知，白色
+      dcl_resource_texturecube (float,float,float,float) t0       AmbientCubemap -> 主体是白色的texcube 
       dcl_resource_texture2d (float,float,float,float) t1         LUT
       dcl_resource_texture2d (float,float,float,float) t2         WorldNormal
       dcl_resource_texture2d (float,float,float,float) t3         Comp_M_D_R_F
@@ -20,71 +22,94 @@ ps_5_0
       dcl_output o0.xyzw
       dcl_temps 13
 
-   0: sample_l(texture2d)(float,float,float,float) r0.xyz, v0.xyxx, t2.xyzw, s0, l(0)           
+   0: sample_l(texture2d)(float,float,float,float) r0.xyz, v0.xyxx, t2.xyzw, s0, l(0)           -> get GBuffer 
    1: sample_l(texture2d)(float,float,float,float) r1.xyzw, v0.xyxx, t3.xyzw, s0, l(0)
    2: sample_l(texture2d)(float,float,float,float) r2.xyzw, v0.xyxx, t4.xyzw, s0, l(0)
    3: sample_l(texture2d)(float,float,float,float) r3.xyz, v0.xyxx, t5.xyzw, s0, l(0)
+
    4: mul r4.xy, v0.xyxx, cb1[131].xyxx
-   5: ftou r4.xy, r4.xyxx
-   6: ftou r0.w, cb1[151].x
+   5: ftou r4.xy, r4.xyxx                                         -> uint2 PixelPos = uint2(UVSceneColor * View.BufferSizeAndInvSize.xy); 
+
+   6: ftou r0.w, cb1[151].x                                       -> uint TemporalAASampleIndex = View.TemporalAAParams.x; 
    7: iadd r3.w, r4.y, r4.x
    8: iadd r0.w, r0.w, r3.w
-   9: and r0.w, r0.w, l(1)
+   9: and r0.w, r0.w, l(1)                                        -> return (PixelPos.x + PixelPos.y + TemporalAASampleIndex) % 2; 
+                                                                  -> CheckerFromSceneColorUV(UV)
+
+
   10: mad r0.xyz, r0.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)
   11: dp3 r3.w, r0.xyzx, r0.xyzx
   12: rsq r3.w, r3.w
-  13: mul r4.xyz, r0.xyzx, r3.wwww
-  14: mul r5.xy, r1.wyww, l(255.0000, 0.0800, 0.0000, 0.0000)
+  13: mul r4.xyz, r0.xyzx, r3.wwww                                -> WorldNormal 
+
+  14: mul r5.xy, r1.wyww, l(255.0000, 0.0800, 0.0000, 0.0000)     -> Decode Flag 
   15: round_ne r1.w, r5.x
   16: ftou r1.w, r1.w
   17: and r5.xz, r1.wwww, l(15, 0, 16, 0)
   18: movc r3.xyz, r5.zzzz, l(0, 0, 0, 0), r3.xyzx
-  19: ieq r6.xyzw, r5.xxxx, l(9, 5, 4, 7)
-  20: movc r1.w, r6.x, l(0), r1.x
+  19: ieq r6.xyzw, r5.xxxx, l(9, 5, 4, 7)                         -> r6.x = eye, r6.y = subsurface_profile, r6.z = clear_coat, r6.w = hair 
+  20: movc r1.w, r6.x, l(0), r1.x                                 -> 和 Metalic 有关 
   21: mad r7.xyz, -r1.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r2.xyzx
   22: mad r7.xyz, r1.wwww, r7.xyzx, r5.yyyy
-  23: or r4.w, r6.x, r6.y
-  24: lt r5.y, l(0), cb1[155].x
-  25: lt r5.z, l(0), cb1[200].z
-  26: and r5.y, r5.z, r5.y
+  23: or r4.w, r6.x, r6.y                                         -> UseSubsurfaceProfile(GBuffer.ShadingModelID) -> Skin or Eye 
+  24: lt r5.y, l(0), cb1[155].x                                   -> View.bSubsurfacePostprocessEnabled=1 > 0                 -> true
+  25: lt r5.z, l(0), cb1[200].z                                   -> View.bCheckerboardSubsurfaceProfileRendering=1 > 0       -> true
+  26: and r5.y, r5.z, r5.y                                        -> const bool bCheckerboardRequired = both (~)
+
   27: ne r5.z, l(0, 0, 0, 0), cb1[155].x
-  28: movc r8.xyz, r5.zzzz, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx
-  29: movc r5.zw, r0.wwww, l(0.0000, 0.0000, 1.0000, 0.0000), l(0.0000, 0.0000, 0.0000, 1.0000)
-  30: mul r9.xyz, r5.wwww, r7.xyzx
-  31: mul r9.w, r1.y, r5.w
-  32: movc r8.xyz, r5.yyyy, r5.zzzz, r8.xyzx
-  33: mov r7.w, r1.y
-  34: movc r9.xyzw, r5.yyyy, r9.xyzw, r7.xyzw
-  35: movc r5.yzw, r4.wwww, r9.xxyz, r7.xxyz
-  36: mov r8.w, r9.w
-  37: mov r7.xyz, r2.xyzx
-  38: movc r7.xyzw, r4.wwww, r8.xyzw, r7.xyzw
-  39: mad r2.xyz, -r7.xyzx, r1.wwww, r7.xyzx
-  40: mad r2.xyz, r2.xyzx, cb1[135].wwww, cb1[135].xyzx
+  28: movc r8.xyz, r5.zzzz, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx  -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
+
+  29: movc r5.zw, r0.wwww, l(0.0000, 0.0000, 1.0000, 0.0000), l(0.0000, 0.0000, 0.0000, 1.0000) -> r5.z=bChecker;  r5.w=!bChecker; 
+  30: mul r9.xyz, r5.wwww, r7.xyzx                                -> SpecularColor *= !bChecker;
+  31: mul r9.w, r1.y, r5.w                                        -> Specular *= !bChecker
+
+  32: movc r8.xyz, r5.yyyy, r5.zzzz, r8.xyzx                      -> if (bCheckerboardRequired) set GBuffer.BaseColor
+  33: mov r7.w, r1.y                                              -> SpecularColor.w = Specular
+
+  34: movc r9.xyzw, r5.yyyy, r9.xyzw, r7.xyzw                     -> if (bCheckerboardRequired) set SpecularColor+Specular
+
+  35: movc r5.yzw, r4.wwww, r9.xxyz, r7.xxyz                      -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) set GBuffer.SpecularColor ... 
+
+  36: mov r8.w, r9.w                                              -> boxedBaseColor.w = Specular
+  37: mov r7.xyz, r2.xyzx                                         -> r2.xyz = raw BaseColor
+  38: movc r7.xyzw, r4.wwww, r8.xyzw, r7.xyzw 
+
+  39: mad r2.xyz, -r7.xyzx, r1.wwww, r7.xyzx                      -> GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic; 
+  40: mad r2.xyz, r2.xyzx, cb1[135].wwww, cb1[135].xyzx           
+                              -> GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
   41: mad r5.yzw, r5.yyzw, cb1[136].wwww, cb1[136].xxyz
-  42: mul r8.xyz, v0.wwww, cb1[49].xyzx
+                              -> GBuffer.SpecularColor = GBuffer.SpecularColor * View.SpecularOverrideParameter.w + View.SpecularOverrideParameter.xyz; 
+
+  42: mul r8.xyz, v0.wwww, cb1[49].xyzx                           -> v0.zw = ScreenSpacePos = UVAndScreenPos.zw 
   43: mad r8.xyz, v0.zzzz, cb1[48].xyzx, r8.xyzx
   44: add r8.xyz, r8.xyzx, cb1[50].xyzx
   45: dp3 r0.w, r8.xyzx, r8.xyzx
   46: rsq r0.w, r0.w
-  47: mul r8.xyz, r0.wwww, r8.xyzx
+  47: mul r8.xyz, r0.wwww, r8.xyzx        -> float3 ScreenVector = normalize(mul(float4(ScreenSpacePos, 1, 0), View.ScreenToWorld).xyz);
+
   48: dp3 r0.w, -r8.xyzx, r4.xyzx
   49: add r6.x, r0.w, r0.w
-  50: mad r9.xyz, r6.xxxx, r4.xyzx, r8.xyzx
-  51: mov_sat r1.x, r0.w
-  52: mad r6.x, -r1.z, r1.z, l(1.0000)
-  53: sqrt r6.y, r6.x
-  54: mad r6.y, r1.z, r1.z, r6.y
-  55: mul r6.x, r6.y, r6.x
+  50: mad r9.xyz, r6.xxxx, r4.xyzx, r8.xyzx                       -> float3 R0 = 2 * dot( V, N ) * N - V; 
+
+  51: mov_sat r1.x, r0.w                                          -> float NoV = saturate( dot(N, V) );
+
+  52: mad r6.x, -r1.z, r1.z, l(1.0000)                            -> 1 - a  where a = Square(GBuffer.Roughness)
+  53: sqrt r6.y, r6.x 
+  54: mad r6.y, r1.z, r1.z, r6.y                                  -> sqrt(1 - a) + a 
+  55: mul r6.x, r6.y, r6.x                                        -> (1 - a) * ( sqrt(1 - a) + a )
   56: mad r0.xyz, -r0.xyzx, r3.wwww, r9.xyzx
-  57: mad r0.xyz, r6.xxxx, r0.xyzx, r4.xyzx
-  58: sample_l(texturecube)(float,float,float,float) r10.xyz, r4.xyzx, t0.xyzw, s1, cb0[28].z
-  59: mul r2.xyz, r2.xyzx, r10.xyzx
-  60: if_nz r6.z
+  57: mad r0.xyz, r6.xxxx, r0.xyzx, r4.xyzx                       -> float3 R = lerp( N, R0, (1 - a) * ( sqrt(1 - a) + a ) );
+
+  58: sample_l(texturecube)(float,float,float,float) r10.xyz, r4.xyzx, t0.xyzw, s1, cb0[28].z   -> sample AmbientCubemap to get DiffuseLookup 
+
+  59: mul r2.xyz, r2.xyzx, r10.xyzx                               -> NonSpecularContribution += GBuffer.DiffuseColor * DiffuseLookup;
+
+  60: if_nz r6.z                                                  -> if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT ) 
   61:   log r3.w, r1.z
-  62:   mad r3.w, -r3.w, l(1.1500), l(3.0000)
+  62:   mad r3.w, -r3.w, l(1.1500), l(3.0000)                     -> half Level = 3 - 1.15 * log2( Roughness );
   63:   add r6.x, cb0[28].w, l(-1.0000)
-  64:   add r3.w, -r3.w, r6.x
+  64:   add r3.w, -r3.w, r6.x                                     -> return MipCount - 1 - Level;
+                                                                  -> half ComputeCubemapMipFromRoughness( half Roughness, half MipCount ) 
   65:   sample_l(texturecube)(float,float,float,float) r11.xyz, r0.xyzx, t0.xyzw, s1, r3.w
   66:   mov r1.y, r1.z
   67:   sample_l(texture2d)(float,float,float,float) r6.yz, r1.xyxx, t1.zxyw, s2, l(0)
