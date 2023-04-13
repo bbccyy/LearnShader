@@ -102,7 +102,7 @@ ps_5_0
 
   58: sample_l(texturecube)(float,float,float,float) r10.xyz, r4.xyzx, t0.xyzw, s1, cb0[28].z   -> sample AmbientCubemap to get DiffuseLookup 
 
-  59: mul r2.xyz, r2.xyzx, r10.xyzx                               -> NonSpecularContribution += GBuffer.DiffuseColor * DiffuseLookup;
+  59: mul r2.xyz, r2.xyzx, r10.xyzx                               -> NonSpecularContribution += GBuffer.DiffuseColor * DiffuseLookup; 
 
   60: if_nz r6.z                                                  -> if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT ) 
   61:   log r3.w, r1.z
