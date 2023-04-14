@@ -307,7 +307,7 @@ ps_5_0
  225: mul r2.xyz, r2.xyzx, cb0[27].xyzx                           -> ScatterableLight * CommonMultiplier
  226: dp3 r0.z, r2.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)        -> Luminance(ScatterableLight * CommonMultiplier)
  227: and r0.z, r0.z, r0.y                                        -> if branch for View.bCheckerboardSubsurfaceProfileRendering == 0 ? 
- 228: and r0.z, r0.z, r4.w                                        -> if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) ... 
+ 228: and r0.z, r0.z, r4.w                                        -> if branch for bNeedsSeparateSubsurfaceLightAccumulation 
  229: and r1.w, r0.z, r0.y
  230: mul o0.xyzw, r0.xxxx, r1.xyzw
  231: ret
