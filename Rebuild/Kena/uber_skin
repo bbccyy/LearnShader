@@ -16,9 +16,11 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t0         depth 
       dcl_resource_texture2d (float,float,float,float) t1         Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t2         Color 
+
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u1 
       dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4> SetupTexture;
+
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy
       dcl_input vThreadID.xy
@@ -165,9 +167,10 @@ cs_5_0
 
  117: add r6.xyzw, r2.xyzw, r3.xyzw
  118: add r7.xyzw, r4.xyzw, r5.xyzw
- 119: add r6.xyzw, r6.xyzw, r7.xyzw
- 120: max r0.w, r6.w, l(0.0000)
- 121: div r0.w, l(1.0000, 1.0000, 1.0000, 1.0000), r0.w
+ 119: add r6.xyzw, r6.xyzw, r7.xyzw                         -> float4 Sum = (A + B) + (C + D);
+ 120: max r0.w, r6.w, l(0.0000)                       
+ 121: div r0.w, l(1.0000, 1.0000, 1.0000, 1.0000), r0.w     -> float Div = 1.0f / max(Sum.a, 0.00001f); 
+
  122: gather4(texture2d)(float,float,float,float) r7.xyzw, r0.yzyy, t0.xyzw, s1.x
  123: mad r0.yz, r7.xxyx, cb1[65].xxxx, cb1[65].yyyy
  124: mad r2.xy, r7.xyxx, cb1[65].zzzz, -cb1[65].wwww
@@ -176,15 +179,17 @@ cs_5_0
  127: mad r0.yz, r7.zzwz, cb1[65].xxxx, cb1[65].yyyy
  128: mad r2.xy, r7.zwzz, cb1[65].zzzz, -cb1[65].wwww
  129: div r2.xy, l(1.0000, 1.0000, 1.0000, 1.0000), r2.xyxx
- 130: add r8.zw, r0.yyyz, r2.xxxy
+ 130: add r8.zw, r0.yyyz, r2.xxxy                           -> float4 FourDepth = GatherSceneDepth(BufferUV, SubsurfaceInput0_ExtentInverse); 
+
  131: mov r4.x, r3.w
  132: mov r4.y, r2.w
  133: mov r4.z, r5.w
- 134: dp4 r0.y, r8.xyzw, r4.xyzw
- 135: mul r2.w, r0.w, r0.y
- 136: lt r0.y, l(0), r2.w
- 137: and r0.y, r0.y, l(1)
- 138: ult r3.xy, r1.xwxx, cb0[51].zwzz
+ 134: dp4 r0.y, r8.xyzw, r4.xyzw                            -> dot(FourDepth, float4(A.a, B.a, C.a, D.a))
+ 135: mul r2.w, r0.w, r0.y                                  -> float SingleDepth = dot(FourDepth, float4(A.a, B.a, C.a, D.a)) * Div; 
+
+ 136: lt r0.y, l(0), r2.w                                   -> if (OutColor.a > 0)  其中 OutColor.a == SingleDepth 
+ 137: and r0.y, r0.y, l(1)                                  -> bHasSubsurface = true; 
+ 138: ult r3.xy, r1.xwxx, cb0[51].zwzz                      -> if (all(Pos < Output_ViewportMax))  
  139: and r0.z, r3.y, r3.x
  140: if_nz r0.z
  141:   mul r2.xyz, r0.wwww, r6.xyzx
