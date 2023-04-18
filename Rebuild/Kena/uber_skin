@@ -189,13 +189,13 @@ cs_5_0
 
  136: lt r0.y, l(0), r2.w                                   -> if (OutColor.a > 0)  其中 OutColor.a == SingleDepth 
  137: and r0.y, r0.y, l(1)                                  -> bHasSubsurface = true; 
- 138: ult r3.xy, r1.xwxx, cb0[51].zwzz                      -> if (all(Pos < Output_ViewportMax))  
+ 138: ult r3.xy, r1.xwxx, cb0[51].zwzz                      -> if (all(Pos < Output_ViewportMax)) -> cb0[51] = [0,0,854,480] 
  139: and r0.z, r3.y, r3.x
  140: if_nz r0.z
- 141:   mul r2.xyz, r0.wwww, r6.xyzx
- 142:   store_uav_typed u2.xyzw, r1.xyzw, r2.xyzw
+ 141:   mul r2.xyz, r0.wwww, r6.xyzx                        -> OutColor.rgb = Sum.rgb * Div;
+ 142:   store_uav_typed u2.xyzw, r1.xyzw, r2.xyzw           -> SSSColorUAV[Pos] = OutColor;
  143: endif
- 144: atomic_or g0, l(0), r0.y
+ 144: atomic_or g0, l(0), r0.y                              -> InterlockedOr(SubsurfaceTypeFlag, Type);  
  145: sync_g_t
  146: ld_raw r0.y, l(0), g0.xxxx
  147: and r0.yz, r0.yyyy, l(0, 1, 2, 0)
