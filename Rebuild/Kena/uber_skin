@@ -17,9 +17,9 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t1         Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t2         Color 
 
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u0 
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u1 
-      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4> SetupTexture;
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer;
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    <-- 实际上并没有设置此Buffer 
+      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;
 
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy
@@ -195,32 +195,37 @@ cs_5_0
  141:   mul r2.xyz, r0.wwww, r6.xyzx                        -> OutColor.rgb = Sum.rgb * Div;
  142:   store_uav_typed u2.xyzw, r1.xyzw, r2.xyzw           -> SSSColorUAV[Pos] = OutColor;
  143: endif
- 144: atomic_or g0, l(0), r0.y                              -> InterlockedOr(SubsurfaceTypeFlag, Type);  
- 145: sync_g_t
- 146: ld_raw r0.y, l(0), g0.xxxx
- 147: and r0.yz, r0.yyyy, l(0, 1, 2, 0)
- 148: ine r0.yz, r0.yyzy, l(0, 0, 0, 0)
- 149: and r0.xy, r0.yzyy, r0.xxxx
- 150: if_nz r0.x
- 151:   imm_atomic_iadd r1.x, u0, l(0), l(1)
- 152:   ult r0.x, r1.x, cb2[0].x
- 153:   if_nz r0.x
- 154:     ishl r0.x, r1.x, l(1)
- 155:     iadd r0.x, r0.x, l(2)
- 156:     store_uav_typed u0.xyzw, r0.xxxx, vThreadGroupID.xxxx
+ 144: atomic_or g0, l(0), r0.y                              -> InterlockedOr(SubsurfaceTypeFlag, Type);  注意此处是 g0 or r0.y 结果输出到虚空 
+ 145: sync_g_t                                              -> GroupMemoryBarrierWithGroupSync() 
+ 146: ld_raw r0.y, l(0), g0.xxxx                            -> 从sharedMemery中的0偏移位置读取数据，让如r0.y 
+ 147: and r0.yz, r0.yyyy, l(0, 1, 2, 0)                     -> SubsurfaceTypeFlag.xx & [TYPE_SEPARABLE, TYPE_BURLEY] 
+ 148: ine r0.yz, r0.yyzy, l(0, 0, 0, 0)                     -> 执行并行 IF 判断 Step 1
+ 149: and r0.xy, r0.yzyy, r0.xxxx                           -> 执行并行 IF 判断 Step 2
+
+ 150: if_nz r0.x                                            -> if (GI == 0 && (SubsurfaceTypeFlag & TYPE_SEPARABLE))
+ 151:   imm_atomic_iadd r1.x, u0, l(0), l(1)                -> InterlockedAdd(RWSeparableGroupBuffer[0], 1, IndexToStore);
+                                                            -> atomic action！ 对RWSeparableGroupBuffer[0] + 1，将结果设置到本地变量 IndexToStore 上去 
+                                                            -> r1.x == IndexToStore 
+ 152:   ult r0.x, r1.x, cb2[0].x                            -> cb2[0].x == SubsurfaceUniformParameters.MaxGroupCount
+ 153:   if_nz r0.x                          
+ 154:     ishl r0.x, r1.x, l(1)                             -> IndexToStore * 2
+ 155:     iadd r0.x, r0.x, l(2)                             -> IndexToStore * 2 + 2 -> 2 * (IndexToStore + 1) + 0
+ 156:     store_uav_typed u0.xyzw, r0.xxxx, vThreadGroupID.xxxx   -> RWSeparableGroupBuffer 
  157:     iadd r0.z, r0.x, l(1)
  158:     store_uav_typed u0.xyzw, r0.zzzz, vThreadGroupID.yyyy
  159:   endif
- 160: endif
+ 160: endif                                                 -> AddSeparableGroup(GroupXY);
+
+
  161: if_nz r0.y
  162:   imm_atomic_iadd r0.x, u1, l(0), l(1)
  163:   ult r0.y, r0.x, cb2[0].x
  164:   if_nz r0.y
  165:     ishl r0.x, r0.x, l(1)
  166:     iadd r0.x, r0.x, l(2)
- 167:     store_uav_typed u1.xyzw, r0.xxxx, vThreadGroupID.xxxx
+ 167:     store_uav_typed u1.xyzw, r0.xxxx, vThreadGroupID.xxxx   -> RWBurleyGroupBuffer 
  168:     iadd r0.y, r0.x, l(1)
  169:     store_uav_typed u1.xyzw, r0.yyyy, vThreadGroupID.yyyy
  170:   endif
- 171: endif
+ 171: endif                                                 -> AddBurleyGroup(GroupXY); 
  172: ret
