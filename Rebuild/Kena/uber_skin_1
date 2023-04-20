@@ -12,12 +12,13 @@ cs_5_0
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
-      
+
       dcl_resource_texture2d (float,float,float,float) t0                     -> Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t1                     -> CustomData 
       dcl_resource_texture2d (float,float,float,float) t2                     -> LUT_ssss 
       dcl_resource_texture2d (float,float,float,float) t3                     -> RT 31731 
       dcl_resource_buffer (uint,uint,uint,uint) t4                            -> RWBuffer<uint> RWSeparableGroupBuffer -> [Buffer 32036] 
+                                                                              -> 对应源码中的 GroupBuffer 
 
       dcl_uav_typed_texture2d (float,float,float,float) u0                    -> RWTexture2D<float4> SSSColorUAV -> [Buffer 32035] 
 
@@ -25,32 +26,43 @@ cs_5_0
       dcl_input vThreadGroupID.x
       dcl_temps 15
       dcl_thread_group 64, 1, 1
-   0: ishl r0.x, vThreadGroupID.x, l(1)
+
+   0: ishl r0.x, vThreadGroupID.x, l(1) 
    1: iadd r0.x, r0.x, l(2)
-   2: ld_indexable(buffer)(uint,uint,uint,uint) r0.y, r0.xxxx, t4.yxzw
+   2: ld_indexable(buffer)(uint,uint,uint,uint) r0.y, r0.xxxx, t4.yxzw        -> GroupBuffer[2*(IndirectG_ID.x + 1) + 0] 
    3: iadd r0.x, r0.x, l(1)
-   4: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw
-   5: utof r1.xyzw, r0.yxxx
-   6: and r0.x, vThreadIDInGroupFlattened.x, l(7)
-   7: ushr r0.y, vThreadIDInGroupFlattened.x, l(3)
+   4: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw        -> GroupBuffer[2*(IndirectG_ID.x + 1)+1] 
+   5: utof r1.xyzw, r0.yxxx                                                   -> uint2 G_ID
+
+   6: and r0.x, vThreadIDInGroupFlattened.x, l(7)                             -> GI % THREAD_SIZE_X 
+   7: ushr r0.y, vThreadIDInGroupFlattened.x, l(3)                            -> GI / THREAD_SIZE_X 
    8: utof r2.xyzw, r0.xyyy
    9: mad r0.xyzw, r1.xyzw, l(8.0000, 8.0000, 8.0000, 8.0000), r2.xyzw
-  10: ftou r0.xyzw, r0.xyzw
+  10: ftou r0.xyzw, r0.xyzw               -> uint2 DT_ID = G_ID * float2(THREAD_SIZE_X, THREAD_SIZE_Y) + float2(GI % THREAD_SIZE_X, GI / THREAD_SIZE_X);
+
   11: ubfe r0.xyzw, l(29, 29, 29, 29), l(0, 0, 0, 0), r0.xyzw
   12: iadd r0.xyzw, r0.xyzw, cb0[51].xyyy
-  13: utof r1.xy, r0.xwxx
+  13: utof r1.xy, r0.xwxx                                         -> uint2 Pos = DT_ID.xy*SUBSURFACE_GROUP_SIZE / THREAD_SIZE_1D + Output_ViewportMin;
   14: add r1.xy, r1.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000)
-  15: mul r1.zw, r1.xxxy, cb0[49].zzzw
-  16: max r2.xy, r1.zwzz, cb0[34].xyxx
-  17: min r2.xy, r2.xyxx, cb0[34].zwzz
-  18: sample_l(texture2d)(float,float,float,float) r2.xyzw, r2.xyxx, t3.xyzw, s2, l(0)
-  19: lt r3.x, l(0), r2.w
+  15: mul r1.zw, r1.xxxy, cb0[49].zzzw                                        -> Output_ExtentInverse == cb0[49].zw 
+                                                                              -> float2 BufferUV = ConvertGridPos2UV(Pos);
+
+-> SSSSSampleSceneColorPoint -> GetSceneColor(coord) -> PostProcessSubsuraface.usf -> GetSceneColor 
+  16: max r2.xy, r1.zwzz, cb0[34].xyxx                                        -> cb0[34] = [0.00059, 0.00104, 0.99941, 0.99896]
+  17: min r2.xy, r2.xyxx, cb0[34].zwzz                                        -> SubsurfaceInput0_UVViewportBilinearMin{Max} 
+                                                                              -> clamp UV 操作 
+  18: sample_l(texture2d)(float,float,float,float) r2.xyzw, r2.xyxx, t3.xyzw, s2, l(0)    -> float4 colorM = SSSSSampleSceneColorPoint(BufferUV);
+  19: lt r3.x, l(0), r2.w                                                     -> colorM.a = GetMaskFromDepthInAlpha(colorM.a);
   20: if_z r3.x
-  21:   mov r4.xyzw, l(0, 0, 0, 0)
+  21:   mov r4.xyzw, l(0, 0, 0, 0)                                            -> return 0.0f; 非SSSS部分直接返回
   22: endif
+
   23: if_nz r3.x
-  24:   mul r3.x, cb0[28].z, cb0[31].x
-  25:   mul r3.xy, r3.xxxx, l(1024.0000, 0.0000, 0.0000, 0.0000)
+
+  24:   mul r3.x, cb0[28].z, cb0[31].x                                        -> 0.00117 * 854.0 = 0.99918 
+  25:   mul r3.xy, r3.xxxx, l(1024.0000, 0.0000, 0.0000, 0.0000)              -> float2 ViewportDirectionUV = float2(1, 0) * SUBSURFACE_RADIUS_SCALE;
+                                                                              -> SUBSURFACE_RADIUS_SCALE 由cpp端设置，数值为 1024 
+
   26:   sample_l(texture2d)(float,float,float,float) r3.z, r1.zwzz, t0.xywz, s0, l(0)
   27:   sample_l(texture2d)(float,float,float,float) r1.zw, r1.zwzz, t1.yzxw, s1, l(0)
   28:   mul r3.z, r3.z, l(255.0000)
@@ -58,11 +70,13 @@ cs_5_0
   30:   ftou r3.z, r3.z
   31:   and r3.zw, r3.zzzz, l(0, 0, 15, 16)
   32:   ieq r5.xy, r3.zzzz, l(5, 9, 0, 0)
-  33:   or r3.z, r5.y, r5.x
+  33:   or r3.z, r5.y, r5.x                                                   -> UseSubsurfaceProfile() ? 
   34:   and r3.z, r3.z, l(1.0000)
   35:   mul r1.w, r1.w, r3.z
-  36:   movc r1.w, r3.w, l(0), r1.w
-  37:   div r3.z, cb0[27].x, r2.w
+  36:   movc r1.w, r3.w, l(0), r1.w                                           -> Mask * ScreenSpaceData.GBuffer.CustomData.a
+                                                                              -> GetSubsurfaceStrength 
+
+  37:   div r3.z, cb0[27].x, r2.w                                             -> float SSSScaleX = SubsurfaceParams.x; float scale = SSSScaleX / OutDepth; 
   38:   mul r3.xy, r3.xyxx, r3.zzzz
   39:   mul r3.xy, r1.wwww, r3.xyxx
   40:   mad r1.z, r1.z, l(255.0000), l(0.5000)
