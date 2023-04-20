@@ -1,8 +1,10 @@
 uber_skin_2
-SubsurfaceRecombinePS
+SubsurfaceRecombinePS 
+Shaders\Private\PostProcessSubsurface.usf
+
 
 Shader hash f6928891-4d09da32-97f0d582-0831ca6d
-
+DC -> 18434 
 
 ps_5_0
       dcl_globalFlags refactoringAllowed

@@ -1,0 +1,31 @@
+uber_skin_helper_1
+InitValueBufferCS
+Shaders\Private\PostProcessSubsurface.usf
+
+
+Shader hash 8c017f63-dae9e1bc-278c21ab-b8712a23
+DC -> 18374
+
+cs_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u0 			-> RWBuffer<uint> RWSeparableGroupBuffer; 
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u1 			-> RWBuffer<uint> RWBurleyGroupBuffer; 
+      dcl_thread_group 1, 1, 1
+   0: store_uav_typed u0.xyzw, l(0, 0, 0, 0), l(0, 0, 0, 0)
+   1: store_uav_typed u1.xyzw, l(0, 0, 0, 0), l(0, 0, 0, 0)
+   2: ret
+
+
+
+对应源码：
+// Indirect dispatch parameters
+RWBuffer<uint> RWSeparableGroupBuffer;
+RWBuffer<uint> RWBurleyGroupBuffer;
+
+[numthreads(1, 1, 1)]
+void InitValueBufferCS()
+{
+	// Clear the first buffer element which is used as the buffer counter.
+	RWSeparableGroupBuffer[0] = 0;
+	RWBurleyGroupBuffer[0] = 0;
+}

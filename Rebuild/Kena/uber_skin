@@ -1,6 +1,7 @@
-SetupIndirectCS -> Shaders\Private\PostProcessSubsurface.usf
+uber_skin
+SetupIndirectCS
+Shaders\Private\PostProcessSubsurface.usf
 cpp部分对应： Source\Runtime\Renderer\Pirvate\PostProcess\PostProcessSubsurface.cpp -> METHOD:ComputeSubsurfaceForView(...) 
-
 
 Shader hash 6bb788c7-18abcca6-c234fe19-484d4f22
 DC -> 18384
@@ -17,9 +18,9 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t1         Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t2         Color 
 
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer;
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    <-- 实际上并没有设置此Buffer 
-      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer; [Buffer 32036] 
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037]实际上并没有设置此Buffer 
+      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture; 
 
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy
