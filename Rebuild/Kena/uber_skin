@@ -20,7 +20,7 @@ cs_5_0
 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer; [Buffer 32036] 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037] <- 条件判断屏蔽了 
-      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture; 
+      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;           [2D RT 31731] 
 
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy
@@ -41,7 +41,7 @@ cs_5_0
 
    9: mad r2.xyzw, cb0[28].zwzw, l(-0.5000, 0.5000, 0.5000, 0.5000), r0.yzyz  -> BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse 
                                                       -> cb0[28].zw = [0.00059, 0.00104] 
-  10: min r2.xyzw, r2.xyzw, cb0[34].zwzw              -> UVSceneColor = min((~), SubsurfaceInput0_UVViewportBilinearMax)
+  10: min r2.xyzw, r2.xyzw, cb0[34].zwzw              -> UVSceneColor = min((~), SubsurfaceInput0_UVViewportBilinearMax) 
                                                       -> cb0[34] = [1.00, 1.00, 0.99912, 0.99948] 
 
 ----------Func:SetupSubsurfaceForOnePixel() Start X 1----------
