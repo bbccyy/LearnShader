@@ -15,13 +15,13 @@ ps_5_0
       dcl_sampler s2, mode_default
       dcl_sampler s3, mode_default
       dcl_sampler s4, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_resource_texture2d (float,float,float,float) t0               -> Depth 
       dcl_resource_texture2d (float,float,float,float) t1               -> Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t2               -> Albedo 
       dcl_resource_texture2d (float,float,float,float) t3               -> CustomData 
-      dcl_resource_texture2d (float,float,float,float) t4
+      dcl_resource_texture2d (float,float,float,float) t4               -> LUT_SSSS 
       dcl_resource_texture2d (float,float,float,float) t5               -> color attahcment 
-      dcl_resource_texture2d (float,float,float,float) t6               -> SubsurfaceInput1_Texture 
+      dcl_resource_texture2d (float,float,float,float) t6               -> SubsurfaceInput1_Texture -> [Buffer 32030] 
       dcl_input_ps linear noperspective v0.xy
       dcl_output o0.xyzw
       dcl_temps 8
