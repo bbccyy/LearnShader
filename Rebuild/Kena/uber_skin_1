@@ -16,11 +16,12 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t0                     -> Comp_M_D_R_F 
       dcl_resource_texture2d (float,float,float,float) t1                     -> CustomData 
       dcl_resource_texture2d (float,float,float,float) t2                     -> LUT_ssss 
-      dcl_resource_texture2d (float,float,float,float) t3                     -> RT 31731 
+      dcl_resource_texture2d (float,float,float,float) t3                     -> DC:18411 对应 RT 31731; DC:18418 对应 RT 32035 
       dcl_resource_buffer (uint,uint,uint,uint) t4                            -> RWBuffer<uint> RWSeparableGroupBuffer -> [Buffer 32036] 
                                                                               -> 对应源码中的 GroupBuffer 
 
-      dcl_uav_typed_texture2d (float,float,float,float) u0                    -> RWTexture2D<float4> SSSColorUAV -> [Buffer 32035] 
+      dcl_uav_typed_texture2d (float,float,float,float) u0                    -> RWTexture2D<float4> SSSColorUAV -> [Buffer 32035] (DC:18411)
+                                                                                                                 -> [Buffer 32030] (DC:18418)
 
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.x
