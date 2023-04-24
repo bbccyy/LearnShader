@@ -19,7 +19,7 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t2         Color 
 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer; [Buffer 32036] 
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037] <- 条件判断屏蔽了  
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037] <- 条件判断屏蔽了 
       dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;           [2D RT 31731] 
 
       dcl_input vThreadIDInGroupFlattened
@@ -207,8 +207,8 @@ cs_5_0
  151:   imm_atomic_iadd r1.x, u0, l(0), l(1)                -> InterlockedAdd(RWSeparableGroupBuffer[0], 1, IndexToStore);
                                                             -> atomic action！ 对RWSeparableGroupBuffer[0] + 1，将结果设置到本地变量 IndexToStore 上去 
                                                             -> r1.x == IndexToStore 
- 152:   ult r0.x, r1.x, cb2[0].x                            -> cb2[0].x == SubsurfaceUniformParameters.MaxGroupCount
- 153:   if_nz r0.x                          
+ 152:   ult r0.x, r1.x, cb2[0].x                            -> cb2[0].x == SubsurfaceUniformParameters.MaxGroupCount 
+ 153:   if_nz r0.x  
  154:     ishl r0.x, r1.x, l(1)                             -> IndexToStore * 2
  155:     iadd r0.x, r0.x, l(2)                             -> IndexToStore * 2 + 2 -> 2 * (IndexToStore + 1) + 0
  156:     store_uav_typed u0.xyzw, r0.xxxx, vThreadGroupID.xxxx   -> RWSeparableGroupBuffer 
