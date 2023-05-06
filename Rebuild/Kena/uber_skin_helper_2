@@ -9,12 +9,12 @@ DC -> 18391 & 18396
 cs_5_0
       dcl_globalFlags refactoringAllowed
       dcl_constantbuffer cb0[1], immediateIndexed
-      dcl_resource_buffer (uint,uint,uint,uint) t0 					-> Buffer<uint> GroupBuffer  
-      																-> DC:18391 对应 [Buffer 32037]
-      																-> DC:18396 对应 [Buffer 32036]
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u0 				-> RWBuffer<uint> RWIndirectDispatchArgsBuffer;
-      																-> DC:18391 对应 u0 = [Buffer 32038] -> [0,1,1,0]
-      																-> DC:18396 对应 u0 = [Buffer 32039]	 -> [44,1,1,0]
+      dcl_resource_buffer (uint,uint,uint,uint) t0 					-> Buffer<uint> GroupBuffer 
+      																-> DC:18391 对应 [Buffer 32037] 
+      																-> DC:18396 对应 [Buffer 32036] 
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u0 				-> RWBuffer<uint> RWIndirectDispatchArgsBuffer; 
+      																-> DC:18391 对应 u0 = [Buffer 32038] -> [0,1,1,0] 
+      																-> DC:18396 对应 u0 = [Buffer 32039]	 -> [44,1,1,0] 
       dcl_temps 1
       dcl_thread_group 1, 1, 1
    0: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, l(0, 0, 0, 0), t0.xyzw 	-> GroupBuffer[0] 
