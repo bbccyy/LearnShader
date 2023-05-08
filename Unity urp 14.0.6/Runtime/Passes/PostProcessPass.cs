@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine.Experimental.Rendering;
@@ -435,10 +436,16 @@ namespace UnityEngine.Rendering.Universal
             // Setup projection matrix for cmd.DrawMesh()
             cmd.SetGlobalMatrix(ShaderConstants._FullscreenProjMat, GL.GetGPUProjectionMatrix(Matrix4x4.identity, true));
 
-            if (useSubsurface)
+            if (useSubsurface) //后处理SSSS材质在此 
             {
-                Blitter.BlitCameraTexture(cmd, GetSource(), GetDestination(), RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurface, 0);
-                Swap(ref renderer);
+                using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.Subsurface)))
+                {
+                    DoSubsurfacePost(ref cameraData, cmd, GetSource(), GetDestination());  //todo 
+
+                    Blitter.BlitCameraTexture(cmd, GetSource(), GetDestination(), RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurface, 0);
+                    Swap(ref renderer);
+
+                }
             }
 
             // Optional NaN killer before post-processing kicks in
@@ -617,6 +624,67 @@ namespace UnityEngine.Rendering.Universal
                 }
             }
         }
+
+        #region Subsurface post
+
+        static void DispatchCompute(ComputeShader targetCS, CommandBuffer cmd, int kernel, int width, int height, int depth = 1)
+        {
+            // If any issue occur on mac / intel GPU devices regarding the probe subdivision, it's likely to be
+            // the GetKernelThreadGroupSizes returning wrong values.
+            targetCS.GetKernelThreadGroupSizes(kernel, out uint x, out uint y, out uint z); 
+            cmd.DispatchCompute(
+                targetCS,
+                kernel,
+                Mathf.Max(1, Mathf.CeilToInt(width / (float)x)),
+                Mathf.Max(1, Mathf.CeilToInt(height / (float)y)),
+                Mathf.Max(1, Mathf.CeilToInt(depth / (float)z)));
+        }
+
+        void DoSubsurfacePost(ref CameraData cameraData, CommandBuffer cmd, RTHandle source, RTHandle dest)
+        {
+            ComputeShader subsurfaceCS = m_Materials.subsurfaceCS;  //获取compute shader 
+            Vector2Int fullRes = new Vector2Int(source.rt.width, source.rt.height);
+
+            //group count 
+            Vector2Int kSubsurfaceGroupSize = new Vector2Int(8, 8);
+            Vector2Int TileDimension = new Vector2Int(Mathf.CeilToInt((float)fullRes.x / (float)kSubsurfaceGroupSize.x), 
+                Mathf.CeilToInt((float)fullRes.y / (float)kSubsurfaceGroupSize.y));
+            Int32 MaxGroupCount = TileDimension.x * TileDimension.y;
+
+            //commen factor -> todo: move to global settings 
+            const int ScaleFactor = 2;
+            //const bool bCheckerboard = true;
+            //const bool bHalfRes = true;
+
+            //Half Res texture descriptor 
+            Vector2Int scaledRes = new Vector2Int(Mathf.CeilToInt((float)fullRes.x / (float)ScaleFactor), Mathf.CeilToInt((float)fullRes.y / (float)ScaleFactor));
+            RenderTextureDescriptor subsurfaceTexDec = new RenderTextureDescriptor(
+                Mathf.CeilToInt(source.rt.width / ScaleFactor), Mathf.CeilToInt(source.rt.height / ScaleFactor),
+                RenderTextureFormat.ARGB32, 0, 0);
+            subsurfaceTexDec.enableRandomWrite = true;
+            subsurfaceTexDec.msaaSamples = 1;
+
+            //Half Res with extra 6 Mips
+            RenderTextureDescriptor subsurfaceTexWith6MipsDec = new RenderTextureDescriptor(
+                Mathf.CeilToInt(source.rt.width / ScaleFactor), Mathf.CeilToInt(source.rt.height / ScaleFactor),
+                RenderTextureFormat.ARGB32, 0, 6);
+            subsurfaceTexWith6MipsDec.enableRandomWrite = true;
+            subsurfaceTexWith6MipsDec.msaaSamples = 1;
+
+            //Initialize the group buffer -> TODO:ok to use Raw as the type of the buffer? 
+            ComputeBuffer SeparableGroupBuffer = new ComputeBuffer(2 * (MaxGroupCount + 1), sizeof(uint), ComputeBufferType.Raw);
+
+            using (new ProfilingScope(cmd, new ProfilingSampler("InitGroupCounter")))
+            {
+                cmd.SetComputeBufferParam(subsurfaceCS, 0, Shader.PropertyToID("RWSeparableGroupBuffer"), SeparableGroupBuffer);
+                DispatchCompute(subsurfaceCS, cmd, 0, 1, 1, 1);
+            }
+
+        }
+
+        #endregion
+
+
         #region Sub-pixel Morphological Anti-aliasing
 
         void DoSubpixelMorphologicalAntialiasing(ref CameraData cameraData, CommandBuffer cmd, RTHandle source, RTHandle destination)
@@ -1505,12 +1573,14 @@ namespace UnityEngine.Rendering.Universal
             public readonly Material finalPass;
             public readonly Material lensFlareDataDriven;
             public readonly Material subsurface;
+            public ComputeShader subsurfaceCS;
 
             public MaterialLibrary(PostProcessData data)
             {
                 subsurface = Load(Shader.Find("Custom/Subsurface"));
                 stopNaN = Load(data.shaders.stopNanPS);
                 subpixelMorphologicalAntialiasing = Load(data.shaders.subpixelMorphologicalAntialiasingPS);
+                subsurfaceCS = data.shaders.subsurfaceCS;
                 gaussianDepthOfField = Load(data.shaders.gaussianDepthOfFieldPS);
                 bokehDepthOfField = Load(data.shaders.bokehDepthOfFieldPS);
                 cameraMotionBlur = Load(data.shaders.cameraMotionBlurPS);

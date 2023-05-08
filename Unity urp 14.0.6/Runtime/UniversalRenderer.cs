@@ -296,7 +296,7 @@ namespace UnityEngine.Rendering.Universal
             m_RenderOpaqueForwardWithRenderingLayersPass = new DrawObjectsWithRenderingLayersPass(URPProfileId.DrawOpaqueObjects, true, RenderPassEvent.BeforeRenderingOpaques, RenderQueueRange.opaque, data.opaqueLayerMask, m_DefaultStencilState, stencilData.stencilReference);
 
             bool copyDepthAfterTransparents = m_CopyDepthMode == CopyDepthMode.AfterTransparents;
-
+             
             m_CopyDepthPass = new CopyDepthPass(
                 copyDepthAfterTransparents ? RenderPassEvent.AfterRenderingTransparents : RenderPassEvent.AfterRenderingSkybox,
                 m_CopyDepthMaterial,

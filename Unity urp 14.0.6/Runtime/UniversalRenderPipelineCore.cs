@@ -1639,6 +1639,7 @@ namespace UnityEngine.Rendering.Universal
 
         // PostProcessPass
         StopNaNs,
+        Subsurface,
         SMAA,
         GaussianDepthOfField,
         BokehDepthOfField,

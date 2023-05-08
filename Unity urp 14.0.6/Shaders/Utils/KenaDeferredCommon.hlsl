@@ -48,6 +48,14 @@
 #define	SSSS_MAX_TRANSMISSION_PROFILE_DISTANCE	5.0f // See MaxTransmissionProfileDistance in ComputeTransmissionProfile(), SeparableSSS.cpp
 #define SSSS_MAX_DUAL_SPECULAR_ROUGHNESS		2.0f
 
+// Hair reflectance component (R, TT, TRT, Local Scattering, Global Scattering, Multi Scattering,...)
+#define HAIR_COMPONENT_R			0x1u
+#define HAIR_COMPONENT_TT			0x2u
+#define HAIR_COMPONENT_TRT			0x4u
+#define HAIR_COMPONENT_LS			0x8u 
+#define HAIR_COMPONENT_GS			0x10u
+#define HAIR_COMPONENT_MULTISCATTER	0x12u
+
 // Must match C++
 #define AO_DOWNSAMPLE_FACTOR 2
 
@@ -115,17 +123,23 @@ struct FGBufferData
 
 //------------------Per DC Com Variant Start------------------
 static float FrameId = 3;
+static int View_StateFrameIndexMod8 = 3;
 static bool bSubsurfacePostprocessEnabled = true;
 static uint bCheckerboardSubsurfaceProfileRendering = 1;
 static FDeferredLightData kena_LightData = (FDeferredLightData)0;
 
+static float4 View_ViewRectMin = float4(0, 0, 0, 0);
 static float4 View_BufferSizeAndInvSize = float4(1708.00, 960.00, 0.00059, 0.00104);
 static float4 View_ViewSizeAndInvSize = float4(1708.00, 960.00, 0.00059, 0.00104);
 static float4 View_SkyLightColor = float4(4.95, 4.19202, 3.12225, 0.00);
 static float4 OcclusionTintAndMinOcclusion = float4(0.04519, 0.05127, 0.02956, 0.00);
 static float4 ContrastAndNormalizeMulAdd = float4(0.01, 40.00843, -19.50422, 0.70);
 
+static float4 AmbientCubemapColor = float4(0.14722, 0.17128, 0.2, 0.2);
+
 static float4 ReflectionStruct_SkyLightParameters = float4(7.00, 1.00, 1.00, 0.00);
+
+static float4 AmbientCubemapMipAdjust = float4(0.33333, 1.66667, 2.00, 6.00);
 
 //SH irradiance map 
 static float4 View_SkyIrradianceEnvironmentMap[] = {
@@ -182,12 +196,13 @@ static float4x4 Matrix_Inv_VP = float4x4(
 // TEXTURE2D(_Normal); SAMPLER(sampler_Normal);
 // TEXTURE2D(_Comp_M_D_R_F); SAMPLER(sampler_Comp_M_D_R_F);
 // TEXTURE2D(_Albedo); SAMPLER(sampler_Albedo);
-// TEXTURE2D(_Comp_F_R_X_I); SAMPLER(sampler_Comp_F_R_X_I);
-// TEXTURE2D(_SSAO); SAMPLER(sampler_SSAO);
+// TEXTURE2D(_Comp_F_R_X_I); SAMPLER(sampler_Comp_F_R_X_I); 
 
-// TEXTURECUBE(_IBL); SAMPLER(sampler_IBL);
+TEXTURE2D(_LUT2); SAMPLER(sampler_LUT2); //PreIntegratedGF
+TEXTURE2D(_SSAO); SAMPLER(sampler_SSAO);
+TEXTURECUBE(_IBL); SAMPLER(sampler_IBL);
 TEXTURECUBE(_Sky); SAMPLER(sampler_Sky);
-TEXTURECUBE(_SkyLightBlend); SAMPLER(sampler_SkyLightBlend);
+TEXTURECUBE(_Ambientmap); SAMPLER(sampler_Ambientmap);
 //------------------Declare Buffer End------------------
 
 
@@ -281,9 +296,9 @@ float3 ComputeF0(float Specular, float3 BaseColor, float Metallic)
 	return lerp(DielectricSpecularToF0(Specular).xxx, BaseColor, Metallic.xxx);
 }
 
-float3 DecodeNormal(float3 N)
+float3 DecodeNormalUE(float3 N)
 {
-    return N * 2 - 1;
+    return N * 2.0f - 1.0f;
 }
 
 uint DecodeShadingModelId(float InPackedChannel)
@@ -305,7 +320,8 @@ float ConvertFromDeviceZ(float DeviceZ)
 bool CheckerFromSceneColorUV(float2 UVSceneColor)
 {
 	// relative to left top of the rendertarget (not viewport)
-	uint2 PixelPos = uint2(UVSceneColor * View_BufferSizeAndInvSize.xy);
+	//uint2 PixelPos = uint2(UVSceneColor * View_BufferSizeAndInvSize.xy); 
+	uint2 PixelPos = uint2(UVSceneColor * _ScreenParams.xy);
 	uint TemporalAASampleIndex = 3;
 	return (PixelPos.x + PixelPos.y + TemporalAASampleIndex) & 1;
 }
@@ -333,6 +349,35 @@ float ApproximateConeConeIntersection(float ArcLength0, float ArcLength1, float 
 	return Intersection;
 }
 
+float2 SvPositionToBufferUV(float4 SvPosition)
+{
+	//return SvPosition.xy * View_BufferSizeAndInvSize.zw;
+	//_ScreenParams
+	return SvPosition.xy / _ScreenParams.xy;  //注意，使用_ScreenParams时必须确保重建Pass使用的屏幕分辨率参数与截帧一致 
+}
+
+float4 SvPositionToScreenPosition(float4 SvPosition)
+{
+	float2 PixelPos = SvPosition.xy - View_ViewRectMin.xy;
+	// NDC (NormalizedDeviceCoordinates, after the perspective divide) 
+	// 备注: 原式乘子float2(2, -2),带有y的翻转 
+	float3 NDCPos = float3((PixelPos * View_ViewSizeAndInvSize.zw - 0.5f) * float2(2, 2), SvPosition.z);
+	// SvPosition.w: so .w has the SceneDepth, some mobile code and the DepthFade material expression wants that
+	return float4(NDCPos.xyz, 1) * SvPosition.w;
+}
+
+uint3 Rand3DPCG16(int3 p)
+{
+	uint3 v = uint3(p);
+	v = v * 1664525u + 1013904223u;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	v.x += v.y * v.z;
+	v.y += v.z * v.x;
+	v.z += v.x * v.y;
+	return v >> 16u;
+}
 #endif 
 //------------------Utility End------------------
 
@@ -361,7 +406,7 @@ FGBufferData DecodeGBufferData(float3 Normal_Raw, float4 Albedo_Raw, float4 Comp
 {
 	FGBufferData GBuffer = (FGBufferData)0;
 
-	GBuffer.WorldNormal = normalize(DecodeNormal(Normal_Raw));
+	GBuffer.WorldNormal = normalize(DecodeNormalUE(Normal_Raw));
 	GBuffer.Metallic = Comp_M_D_R_F_Raw.r;
 	GBuffer.Specular = Comp_M_D_R_F_Raw.g;
 	GBuffer.Roughness = Comp_M_D_R_F_Raw.b;
@@ -393,7 +438,7 @@ FGBufferData DecodeGBufferData(float3 Normal_Raw, float4 Albedo_Raw, float4 Comp
 		GBuffer.SpecularColor = ComputeF0(GBuffer.Specular, GBuffer.BaseColor, GBuffer.Metallic);
 
 		if (UseSubsurfaceProfile(GBuffer.ShadingModelID)) //对皮肤和眼睛来说，会进入此分支 
-		{
+		{	//对应棋盘状纹理 + 后处理的计算流程 -> 这里需要修改皮肤像素对应的 BaseCol，SpecCol等参数 
 			AdjustBaseColorAndSpecularColorForSubsurfaceProfileLighting(GBuffer.BaseColor,
 				GBuffer.SpecularColor, GBuffer.Specular, bChecker);
 		}
@@ -404,6 +449,38 @@ FGBufferData DecodeGBufferData(float3 Normal_Raw, float4 Albedo_Raw, float4 Comp
 	return GBuffer;
 }
 
+
+FGBufferData GetGBufferDataFromSceneTextures(float2 UV, bool bGetNormalizedNormal = true)
+{
+	float4 Albedo_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, UV, 0);
+	float4 Comp_M_D_R_F_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, UV, 0);
+	float3 Normal_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, UV, 0).rgb;
+	float DeviceZ = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, UV, 0).x;
+	float4 Comp_F_R_X_I_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer5, my_point_clamp_sampler, UV, 0);
+	float SceneDepth = ConvertFromDeviceZ(DeviceZ);
+	float4 ShadowTex_Raw = 0;   //GBufferE: Shadow 
+	//float4 GBufferF = 0.5f;     //GBufferF: TANGENT 
+
+	return DecodeGBufferData(Normal_Raw, Albedo_Raw, Comp_M_D_R_F_Raw, Comp_F_R_X_I_Raw, ShadowTex_Raw,
+		SceneDepth, CheckerFromSceneColorUV(UV));
+}
+
+FGBufferData GetGBufferData(float2 UV, bool bGetNormalizedNormal = true)
+{
+	float4 Albedo_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, UV, 0);
+	float4 Comp_M_D_R_F_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, UV, 0);
+	float3 Normal_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, UV, 0).rgb;
+
+	float DeviceZ = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, UV, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
+	float4 Comp_F_R_X_I_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer5, my_point_clamp_sampler, UV, 0);
+
+	float SceneDepth = ConvertFromDeviceZ(DeviceZ);
+	float4 ShadowTex_Raw = 0;
+
+	return DecodeGBufferData(Normal_Raw, Albedo_Raw, Comp_M_D_R_F_Raw,
+		Comp_F_R_X_I_Raw, ShadowTex_Raw, SceneDepth, CheckerFromSceneColorUV(UV));
+}
+
 #endif 
 //------------------Gbuffer End------------------
 
@@ -411,6 +488,24 @@ FGBufferData DecodeGBufferData(float3 Normal_Raw, float4 Albedo_Raw, float4 Comp
 
 //------------------HairShading Start------------------
 #if 1
+FHairTransmittanceData InitHairTransmittanceData()
+{
+	FHairTransmittanceData o;
+	o.Transmittance = 1;
+	o.A_front = 1;
+	o.A_back = 1;
+	o.OpaqueVisibility = 1;
+	o.HairCount = 0;
+
+	// TEMP: for fastning iteration times
+	o.LocalScattering = 0;
+	o.GlobalScattering = 1;
+	o.ScatteringComponent = HAIR_COMPONENT_R | HAIR_COMPONENT_TT | HAIR_COMPONENT_TRT;
+
+	return o;
+}
+
+
 float Hair_g(float B, float Theta)
 {
 	return exp(-0.5 * Pow2(Theta) / (B * B)) / (sqrt(2 * PI) * B);
@@ -561,7 +656,8 @@ float3 GetSkyLightReflectionSupportingBlend(float3 ReflectionVector, float Rough
 	if (ReflectionStruct_SkyLightParameters.w > 0)
 	{
 		float AbsoluteSpecularMip = ComputeReflectionCaptureMipFromRoughness(Roughness, ReflectionStruct_SkyLightParameters.x);
-		float3 BlendDestinationReflection = SAMPLE_TEXTURECUBE_LOD(_SkyLightBlend, sampler_SkyLightBlend, ReflectionVector, AbsoluteSpecularMip).rgb;
+		//float3 BlendDestinationReflection = SAMPLE_TEXTURECUBE_LOD(_SkyLightBlend, sampler_SkyLightBlend, ReflectionVector, AbsoluteSpecularMip).rgb;
+		float3 BlendDestinationReflection = float3(0,0,0); 
 		Reflection = lerp(Reflection, BlendDestinationReflection * View_SkyLightColor.rgb, ReflectionStruct_SkyLightParameters.w);
 	}
 
@@ -607,3 +703,17 @@ float3 GetLookupVectorForSphereCapture(float3 ReflectionVector, float3 WorldPosi
 #endif
 //------------------Reflection Share End------------------
 
+
+//------------------BRDF Common Start------------------
+#if 1
+half3 EnvBRDF(half3 SpecularColor, half Roughness, half NoV)
+{
+	// Importance sampled preintegrated G * F
+	//float2 AB = Texture2DSampleLevel(PreIntegratedGF, PreIntegratedGFSampler, float2(NoV, Roughness), 0).rg;
+	float2 AB = SAMPLE_TEXTURE2D(_LUT2, sampler_LUT2, float2(NoV, Roughness)).rg; //todo: 确认y轴上下是否对调 -> 1 - Roughness 
+	// Anything less than 2% is physically impossible and is instead considered to be shadowing 
+	float3 GF = SpecularColor * AB.x + saturate(50.0 * SpecularColor.g) * AB.y;
+	return GF;
+}
+#endif
+//------------------BRDF Common End------------------

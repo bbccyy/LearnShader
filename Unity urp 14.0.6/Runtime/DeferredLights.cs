@@ -105,6 +105,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             "Fog",
             "SSAOOnly",
             "KenaDirLight",  //这是Kena直接光pass 
+            "KenaGI",
+            "KenaAmbientCube",
             "KenaTest"
             //TODO: 在此后追加 Kena_Uber 若干pass 
         };
@@ -120,6 +122,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             Fog,
             SSAOOnly,
             KenaDL,
+            KenaGI,
+            KenaAmbient,
             KenaTest
         };
 
@@ -152,15 +156,15 @@ namespace UnityEngine.Rendering.Universal.Internal
         internal GraphicsFormat GetGBufferFormat(int index)
         {  
             if (index == GBufferAlbedoIndex) // sRGB albedo, materialFlags
-                return QualitySettings.activeColorSpace == ColorSpace.Linear ? GraphicsFormat.R8G8B8A8_SRGB : GraphicsFormat.R8G8B8A8_UNorm;
+                return GraphicsFormat.R8G8B8A8_SRGB;
             else if (index == GBufferSpecularMetallicIndex) // sRGB specular, [unused]
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferNormalSmoothnessIndex)
-                return this.AccurateGbufferNormals ? GraphicsFormat.R8G8B8A8_UNorm : GraphicsFormat.R8G8B8A8_SNorm; // normal normal normal packedSmoothness
+                return GraphicsFormat.A2R10G10B10_UNormPack32; // normal normal normal packedSmoothness
             else if (index == GBufferLightingIndex) // Emissive+baked: Most likely B10G11R11_UFloatPack32 or R16G16B16A16_SFloat
-                return GraphicsFormat.None;
+                return GraphicsFormat.B10G11R11_UFloatPack32;
             else if (index == GbufferDepthIndex) // Render-pass on mobiles: reading back real depth-buffer is either inefficient (Arm Vulkan) or impossible (Metal).
-                return GraphicsFormat.R32_SFloat;
+                return GraphicsFormat.R16_SFloat;
             else if (index == GBufferShadowMask) // Optional: shadow mask is outputed in mixed lighting subtractive mode for non-static meshes only
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferRenderingLayers) // Optional: rendering layers is outputed when light layers are enabled (subset of rendering layers)
@@ -168,14 +172,14 @@ namespace UnityEngine.Rendering.Universal.Internal
             else if (index == GBufferKenaExtraAIndex)
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferKenaExtraBIndex)
-                return GraphicsFormat.R32_SFloat; //TODO 
+                return GraphicsFormat.R8G8B8A8_UNorm; 
             else
                 return GraphicsFormat.None; 
         }
 
         // This may return different values depending on what lights are rendered for a given frame.
         internal bool UseKenaGBufferA { get { return true; } }  //用于追加GBuffer对象 
-        internal bool UseKenaGBufferB { get { return false; } } 
+        internal bool UseKenaGBufferB { get { return UseRenderPass ? false : true; } }  //关闭UseRenderPass的话，需要这个变量为True以提供完整的6张RT 
 
         internal bool UseShadowMask { get { return this.MixedLightingSetup != MixedLightingSetup.None; } }
         //
@@ -747,9 +751,14 @@ namespace UnityEngine.Rendering.Universal.Internal
                 NativeArray<VisibleLight> visibleLights = renderingData.lightData.visibleLights;
 
                 if (HasStencilLightsOfType(LightType.Directional))
-                    RenderKenaTest(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                {
+                    RenderKenaAmbient(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    RenderKenaDirLight(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    RenderKenaGI(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                    
                     //RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                     //RenderStencilDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
+                }
                 if (HasStencilLightsOfType(LightType.Point))
                     RenderStencilPointLights(cmd, ref renderingData, visibleLights);
                 if (HasStencilLightsOfType(LightType.Spot))
@@ -762,7 +771,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             Profiler.EndSample();
         }
 
-        void RenderKenaTest(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        void RenderKenaDirLight(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
         {
             if (m_FullscreenMesh == null)
                 m_FullscreenMesh = CreateFullscreenMesh();
@@ -805,7 +814,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
 
                 // Lighting pass.
-                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaTest]);
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaDL]);
 
             }
 
@@ -813,7 +822,58 @@ namespace UnityEngine.Rendering.Universal.Internal
             cmd.DisableShaderKeyword("_NEED_REBUILD_POSWS");
         }
 
-        void RenderKenaDirectionalLights(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        void RenderKenaGI (CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        {
+            if (m_FullscreenMesh == null)
+                m_FullscreenMesh = CreateFullscreenMesh();
+
+            cmd.EnableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+
+            for (int soffset = m_stencilVisLightOffsets[(int)LightType.Directional]; soffset < m_stencilVisLights.Length; ++soffset)
+            {
+                ushort visLightIndex = m_stencilVisLights[soffset];
+                ref VisibleLight vl = ref visibleLights.UnsafeElementAtMutable(visLightIndex);
+                if (vl.lightType != LightType.Directional)
+                    break;
+                if (visLightIndex != mainLightIndex)
+                    continue;
+
+                // Avoid light find on every access.
+                Light light = vl.light;
+
+                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+
+                int lightFlags = 0;
+
+                var additionalLightData = light.GetUniversalAdditionalLightData();
+                uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
+
+                // Setup shadow paramters:
+                // - for the main light, they have already been setup globally, so nothing to do.
+                bool hasDeferredShadows = light && light.shadows != LightShadows.None;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.AdditionalLightShadows, false);
+
+                bool hasSoftShadow = hasDeferredShadows && renderingData.shadowData.supportsSoftShadows && light.shadows == LightShadows.Soft;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.SoftShadows, hasSoftShadow);
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings._DEFERRED_MAIN_LIGHT, visLightIndex == mainLightIndex); // main directional light use different uniform constants from additional directional lights
+                //CoreUtils.SetKeyword(cmd, "_NEED_REBUILD_POSWS", true);
+
+                cmd.SetGlobalVector(ShaderConstants._LightColor, lightColor); // VisibleLight.finalColor already returns color in active color space
+                cmd.SetGlobalVector(ShaderConstants._LightDirection, lightDir);
+                cmd.SetGlobalInt(ShaderConstants._LightFlags, lightFlags);
+                cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
+
+                // Lighting pass.
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaGI]);
+
+            }
+
+            cmd.DisableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+            //cmd.DisableShaderKeyword("_NEED_REBUILD_POSWS");
+        }
+
+        void RenderKenaAmbient(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
         {
             if (m_FullscreenMesh == null)
                 m_FullscreenMesh = CreateFullscreenMesh();
@@ -855,7 +915,56 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
 
                 // Lighting pass.
-                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaDL]);
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaAmbient]);
+
+            }
+
+            cmd.DisableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+        }
+
+        void RenderKenaTest(CommandBuffer cmd, ref RenderingData renderingData, NativeArray<VisibleLight> visibleLights, int mainLightIndex)
+        {
+            if (m_FullscreenMesh == null)
+                m_FullscreenMesh = CreateFullscreenMesh();
+
+            cmd.EnableShaderKeyword(ShaderKeywordStrings._DIRECTIONAL);
+
+            for (int soffset = m_stencilVisLightOffsets[(int)LightType.Directional]; soffset < m_stencilVisLights.Length; ++soffset)
+            {
+                ushort visLightIndex = m_stencilVisLights[soffset];
+                ref VisibleLight vl = ref visibleLights.UnsafeElementAtMutable(visLightIndex);
+                if (vl.lightType != LightType.Directional)
+                    break;
+                if (visLightIndex != mainLightIndex)
+                    continue;
+
+                // Avoid light find on every access.
+                Light light = vl.light;
+
+                Vector4 lightDir, lightColor, lightAttenuation, lightSpotDir, lightOcclusionChannel;
+                UniversalRenderPipeline.InitializeLightConstants_Common(visibleLights, visLightIndex, out lightDir, out lightColor, out lightAttenuation, out lightSpotDir, out lightOcclusionChannel);
+
+                int lightFlags = 0;
+
+                var additionalLightData = light.GetUniversalAdditionalLightData();
+                uint lightLayerMask = RenderingLayerUtils.ToValidRenderingLayers(additionalLightData.renderingLayers);
+
+                // Setup shadow paramters:
+                // - for the main light, they have already been setup globally, so nothing to do.
+                bool hasDeferredShadows = light && light.shadows != LightShadows.None;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.AdditionalLightShadows, false);
+
+                bool hasSoftShadow = hasDeferredShadows && renderingData.shadowData.supportsSoftShadows && light.shadows == LightShadows.Soft;
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings.SoftShadows, hasSoftShadow);
+                CoreUtils.SetKeyword(cmd, ShaderKeywordStrings._DEFERRED_MAIN_LIGHT, visLightIndex == mainLightIndex); // main directional light use different uniform constants from additional directional lights
+
+                cmd.SetGlobalVector(ShaderConstants._LightColor, lightColor); // VisibleLight.finalColor already returns color in active color space
+                cmd.SetGlobalVector(ShaderConstants._LightDirection, lightDir);
+                cmd.SetGlobalInt(ShaderConstants._LightFlags, lightFlags);
+                cmd.SetGlobalInt(ShaderConstants._LightLayerMask, (int)lightLayerMask);
+
+                // Lighting pass.
+                cmd.DrawMesh(m_FullscreenMesh, Matrix4x4.identity, m_StencilDeferredMaterial, 0, m_StencilDeferredPasses[(int)StencilDeferredPasses.KenaTest]);
 
             }
 
@@ -1105,9 +1214,27 @@ namespace UnityEngine.Rendering.Universal.Internal
             for (int pass = 0; pass < k_StencilDeferredPassNames.Length; ++pass)
                 m_StencilDeferredPasses[pass] = m_StencilDeferredMaterial.FindPass(k_StencilDeferredPassNames[pass]);
 
-            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr"); //TODO: 找个更加合适的地方设置LUT 
+            //TODO: 找个更加合适的方式加载和设置这些辅助纹理 
+            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr"); 
             if (lut != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut);
+
+            var ibl = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/IBL.png");
+            if (ibl != null)
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_IBL"), ibl);
+
+            var sky = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/Sky.png");
+            if (sky != null)
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_Sky"), sky);
+
+            var lut2 = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT2.png"); 
+            if (lut2 != null)
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT2"), lut2);
+
+            var ambient = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/kena_EnvLitCube.exr");
+            if (ambient != null)
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_Ambientmap"), ambient);
+
 
             m_StencilDeferredMaterial.SetFloat(ShaderConstants._StencilRef, (float)StencilUsage.MaterialUnlit);
             m_StencilDeferredMaterial.SetFloat(ShaderConstants._StencilReadMask, (float)StencilUsage.MaterialMask);

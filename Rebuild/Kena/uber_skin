@@ -19,8 +19,8 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t2         Color 
 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0               RWBuffer<uint>          RWSeparableGroupBuffer; [Buffer 32036] 
-      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037] <- 条件判断屏蔽了  
-      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;           [2D RT 31731]  
+      dcl_uav_typed_buffer (uint,uint,uint,uint) u1               RWBuffer<uint>          RWBurleyGroupBuffer;    [Buffer 32037] <- 条件判断屏蔽了 
+      dcl_uav_typed_texture2d (float,float,float,float) u2        RWTexture2D<float4>     SetupTexture;           [2D RT 31731] 
 
       dcl_input vThreadIDInGroupFlattened
       dcl_input vThreadGroupID.xy

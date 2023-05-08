@@ -47,6 +47,9 @@ namespace UnityEngine.Rendering.Universal
         [Serializable, ReloadGroup]
         public sealed class ShaderResources
         {
+            [Reload("Shaders/PostProcessing/KenaPostSubsurface.compute")]
+            public ComputeShader subsurfaceCS;
+
             /// <summary>
             /// The StopNan Post Processing shader.
             /// </summary>

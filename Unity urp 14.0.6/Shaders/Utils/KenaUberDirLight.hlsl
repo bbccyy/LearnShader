@@ -1,7 +1,7 @@
 
-TEXTURE2D(_SSAO); SAMPLER(sampler_SSAO);
 TEXTURE2D(_ShadowTex); SAMPLER(sampler_ShadowTex);
 TEXTURE2D(_LUT); SAMPLER(sampler_LUT);
+
 
 struct FShadowTerms
 {
@@ -256,23 +256,6 @@ void GetProfileDualSpecular(FGBufferData GBuffer, out float AverageToRoughness0,
     LobeMix = Data.z;
 }
 
-FGBufferData GetGBufferData(float2 UV, bool bGetNormalizedNormal = true)  
-{
-    float DeviceZ  = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, UV, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
-    half3 Normal_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, UV, 0).xyz;
-    half4 Albedo_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, UV, 0);
-    half4 Comp_M_D_R_F_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, UV, 0);
-    half4 Comp_F_R_X_I_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer5, my_point_clamp_sampler, UV, 0);
-
-    float4 ShadowTex_Raw = SAMPLE_TEXTURE2D(_ShadowTex, sampler_ShadowTex, UV).xyzw;
-    //float4 ShadowTex_Raw = 0;  //TODO: set tex 
-
-    float SceneDepth = ConvertFromDeviceZ(DeviceZ);
-
-    return DecodeGBufferData(Normal_Raw, Albedo_Raw, Comp_M_D_R_F_Raw, 
-        Comp_F_R_X_I_Raw, ShadowTex_Raw, SceneDepth, CheckerFromSceneColorUV(UV));
-}
-
 float InterleavedGradientNoise(float2 uv, float frameId)
 {
     uv += frameId * float2(32.665f, 11.815f);
@@ -385,8 +368,8 @@ void GetShadowTerms(FGBufferData GBuffer, FDeferredLightData LightData, float3 W
 
     // TODO: 查明为何ContactShadow效果会和截帧输出不一致(特别是披肩下方的阴影) 
 #define USE_CONTACT_SHADOW 0 
-#if USE_CONTACT_SHADOW
-    ContactShadow = ShadowRayCast(
+#if USE_CONTACT_SHADOW 
+    ContactShadow = ShadowRayCast( 
         WorldPosition - CameraPosWS.xyz,  //对应UE4源码: WorldPosition + View.PreViewTranslation 
         L,
         ContactShadowLength, 
@@ -467,12 +450,12 @@ void SphereMaxNoH(inout BxDFContext Context, float SinAlpha, bool bNewtonIterati
 //通用:木+石+土墙+乔木(含枝叶)等的渲染 
 FDirectLighting DefaultLitBxDF(FGBufferData GBuffer, half3 N, half3 V, half3 L, float Falloff, float NoL, FAreaLight AreaLight, FShadowTerms Shadow)
 {
-    BxDFContext Context = (BxDFContext)0;
+    BxDFContext Context = (BxDFContext)0; //初始化一些常用点积 
     Context.NoL = dot(N, L);
     Context.NoV = dot(N, V);
     Context.VoL = dot(V, L);
 
-    SphereMaxNoH(Context, AreaLight.SphereSinAlpha, true);
+    SphereMaxNoH(Context, AreaLight.SphereSinAlpha, true); 
     Context.NoV = saturate(abs(Context.NoV) + 1e-5); 
 
     FDirectLighting Lighting = (FDirectLighting)0;
@@ -608,23 +591,23 @@ FDirectLighting IntegrateBxDF(FGBufferData GBuffer, half3 N, half3 V, half3 L, f
     case SHADINGMODELID_DEFAULT_LIT:
     case SHADINGMODELID_SINGLELAYERWATER:
     case SHADINGMODELID_THIN_TRANSLUCENT:
-        return DefaultLitBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        return DefaultLitBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //默认光照模型 
     case SHADINGMODELID_TWOSIDED_FOLIAGE:
-        return TwoSidedBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        return TwoSidedBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //双面模型 
     case SHADINGMODELID_CLOTH:
-        return ClothBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        return ClothBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //布料模型 
     case SHADINGMODELID_SUBSURFACE_PROFILE:
-        return SubsurfaceProfileBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        return SubsurfaceProfileBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //次表面散射配置（既分步SSSS计算中的第一步) 
     case SHADINGMODELID_HAIR:
-        return HairBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        return HairBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //头发模型 
     case SHADINGMODELID_SUBSURFACE:
         //return SubsurfaceBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
     case SHADINGMODELID_PREINTEGRATED_SKIN:
         //return PreintegratedSkinBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
     case SHADINGMODELID_CLEAR_COAT:
-        //return ClearCoatBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        //return ClearCoatBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);  //清漆模型 
     case SHADINGMODELID_EYE:
-        //return EyeBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow);
+        //return EyeBxDF(GBuffer, N, V, L, Falloff, NoL, AreaLight, Shadow); //眼睛 
         return (FDirectLighting)0;
     default:
         return (FDirectLighting)0;
@@ -638,24 +621,25 @@ FDirectLighting IntegrateBxDF(FGBufferData GBuffer, half3 N, half3 V, FCapsuleLi
     float Falloff = 0;
     float LineCosSubtended = 1; 
 
-    if (Capsule.Length <= 0 ) // -> Kena 的CapsuleLight.len总是为0 
+    if (Capsule.Length <= 0 ) // //是点光源 -> Kena 的CapsuleLight.len为0 
     {
-        float DistSqr = dot(Capsule.LightPos[0], Capsule.LightPos[0]); //LightPos里存的其实是LightDir 
-        Falloff = rcp(DistSqr + Capsule.DistBiasSqr);	//todo  
-        float3 L = Capsule.LightPos[0] * rsqrt(DistSqr);  //可以直接拿Capsule.LightPos[0]替代，Kena中，这个值本身已经被归一化了 
-        NoL = dot(N, L);
+        float DistSqr = dot(Capsule.LightPos[0], Capsule.LightPos[0]); //距离系数 
+        Falloff = rcp(DistSqr + Capsule.DistBiasSqr);	    //赋值衰减系数
+        float3 L = Capsule.LightPos[0] * rsqrt(DistSqr);    //光照方向（归一化） 
+        NoL = dot(N, L); //赋值NoL，其中N为物体表面法线 -> GBuffer.WorldNormal 
     }
 
-    if (Capsule.Radius > 0)
+    if (Capsule.Radius > 0) // 胶囊半径>0（不是无体积的点）, 当球体盖帽来调整N和L的点积  
     {
-        float SinAlphaSqr = saturate(Pow2(Capsule.Radius) * Falloff); //todo: 含义 
+        float SinAlphaSqr = saturate(Pow2(Capsule.Radius) * Falloff); 
         NoL = SphereHorizonCosWrap(NoL, SinAlphaSqr); 
     }
 
     NoL = saturate(NoL);
-    Falloff = bInverseSquared ? Falloff : 1; //todo 确认 bInverseSquared
+    Falloff = bInverseSquared ? Falloff : 1; //kena LightData.bInverseSquared == true 
 
     float3 ToLight = Capsule.LightPos[0];
+    //依据有效长度调整光源方向 
     //if (Capsule.Length > 0) //当前分支不进入，Capsule.Length == 0 
     //{
     //	float3 R = reflect(-V, N);   
@@ -696,8 +680,10 @@ FDeferredLightingSplit GetDynamicLightingSplit(
     float4 RetSpecular = 0;
     float3 CommonMultiplier = 0;
 
-    //if (LightMask > 0)		//TRUE -> 假设任何位置都能被 RadialLight 照射到 
+    UNITY_BRANCH 
+    if (LightMask > 0)		//TRUE -> 假设任何位置都能被 RadialLight 照射到 
     {
+        //首先处理表面阴影 
         FShadowTerms Shadow = (FShadowTerms)0;
         Shadow.SurfaceShadow = AmbientOcclusion;
         Shadow.TransmissionShadow = 1;
@@ -750,9 +736,10 @@ FDeferredLightingSplit GetDynamicLightingSplit(
 //float3 screenUV : TEXCOORD1;
 //float3 viewDirWS : TEXCOORD2;
 
-float4 FragKenaTest(Varyings IN) : SV_Target
+float4 FragKenaDirectLight(Varyings IN) : SV_Target
 {
     //init all local buffer data
+    //TODO: 向Unity兼容 
     kena_LightData.ShadowedBits = 3;		  //cb1[2].x=3 -> 需用uint4查看 
     kena_LightData.ContactShadowLength = 0.2; //cb1[1].z=0.2 
     kena_LightData.Direction = float3(0.51555, -0.29836, 0.80324);  //cb1[5].xyz
@@ -772,26 +759,23 @@ float4 FragKenaTest(Varyings IN) : SV_Target
     FGBufferData GBuffer = GetGBufferData(IN.screenUV.xy);
     float3 ViewDirWS = normalize(IN.viewDirWS);
 	float3 WorldPosition = ViewDirWS * GBuffer.Depth + CameraPosWS.xyz;
+    float3 CameraVector = normalize(WorldPosition - CameraPosWS.xyz);
 
     //验证世界坐标正确性用
 	//float4 shouldBeHClipPos = mul(Matrix_VP, float4(WorldPosition - CameraPosWS.xyz, 1));
 	//test.rgb = shouldBeHClipPos.xyz / shouldBeHClipPos.w; 
 
-    uint see_flag = GBuffer.ShadingModelID == (uint)SHADINGMODELID_HAIR;
-    //test.rgb = see_flag;
+    //验证渲染通道 
+    //uint see_flag = GBuffer.ShadingModelID == (uint)SHADINGMODELID_HAIR;
+    //test.rgb = see_flag; 
 
-    if (GBuffer.ShadingModelID)  //不是天空的进入 
+    UNITY_BRANCH 
+    if (GBuffer.ShadingModelID > 0)  //当前像素使用延迟渲染的才能进入 
     {
-        float3 ViewDirWS = normalize(IN.viewDirWS);
-        float3 WorldPosition = ViewDirWS * GBuffer.Depth + CameraPosWS.xyz;
-
-        float3 CameraVector = normalize(WorldPosition - CameraPosWS.xyz);
-        //test.xyz = abs(WorldPosition - CameraPosWS.xyz) / 35000; //用于验证世界坐标解码后的正确性 
-
-        //在一定屏幕空间范围内的随机变量，一般用于模糊摩尔纹或其他异样 
+        //随机抖动，一般用于消除摩尔纹或其他异样 
         float Dither = InterleavedGradientNoise(IN.positionCS, FrameId); 
 
-        //get shadow terms
+        //get shadow terms 
         float4 LightAttenuation = GetPerPixelLightAttenuation(IN.screenUV.xy);
 
         //get ssao 
@@ -802,16 +786,28 @@ float4 FragKenaTest(Varyings IN) : SV_Target
 
         float SurfaceShadow = 1.0f;
 
+        //计算动态光照 
         FDeferredLightingSplit light_output = GetDynamicLightingSplit(
             WorldPosition, CameraVector, GBuffer, AmbientOcclusion, GBuffer.ShadingModelID,
             kena_LightData, LightAttenuation, Dither, uint2(IN.positionCS.xy), SourceTexture,
             SurfaceShadow
         );
 
-        FinalColor = light_output.DiffuseLighting * 0.5 + light_output.SpecularLighting * 0.3; //TODO: 结合渲染原理，定位颜色差异问题 
+        FinalColor = light_output.DiffuseLighting + light_output.SpecularLighting; //TODO: 结合渲染原理，定位颜色差异问题 
 
         test = FinalColor;
+
+        // float3 Normal_Raw = SAMPLE_TEXTURE2D(_GBuffer2, my_point_clamp_sampler, IN.screenUV.xy).xyz;
+        // float4 Albedo_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, IN.screenUV.xy, 0); 
+        // float3 Data = LOAD_TEXTURE2D(_LUT, uint2(1, 64 - 2)).xyz;
+        // float4 MDRF_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, IN.screenUV.xy, 0); 
+        // float D_Raw = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, IN.screenUV.xy, 0).r; 
+        // test.xyz = Normal_Raw; //normalize(DecodeNormalUE(Normal_Raw)); //GBuffer.WorldNormal.xyz;
+        // test.xyz = Normal_Raw.xyz * 2 - 1;
+        // test = FinalColor;
+        
         //test = light_output.DiffuseLighting;
+        //test.rgb = CameraVector;
     }
 
     return float4(test.rgb , test.a);

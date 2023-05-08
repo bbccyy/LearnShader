@@ -26,6 +26,13 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         _ClearStencilWriteMask ("ClearStencilWriteMask", Int) = 0
 
         [NoScaleOffset] _LUT("LUT", 2D)	 = "white" {}
+
+        [NoScaleOffset] _LUT2("LUT2", 2D) = "white" {}
+        _IBL("IBL", cube) = "white" {}
+        _Sky("Sky", cube) = "white" {}
+
+        _Ambientmap("Ambientmap", cube) = "white" {}
+
     }
 
     HLSLINCLUDE
@@ -34,8 +41,6 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Deferred.hlsl"
     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
     #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRendering.hlsl"
-    
-    #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaDeferredCommon.hlsl"
 
     struct Attributes
     {
@@ -60,6 +65,20 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     float4 _SpotLightBias;
     float4 _SpotLightGuard;
     #endif
+
+    SamplerState my_point_clamp_sampler;
+    SamplerState my_bilinear_clamp_sampler;
+
+    TEXTURE2D_X(_CameraDepthTexture);   //借用截帧数据测试期间不使用，全仿真是使用  //对应InputAttachment_3 
+    TEXTURE2D_X_HALF(_GBuffer0);        //Albedo 
+    TEXTURE2D_X_HALF(_GBuffer1);        //Comp_M_D_R_F 
+    TEXTURE2D_X_HALF(_GBuffer2);        //Normal 
+
+    //GB3 == colorAttachment
+    //GB4 == _CameraDepthTexture
+    TEXTURE2D_X_FLOAT(_GBuffer4);        //Depth 
+    TEXTURE2D_X_HALF(_GBuffer5);         //Comp_Custom_F_R_X_I 
+    #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaDeferredCommon.hlsl"
 
     Varyings Vertex(Attributes input)
     {
@@ -117,16 +136,6 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     }
 
 
-    TEXTURE2D_X(_CameraDepthTexture);   //借用截帧数据测试期间不使用，全仿真是使用  //对应InputAttachment_3 
-    TEXTURE2D_X_HALF(_GBuffer0);        //Normal
-    TEXTURE2D_X_HALF(_GBuffer1);        //Albedo
-    TEXTURE2D_X_HALF(_GBuffer2);        //Comp_M_D_R_F
-
-    //GB3 == colorAttachment
-    //GB4 == _CameraDepthTexture
-    TEXTURE2D_X_HALF(_GBuffer4);
-    TEXTURE2D_X_HALF(_GBuffer5);        //Comp_Custom_F_R_X_I 
-
 #if _RENDER_PASS_ENABLED  //TODO: 为何C#断点查看此Key是设置为True的，但是实际上Shader内读取的是False？ -> 没加 #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
 //#if 1
     #define GBUFFER0 0
@@ -154,7 +163,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     #endif
 
     float4x4 _ScreenToWorld[2];
-    SamplerState my_point_clamp_sampler;
+    
 
     float3 _LightPosWS;
     half3 _LightColor;
@@ -421,7 +430,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         //test _SSR
         //half4  ssr = SAMPLE_TEXTURE2D_X_LOD(_SSR, my_point_clamp_sampler, screen_uv, 0).xyzw;
 
-        return gbuffer5; 
+        return gbuffer0; 
     }
 
     ENDHLSL
@@ -758,6 +767,89 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ZTest NotEqual
             ZWrite Off
             Cull Off
+            Blend One One  
+            //BlendOp Add, Add
+
+            HLSLPROGRAM
+
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaUberDirLight.hlsl"
+
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #pragma multi_compile _NEED_REBUILD_POSWS 
+
+            #pragma vertex Vertex
+            #pragma fragment FragKenaDirectLight 
+            //#pragma enable_d3d11_debug_symbols
+
+            ENDHLSL
+        }
+
+
+         Pass
+        {
+            Name "KenaGI"
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
+            Blend One One 
+            //BlendOp Add, Add
+
+            HLSLPROGRAM
+
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaUberGI.hlsl"
+
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+
+            #pragma vertex Vertex
+            #pragma fragment FragKenaGI 
+            //#pragma enable_d3d11_debug_symbols
+
+            ENDHLSL
+        }
+
+          Pass
+        {
+            Name "KenaAmbientCube"
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
+            Blend One One 
+            //BlendOp Add, Add
+
+            HLSLPROGRAM
+
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaAmbientCubemapComposite.hlsl" 
+
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+
+            #pragma vertex Vertex
+            #pragma fragment FragKenaAmbientCube 
+            //#pragma enable_d3d11_debug_symbols
+
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "KenaTest"
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
             Blend One Zero 
             //BlendOp Add, Add
 
@@ -775,33 +867,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        Pass
-        {
-            Name "KenaTest"
-
-            ZTest NotEqual
-            ZWrite Off
-            Cull Off
-            Blend One Zero 
-            //BlendOp Add, Add
-
-            HLSLPROGRAM
-
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaUberDirLight.hlsl"
-
-            #pragma exclude_renderers gles gles3 glcore
-            #pragma target 4.5
-
-            #pragma multi_compile _DIRECTIONAL
-            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
-            #pragma multi_compile _NEED_REBUILD_POSWS 
-
-            #pragma vertex Vertex
-            #pragma fragment FragKenaTest 
-            //#pragma enable_d3d11_debug_symbols
-
-            ENDHLSL
-        }
+     
     }
 
     FallBack "Hidden/Universal Render Pipeline/FallbackError"
