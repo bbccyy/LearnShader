@@ -17,7 +17,7 @@
 #define SHADINGMODELID_PREINTEGRATED_SKIN	3
 #define SHADINGMODELID_SUBSURFACE_PROFILE	5
 #define SHADINGMODELID_EYE					9
-#define SHADINGMODELID_MASK					0xF		// 4 bits reserved for ShadingModelID 
+#define SHADINGMODELID_MASK					0xF		// 4 bits reserved for ShadingModelID  
 
 // define structure here 
 struct SDiffuseAndSpecular
