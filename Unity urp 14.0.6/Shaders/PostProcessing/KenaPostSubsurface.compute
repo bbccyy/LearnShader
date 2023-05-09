@@ -1,5 +1,5 @@
 // Each #kernel tells which function to compile; you can have many kernels
-#pragma kernel InitValueBufferCS 
+#pragma kernel InitValueBufferCS
 #pragma kernel BuildIndirectDispatchArgsCS 
 #pragma kernel SetupIndirectCS 
 
@@ -34,9 +34,8 @@ struct SDiffuseAndSpecular
 groupshared uint SubsurfaceTypeFlag;
 
 uint SubsurfaceUniformParameters_MaxGroupCount;
-uint2 Output_ViewportMin; // [0,0]
-uint2 Output_ViewportMax; // [1708, 960]
-float2 Output_ExtentInverse; //[1/pixelSizeX, 1/pixelSizeY]
+uint4 Output_ViewportMinMax; // [0, 0, 1708, 960]
+float4 Output_ExtentInverse; //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY]
 
 static float4 InvDeviceZToWorldZTransform = float4(0.00, 0.00, 0.10, -1.00000E-08);
 static float4 View_BufferSizeAndInvSize = float4(1708.00, 960.00, 0.00059, 0.00104);
@@ -46,10 +45,10 @@ static float4 SubsurfaceInput0_UVViewportBilinearMax = float4(1.00, 1.00, 0.9991
 
 //SamplerState my_point_clamp_sampler;
 SamplerState pointClampSampler;
-Texture2D<half4>  _GBuffer0;    //Albedo
-Texture2D<half4>  _GBuffer1;    //Comp_M_D_R_F 
-Texture2D<half4>  _GBuffer4;    //Depth 
-Texture2D<half4>  _SceneTex;    //current render target  -> SubsurfaceInput0_Texture 
+uniform Texture2D<half4>  _GBuffer0;    //Albedo
+uniform Texture2D<half4>  _GBuffer1;    //Comp_M_D_R_F 
+uniform Texture2D<float>  _GBuffer4;    //Depth -> pay attention, must be float, not float4 
+uniform Texture2D<half4>  _CameraTexture;    //current render target  -> SubsurfaceInput0_Texture 
 
 
 RWBuffer<uint> RWSeparableGroupBuffer;
@@ -65,7 +64,7 @@ bool UseSubsurfaceProfile(int ShadingModel)
 float2 ConvertGridPos2UV(uint2 GridPosition)
 {
     float2 GripPositionF = float2(GridPosition);
-    return Output_ExtentInverse * (GripPositionF + 0.5f);
+    return Output_ExtentInverse.zw * (GripPositionF + 0.5f);
 }
 
 
@@ -95,16 +94,16 @@ float4 GatherSceneDepth(float2 UV, float2 InvBufferSize)
 half3 LookupSceneColor(float2 SceneUV, half2 PixelOffset)
 {
     // faster
-    return _SceneTex.SampleLevel(pointClampSampler, SceneUV, 0, PixelOffset * View_BufferSizeAndInvSize.zw).rgb;
-    //return SAMPLE_TEXTURE2D_X(_SceneTex, sampler_PointClamp, SceneUV + PixelOffset * View_BufferSizeAndInvSize.zw).rgb;
+    return _CameraTexture.SampleLevel(pointClampSampler, SceneUV, 0, PixelOffset * View_BufferSizeAndInvSize.zw).rgb;
+    //return SAMPLE_TEXTURE2D_X(_CameraTexture, sampler_PointClamp, SceneUV + PixelOffset * View_BufferSizeAndInvSize.zw).rgb;
 }
 
 bool CheckerFromSceneColorUV(float2 UVSceneColor)
 {
     // relative to left top of the rendertarget (not viewport)
-    uint2 PixelPos = uint2(UVSceneColor * View_BufferSizeAndInvSize.xy);
+    uint2 PixelPos = (uint2)(UVSceneColor.xy * View_BufferSizeAndInvSize.xy).xy;
     uint TemporalAASampleIndex = 3;
-    return (PixelPos.x + PixelPos.y + TemporalAASampleIndex) & 1;
+    return (PixelPos.x + PixelPos.y + TemporalAASampleIndex) % 2;
 }
 
 SDiffuseAndSpecular ReconstructLighting(float2 UVSceneColor)
@@ -113,8 +112,8 @@ SDiffuseAndSpecular ReconstructLighting(float2 UVSceneColor)
 
     bool bChecker = CheckerFromSceneColorUV(UVSceneColor);
 
-    half3 Quant0 = _SceneTex.SampleLevel(pointClampSampler, UVSceneColor, 0).rgb;
-    //half3 Quant0 = SAMPLE_TEXTURE2D_X(_SceneTex, sampler_PointClamp, UVSceneColor).rgb;
+    half3 Quant0 = _CameraTexture.SampleLevel(pointClampSampler, UVSceneColor, 0).rgb;
+    //half3 Quant0 = SAMPLE_TEXTURE2D_X(_CameraTexture, sampler_PointClamp, UVSceneColor).rgb;
 
     half3 Quant1 = 0.5f * (
         LookupSceneColor(UVSceneColor, half2(1, 0)) +
@@ -142,6 +141,30 @@ float4 SetupSubsurfaceForOnePixel(float2 UVSceneColor)
         SDiffuseAndSpecular DiffuseAndSpecular = ReconstructLighting(UVSceneColor);
 
         Ret.rgb = DiffuseAndSpecular.Diffuse;
+
+        // it's a valid sample
+        Ret.a = 1;
+    }
+
+    return Ret;
+}
+
+
+float4 test(float2 UVSceneColor)
+{
+    float4 Ret = 0;
+
+    //sample customdata to get material channel info 
+    half packedChannel = _GBuffer1.SampleLevel(pointClampSampler, UVSceneColor, 0).a;
+    uint ShadingModelID = ((uint)round(packedChannel * (float)0xFF)) & SHADINGMODELID_MASK;
+
+    [branch]
+    if (UseSubsurfaceProfile(ShadingModelID))
+    {
+
+        bool bChecker = CheckerFromSceneColorUV(UVSceneColor);
+
+        Ret.rgb = bChecker;
 
         // it's a valid sample
         Ret.a = 1;
@@ -203,9 +226,9 @@ void BuildIndirectDispatchArgsCS()  //event name: BuildBurleyIndirectDispatchArg
 
 RWTexture2D<float4> SetupTexture; // [2D RT 31731] Half Res 
 
-[numthreads(THREAD_SIZE_X, THREAD_SIZE_Y, 1)]
-void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID,
-    uint3 G_ID : SV_GroupID, uint3 GT_ID : SV_GroupThreadID, uint GI : SV_GroupIndex)
+//[numthreads(THREAD_SIZE_X, THREAD_SIZE_Y, 1)]   uint3 DT_ID : SV_DispatchThreadID,
+[numthreads(8, 8, 1)]
+void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID, uint3 GT_ID : SV_GroupThreadID, uint GI : SV_GroupIndex)
 {
     if (GI == 0)
     {
@@ -213,30 +236,29 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID,
     }
     GroupMemoryBarrier();
 
-    uint2 Pos = DT_ID.xy + Output_ViewportMin;  
+    uint2 Pos = DT_ID.xy + Output_ViewportMinMax.xy;  
+    //uint2 Pos = G_ID.xy * uint2(THREAD_SIZE_X, THREAD_SIZE_Y) + GT_ID.xy + Output_ViewportMinMax.xy;
+
     bool bHasSubsurface = false;
     float2 BufferUV = ConvertGridPos2UV(Pos);
     uint Type = 0;
     float4 OutColor = 0;
-    float4 OutColor2 = 0;
+
+    //SetupTexture[Pos.xy] = float4(0, 0, 0, 0);  //clean up all  
 
     // --------------SUBSURFACE_HALF_RES START--------------
     // order aligned with Gather() hardware implementation
     // RGB: color*A, A:weight 0 if no subsurface scattering
-
-    float4 A = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 B = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, 0.5f) * SubsurfaceInput0_ExtentInverse, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 C = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, -0.5f) * SubsurfaceInput0_ExtentInverse, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 D = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, -0.5f) * SubsurfaceInput0_ExtentInverse, SubsurfaceInput0_UVViewportBilinearMax.zw));
+    float4 A = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
+    float4 B = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
+    float4 C = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
+    float4 D = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
 
     float4 Sum = (A + B) + (C + D);
-
     float Div = 1.0f / max(Sum.a, 0.00001f);
-
     OutColor.rgb = Sum.rgb * Div;
 
-    float4 FourDepth = GatherSceneDepth(BufferUV, SubsurfaceInput0_ExtentInverse);
-
+    float4 FourDepth = GatherSceneDepth(BufferUV, SubsurfaceInput0_ExtentInverse.zw);
     // average all valid depth values to a single one
     float SingleDepth = dot(FourDepth, float4(A.a, B.a, C.a, D.a)) * Div;
 
@@ -244,13 +266,13 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID,
 
     if (OutColor.a > 0)
     {
-        bHasSubsurface = true;
+        bHasSubsurface = true;  //? 
     }
     // --------------SUBSURFACE_HALF_RES END--------------
 
     Type = TYPE_SEPARABLE; // use separable for half resolution
 
-    if (all(Pos < Output_ViewportMax)) 
+    if (all(Pos < Output_ViewportMinMax.zw)) 
     {
         SetupTexture[Pos] = OutColor;
     }

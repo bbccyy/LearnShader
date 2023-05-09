@@ -50,6 +50,8 @@ namespace UnityEngine.Rendering.Universal
         RTHandle m_TempTarget;
         RTHandle m_TempTarget2;
 
+        RTHandle m_SubsurfaceHalfResSetup;
+
         const string k_RenderPostProcessingTag = "Render PostProcessing Effects";
         const string k_RenderFinalPostProcessingTag = "Render Final PostProcessing Pass";
         private static readonly ProfilingSampler m_ProfilingRenderPostProcessing = new ProfilingSampler(k_RenderPostProcessingTag);
@@ -212,6 +214,7 @@ namespace UnityEngine.Rendering.Universal
             m_EdgeStencilTexture?.Release();
             m_TempTarget?.Release();
             m_TempTarget2?.Release();
+            m_SubsurfaceHalfResSetup?.Release();
         }
 
         /// <summary>
@@ -642,22 +645,21 @@ namespace UnityEngine.Rendering.Universal
 
         void DoSubsurfacePost(ref CameraData cameraData, CommandBuffer cmd, RTHandle source, RTHandle dest)
         {
+            //commen factor 
+            const int ScaleFactor = 2;
             ComputeShader subsurfaceCS = m_Materials.subsurfaceCS;  //获取compute shader 
             Vector2Int fullRes = new Vector2Int(source.rt.width, source.rt.height);
+            Vector2Int scaledRes = new Vector2Int(Mathf.CeilToInt((float)fullRes.x / (float)ScaleFactor), Mathf.CeilToInt((float)fullRes.y / (float)ScaleFactor));
 
             //group count 
             Vector2Int kSubsurfaceGroupSize = new Vector2Int(8, 8);
             Vector2Int TileDimension = new Vector2Int(Mathf.CeilToInt((float)fullRes.x / (float)kSubsurfaceGroupSize.x), 
                 Mathf.CeilToInt((float)fullRes.y / (float)kSubsurfaceGroupSize.y));
             Int32 MaxGroupCount = TileDimension.x * TileDimension.y;
-
-            //commen factor -> todo: move to global settings 
-            const int ScaleFactor = 2;
-            //const bool bCheckerboard = true;
-            //const bool bHalfRes = true;
+            Vector4 Output_ViewportMinMax = new Vector4(0, 0, fullRes.x, fullRes.y);
+            Vector4 Output_ExtentInverse = new Vector4((float)fullRes.x, (float)fullRes.y, (float)1 / (float)scaledRes.x, (float)1 / (float)scaledRes.y);
 
             //Half Res texture descriptor 
-            Vector2Int scaledRes = new Vector2Int(Mathf.CeilToInt((float)fullRes.x / (float)ScaleFactor), Mathf.CeilToInt((float)fullRes.y / (float)ScaleFactor));
             RenderTextureDescriptor subsurfaceTexDec = new RenderTextureDescriptor(
                 Mathf.CeilToInt(source.rt.width / ScaleFactor), Mathf.CeilToInt(source.rt.height / ScaleFactor),
                 RenderTextureFormat.ARGB32, 0, 0);
@@ -672,12 +674,25 @@ namespace UnityEngine.Rendering.Universal
             subsurfaceTexWith6MipsDec.msaaSamples = 1;
 
             //Initialize the group buffer -> TODO:ok to use Raw as the type of the buffer? 
+            //这个GourpBuffer第一位存放了总长度，余下的成对 
             ComputeBuffer SeparableGroupBuffer = new ComputeBuffer(2 * (MaxGroupCount + 1), sizeof(uint), ComputeBufferType.Raw);
 
             using (new ProfilingScope(cmd, new ProfilingSampler("InitGroupCounter")))
             {
                 cmd.SetComputeBufferParam(subsurfaceCS, 0, Shader.PropertyToID("RWSeparableGroupBuffer"), SeparableGroupBuffer);
                 DispatchCompute(subsurfaceCS, cmd, 0, 1, 1, 1);
+            }
+
+            using (new ProfilingScope(cmd, new ProfilingSampler("SetupIndirectCS")))
+            {
+                cmd.SetComputeBufferParam(subsurfaceCS, 2, Shader.PropertyToID("RWSeparableGroupBuffer"), SeparableGroupBuffer);
+                RenderingUtils.ReAllocateIfNeeded(ref m_SubsurfaceHalfResSetup, subsurfaceTexDec, FilterMode.Point, TextureWrapMode.Clamp, name: "SetupTexture");
+                cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("SetupTexture"), m_SubsurfaceHalfResSetup);
+                cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("_CameraTexture"), source);
+                cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Output_ViewportMinMax"), Output_ViewportMinMax);
+                cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Output_ExtentInverse"), Output_ExtentInverse);
+                cmd.SetComputeIntParam(subsurfaceCS, Shader.PropertyToID("SubsurfaceUniformParameters_MaxGroupCount"), MaxGroupCount);
+                DispatchCompute(subsurfaceCS, cmd, 2, scaledRes.x, scaledRes.y, 1);
             }
 
         }
