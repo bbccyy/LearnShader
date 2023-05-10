@@ -1,3 +1,4 @@
+using Codice.CM.SEIDInfo;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -693,6 +694,15 @@ namespace UnityEngine.Rendering.Universal
                 cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Output_ExtentInverse"), Output_ExtentInverse);
                 cmd.SetComputeIntParam(subsurfaceCS, Shader.PropertyToID("SubsurfaceUniformParameters_MaxGroupCount"), MaxGroupCount);
                 DispatchCompute(subsurfaceCS, cmd, 2, scaledRes.x, scaledRes.y, 1);
+            }
+
+            ComputeBuffer SeprableIndirectDispatchArgs = new ComputeBuffer(1, sizeof(uint) * 4, ComputeBufferType.IndirectArguments);
+            using (new ProfilingScope(cmd, new ProfilingSampler("BuildIndirectDispatchArgsCS")))
+            {
+                cmd.SetComputeBufferParam(subsurfaceCS, 1, Shader.PropertyToID("RWIndirectDispatchArgsBuffer"), SeprableIndirectDispatchArgs);
+                cmd.SetComputeBufferParam(subsurfaceCS, 1, Shader.PropertyToID("GroupBuffer"), SeparableGroupBuffer);
+                cmd.SetComputeIntParam(subsurfaceCS, Shader.PropertyToID("SubsurfaceUniformParameters_MaxGroupCount"), MaxGroupCount);
+                DispatchCompute(subsurfaceCS, cmd, 1, 1, 1, 1);
             }
 
         }

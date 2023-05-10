@@ -14,9 +14,9 @@
 //@ShadingCommon 
 #define SHADINGMODELID_UNLIT				0
 #define SHADINGMODELID_SUBSURFACE			2
-#define SHADINGMODELID_PREINTEGRATED_SKIN	3  
+#define SHADINGMODELID_PREINTEGRATED_SKIN	3
 #define SHADINGMODELID_SUBSURFACE_PROFILE	5
-#define SHADINGMODELID_EYE					9 
+#define SHADINGMODELID_EYE					9
 #define SHADINGMODELID_MASK					0xF		// 4 bits reserved for ShadingModelID 
 
 // define structure here 
@@ -53,7 +53,7 @@ uniform Texture2D<half4>  _CameraTexture;    //current render target  -> Subsurf
 
 RWBuffer<uint> RWSeparableGroupBuffer;
 RWBuffer<uint> RWIndirectDispatchArgsBuffer;
-Buffer<uint> GroupBuffer;
+Buffer<uint> GroupBuffer;  //could be SeparableGroupBuffer or BurleyGroupBuffer 
 
 bool UseSubsurfaceProfile(int ShadingModel)
 {
@@ -221,6 +221,7 @@ void BuildIndirectDispatchArgsCS()  //event name: BuildBurleyIndirectDispatchArg
     RWIndirectDispatchArgsBuffer[0] = ValueCount;
     RWIndirectDispatchArgsBuffer[1] = 1;
     RWIndirectDispatchArgsBuffer[2] = 1;
+    RWIndirectDispatchArgsBuffer[3] = 0;
 }
 
 
