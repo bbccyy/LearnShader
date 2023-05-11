@@ -178,25 +178,28 @@ void AddSeparableGroup(uint2 GroupXY)
     //buffer counter is stored in the .Count in the first element.
     uint IndexToStore = 0;
 
-    InterlockedAdd(RWSeparableGroupBuffer[0], 1, IndexToStore);  
+    InterlockedAdd(RWSeparableGroupBuffer[0], 1, IndexToStore);  //RWSeparableGroupBuffer[0]++ 
 
     if (IndexToStore >= SubsurfaceUniformParameters_MaxGroupCount)
     {
-        return;
+        return; //in case of invalid input params 
     }
 
-    RWSeparableGroupBuffer[2 * (IndexToStore + 1) + 0] = GroupXY.x;
+    RWSeparableGroupBuffer[2 * (IndexToStore + 1) + 0] = GroupXY.x;  //mark down the group ID which has subsurface 
     RWSeparableGroupBuffer[2 * (IndexToStore + 1) + 1] = GroupXY.y;
 }
 
 
-void AddSubsurfaceComputeGroup(uint GI, uint Type, uint2 GroupXY)
+//GI:GroupIndex, Type:Seperable, GroupXY:GroupID 
+void AddSubsurfaceComputeGroup(uint GI, uint Type, uint2 GroupXY) 
 {
-    InterlockedOr(SubsurfaceTypeFlag, Type);  
+    InterlockedOr(SubsurfaceTypeFlag, Type);  //atomic OR operation on shared-memory:SubsurfaceTypeFlag 
 
-    GroupMemoryBarrierWithGroupSync();
+    GroupMemoryBarrierWithGroupSync(); //block all threads in current group until sync to this line 
 
-    if (GI == 0 && (SubsurfaceTypeFlag & TYPE_SEPARABLE))
+    //pass or not pass, One Group as a whole 
+    //if any thread in current group has Type==TYPE_SEPARABLE, the first thread of current group will jump into the following branch 
+    if (GI == 0 && (SubsurfaceTypeFlag & TYPE_SEPARABLE)) 
     {
         AddSeparableGroup(GroupXY);
     }
@@ -221,7 +224,6 @@ void BuildIndirectDispatchArgsCS()  //event name: BuildBurleyIndirectDispatchArg
     RWIndirectDispatchArgsBuffer[0] = ValueCount;
     RWIndirectDispatchArgsBuffer[1] = 1;
     RWIndirectDispatchArgsBuffer[2] = 1;
-    RWIndirectDispatchArgsBuffer[3] = 0;
 }
 
 
@@ -231,11 +233,11 @@ RWTexture2D<float4> SetupTexture; // [2D RT 31731] Half Res
 [numthreads(8, 8, 1)]
 void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID, uint3 GT_ID : SV_GroupThreadID, uint GI : SV_GroupIndex)
 {
-    if (GI == 0)
+    if (GI == 0)  //the very first thread in a perticual group 
     {
-        SubsurfaceTypeFlag = 0;
+        SubsurfaceTypeFlag = 0;  //clean shared flag 
     }
-    GroupMemoryBarrier();
+    GroupMemoryBarrier();  //not allow any thread pass through this line until the shared-flag has been reseted 
 
     uint2 Pos = DT_ID.xy + Output_ViewportMinMax.xy;  
     //uint2 Pos = G_ID.xy * uint2(THREAD_SIZE_X, THREAD_SIZE_Y) + GT_ID.xy + Output_ViewportMinMax.xy;
@@ -267,11 +269,15 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID,
 
     if (OutColor.a > 0)
     {
-        bHasSubsurface = true;  //? 
+        bHasSubsurface = true; 
     }
     // --------------SUBSURFACE_HALF_RES END--------------
 
-    Type = TYPE_SEPARABLE; // use separable for half resolution
+    
+    if (bHasSubsurface)
+    {
+        Type = TYPE_SEPARABLE; // use separable for half resolution
+    }
 
     if (all(Pos < Output_ViewportMinMax.zw)) 
     {

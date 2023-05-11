@@ -696,7 +696,7 @@ namespace UnityEngine.Rendering.Universal
                 DispatchCompute(subsurfaceCS, cmd, 2, scaledRes.x, scaledRes.y, 1);
             }
 
-            ComputeBuffer SeprableIndirectDispatchArgs = new ComputeBuffer(1, sizeof(uint) * 4, ComputeBufferType.IndirectArguments);
+            ComputeBuffer SeprableIndirectDispatchArgs = new ComputeBuffer(1, sizeof(uint) * 3, ComputeBufferType.IndirectArguments);
             using (new ProfilingScope(cmd, new ProfilingSampler("BuildIndirectDispatchArgsCS")))
             {
                 cmd.SetComputeBufferParam(subsurfaceCS, 1, Shader.PropertyToID("RWIndirectDispatchArgsBuffer"), SeprableIndirectDispatchArgs);
@@ -705,6 +705,7 @@ namespace UnityEngine.Rendering.Universal
                 DispatchCompute(subsurfaceCS, cmd, 1, 1, 1, 1);
             }
 
+            //TODO: 2 x MainIndirectDispatchCS 
         }
 
         #endregion
