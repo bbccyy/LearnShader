@@ -13,7 +13,7 @@ cs_5_0
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
 
-      dcl_resource_texture2d (float,float,float,float) t0                     -> Comp_M_D_R_F 
+      dcl_resource_texture2d (float,float,float,float) t0                     -> Comp_M_D_R_F  
       dcl_resource_texture2d (float,float,float,float) t1                     -> CustomData 
       dcl_resource_texture2d (float,float,float,float) t2                     -> LUT_ssss 
       dcl_resource_texture2d (float,float,float,float) t3                     -> DC:18411 对应 RT 31731; DC:18418 对应 RT 32035 
