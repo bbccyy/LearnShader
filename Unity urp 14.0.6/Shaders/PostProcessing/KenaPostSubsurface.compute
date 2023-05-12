@@ -6,7 +6,7 @@
 #define THREAD_SIZE_1D 8
 #define THREAD_SIZE_X THREAD_SIZE_1D
 #define THREAD_SIZE_Y THREAD_SIZE_X
-#define THREAD_TOTAL_SZIE (THREAD_SIZE_X*THREAD_SIZE_Y)
+#define THREAD_TOTAL_SZIE (THREAD_SIZE_X*THREAD_SIZE_Y)  
 
 #define TYPE_SEPARABLE 0x1      //kena use this 
 #define TYPE_BURLEY    0x2      //not support 
