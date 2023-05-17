@@ -1,7 +1,7 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel InitValueBufferCS
 #pragma kernel BuildIndirectDispatchArgsCS 
-#pragma kernel SetupIndirectCS 
+#pragma kernel SetupIndirectCS   
 
 #define THREAD_SIZE_1D 8
 #define THREAD_SIZE_X THREAD_SIZE_1D
