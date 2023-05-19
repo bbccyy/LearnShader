@@ -13,7 +13,7 @@ VertexPositionInputs GetVertexPositionInputs(float3 positionOS)
 
     float4 ndc = input.positionCS * 0.5f;
     input.positionNDC.xy = float2(ndc.x, ndc.y * _ProjectionParams.x) + ndc.w;
-    input.positionNDC.zw = input.positionCS.zw;
+    input.positionNDC.zw = input.positionCS.zw; 
 
     return input;
 }
