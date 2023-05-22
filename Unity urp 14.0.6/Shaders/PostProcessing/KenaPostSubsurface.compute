@@ -4,7 +4,7 @@
 #pragma kernel SetupIndirectCS   
 
 #define THREAD_SIZE_1D 8
-#define THREAD_SIZE_X THREAD_SIZE_1D
+#define THREAD_SIZE_X THREAD_SIZE_1D 
 #define THREAD_SIZE_Y THREAD_SIZE_X
 #define THREAD_TOTAL_SZIE (THREAD_SIZE_X*THREAD_SIZE_Y)  
 
