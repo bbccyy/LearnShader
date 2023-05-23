@@ -27,7 +27,7 @@ vs_4_0
 
 
 // Note: shader requires additional functionality:
-//       Minimum-precision data types
+//       Minimum-precision data types  
 //
 ps_4_0
       dcl_globalFlags refactoringAllowed, enableMinPrecision
