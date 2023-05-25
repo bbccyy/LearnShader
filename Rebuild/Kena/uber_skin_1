@@ -60,7 +60,13 @@ cs_5_0
 
   23: if_nz r3.x
 
-  24:   mul r3.x, cb0[28].z, cb0[31].x                                        -> 0.00117 * 854.0 = 0.99918  cb0_v28=[854.00, 480.00, 0.00117, 0.00208] 
+  24:   mul r3.x, cb0[28].z, cb0[31].x                                        -> 0.00117 * 854.0 = 0.99918  
+                                                                              -> cb0_v28=[854.00, 480.00, 0.00117, 0.00208] 
+                                                                              -> [Extent.xy, Inverse.xy]
+                                                                              -> cb0_v31=[854.00, 480.00, 5.70749E-42, 5.70749E-42] 
+                                                                              -> [ViewportSize.xy, ?.xy] 
+                                                                              -> ViewportDirectionUV *= (SubsurfaceInput0_ViewportSize.x * SubsurfaceInput0_ExtentInverse.x);
+
   25:   mul r3.xy, r3.xxxx, l(1024.0000, 0.0000, 0.0000, 0.0000)              -> float2 ViewportDirectionUV = float2(1, 0) * SUBSURFACE_RADIUS_SCALE; 
                                                                               -> SUBSURFACE_RADIUS_SCALE 由cpp端设置，数值为 1024 
 
@@ -76,7 +82,7 @@ cs_5_0
   35:   mul r1.w, r1.w, r3.z
   36:   movc r1.w, r3.w, l(0), r1.w                                           -> Mask * ScreenSpaceData.GBuffer.CustomData.a
                                                                               -> float SSSStrength = GetSubsurfaceStrength(BufferUV); 
-                                                                              -> 注意，r3.w 对应 DecodeSelectiveOutputMask(InGBufferB.a)
+                                                                              -> 注意，r3.w 对应 DecodeSelectiveOutputMask(InGBufferB.a) 
                                                                               -> 用于控制是否开启CustomData 
 
 
@@ -95,7 +101,7 @@ cs_5_0
   45:   add r7.xyz, r6.xyzx, l(0.0000, 0.0000, 0.0000, 0.0000)                -> colorInvDiv += GetSubsurfaceProfileKernel(
                                                                                     SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb;
 
-  46:   mov r5.xzw, l(4, 0, 0, 0)
+  46:   mov r5.xzw, l(4, 0, 0, 0)                                             -> SSSS_BOUNDARY_COLOR_BLEED_OFFSET = 4 
   47:   ld_indexable(texture2d)(float,float,float,float) r5.xzw, r5.xyzw, t2.xwyz   -> GetSubsurfaceProfileBoundaryColorBleed 
 
 --> Out LOOP Begin! 
@@ -109,7 +115,7 @@ cs_5_0
 
   -> Inner First Loop 
   53:   mul r10.x, r1.z, l(-1.0000)                                           -> UVOffset.x * -1 {Side} 
-  54:   mov r10.yw, l(0, 0x80000000, 0, 0x80000000)                           -> 0x80000000 是decimal number 最大值 -> 2,147,483,648
+  54:   mov r10.yw, l(0, 0x80000000, 0, 0x80000000)                           -> 0x80000000 是decimal number 最大值 -> 2,147,483,648 
                                                                               -> 0x80000000 也是float number 的 -0.0 表示 
   55:   mad r3.zw, cb0[49].zzzw, r1.xxxy, r10.xxxy                            -> BufferUV + r10.xy { UVOffset * Side? }  -> r10.y == -0.0 -> 只调整x方向 
   56:   max r3.zw, r3.zzzw, cb0[34].xxxy

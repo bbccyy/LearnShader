@@ -1,15 +1,19 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel InitValueBufferCS
 #pragma kernel BuildIndirectDispatchArgsCS 
-#pragma kernel SetupIndirectCS   
+#pragma kernel SetupIndirectCS 
 
 #define THREAD_SIZE_1D 8
-#define THREAD_SIZE_X THREAD_SIZE_1D 
+#define THREAD_SIZE_X THREAD_SIZE_1D
 #define THREAD_SIZE_Y THREAD_SIZE_X
-#define THREAD_TOTAL_SZIE (THREAD_SIZE_X*THREAD_SIZE_Y)  
+#define THREAD_TOTAL_SZIE (THREAD_SIZE_X*THREAD_SIZE_Y)
+
+#define SUBSURFACE_GROUP_SIZE 8
 
 #define TYPE_SEPARABLE 0x1      //kena use this 
-#define TYPE_BURLEY    0x2      //not support  
+#define TYPE_BURLEY    0x2      //not support 
+
+#define SKIP_CUSTOMDATA_MASK			(1 << 4)	 
 
 //@ShadingCommon 
 #define SHADINGMODELID_UNLIT				0
@@ -18,6 +22,12 @@
 #define SHADINGMODELID_SUBSURFACE_PROFILE	5
 #define SHADINGMODELID_EYE					9
 #define SHADINGMODELID_MASK					0xF		// 4 bits reserved for ShadingModelID 
+
+#define	SSSS_N_KERNELWEIGHTCOUNT 6 			//6     9       13      (low -> high) 
+#define	SSSS_N_KERNELWEIGHTOFFSET 28		//28    19      6       (low -> high) 
+
+#define SUBSURFACE_KERNEL_SIZE 3
+#define SSSS_BOUNDARY_COLOR_BLEED_OFFSET 4 
 
 // define structure here 
 struct SDiffuseAndSpecular
@@ -34,13 +44,16 @@ struct SDiffuseAndSpecular
 groupshared uint SubsurfaceTypeFlag;
 
 uint SubsurfaceUniformParameters_MaxGroupCount;
-uint4 Output_ViewportMinMax; // [0, 0, 1708, 960]
-float4 Output_ExtentInverse; //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY]
+uint4 Output_ViewportMinMax;    // [0, 0, 1708, 960]
+float4 Output_ExtentInverse;    //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY]
+float4 Input_ExtentInverse;     //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY] -> half res 
+float4 Input_ViewportSize;      //[pixelSizeX, pixelSizeY, 0, 0] -> half res
+float4 SubsurfaceParams;        //[0.18515, 1.11089, 0.00, 0.00] -> cb0_v27 
 
 static float4 InvDeviceZToWorldZTransform = float4(0.00, 0.00, 0.10, -1.00000E-08);
-static float4 View_BufferSizeAndInvSize = float4(1708.00, 960.00, 0.00059, 0.00104);
+static float4 View_BufferSizeAndInvSize = float4(1708.00, 960.00, 0.00059, 0.00104); 
 static float4 SubsurfaceInput0_ExtentInverse = float4(0, 0, 0.00059, 0.00104);
-static float4 SubsurfaceInput0_UVViewportBilinearMax = float4(1.00, 1.00, 0.99912, 0.99948);
+static float4 SubsurfaceInput0_UVViewportBilinearMinMax = float4(0.00059, 0.00104, 0.99941, 0.99896);
 
 
 //SamplerState my_point_clamp_sampler;
@@ -48,6 +61,8 @@ SamplerState pointClampSampler;
 uniform Texture2D<half4>  _GBuffer0;    //Albedo
 uniform Texture2D<half4>  _GBuffer1;    //Comp_M_D_R_F 
 uniform Texture2D<float>  _GBuffer4;    //Depth -> pay attention, must be float, not float4 
+uniform Texture2D<half4>  _GBuffer5;    //Comp_Custom_F_R_X_I 
+uniform Texture2D<float4> _LUT;         //SSSSLUT ->  ActualSSProfilesTexture
 uniform Texture2D<half4>  _CameraTexture;    //current render target  -> SubsurfaceInput0_Texture 
 
 
@@ -252,10 +267,10 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID,
     // --------------SUBSURFACE_HALF_RES START--------------
     // order aligned with Gather() hardware implementation
     // RGB: color*A, A:weight 0 if no subsurface scattering
-    float4 A = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 B = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 C = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
-    float4 D = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMax.zw));
+    float4 A = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
+    float4 B = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
+    float4 C = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
+    float4 D = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
 
     float4 Sum = (A + B) + (C + D);
     float Div = 1.0f / max(Sum.a, 0.00001f);
@@ -287,6 +302,190 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID,
     AddSubsurfaceComputeGroup(GI, Type, G_ID.xy);
 }
 
+
+uniform Texture2D<half4> SubsurfaceInput0_Texture;     //passOne -> SetupTexture; passTwo -> SubsurfaceSubpassOneTex 
+RWTexture2D<float4> SSSColorUAV;
+static const int SUBSURFACE_RADIUS_SCALE = 1024;
+
+float GetMaskFromDepthInAlpha(float Alpha)
+{
+    return Alpha > 0;
+}
+
+float4 GetSceneColor(float2 BufferUV)
+{
+    BufferUV = clamp(BufferUV, SubsurfaceInput0_UVViewportBilinearMinMax.xy, SubsurfaceInput0_UVViewportBilinearMinMax.zw);
+    return SubsurfaceInput0_Texture.SampleLevel(pointClampSampler, BufferUV, 0).rgba;
+}
+
+float4 GetSubsurfaceProfileKernel(uint SampleIndex, uint SubsurfaceProfileInt)
+{
+    const float4 TableMax = float4(1,1,1,SUBSURFACE_KERNEL_SIZE);
+    return _LUT.Load(int3(SampleIndex, 64 - SubsurfaceProfileInt, 0)) * TableMax; //reverse y-axis in Unity 
+}
+
+uint ExtractSubsurfaceProfileInt(float2 UV)
+{
+    half packedChannel = _GBuffer1.SampleLevel(pointClampSampler, UV, 0).a;
+    uint SelectiveOutputMask = ((uint)round(packedChannel * (float)0xFF)) & ~SHADINGMODELID_MASK;
+    half Custom_r = _GBuffer5.SampleLevel(pointClampSampler, UV, 0).r;
+    Custom_r = !(SelectiveOutputMask & SKIP_CUSTOMDATA_MASK) ? Custom_r : 0; 
+    return uint(Custom_r * 255.0f + 0.5f);
+}
+
+uint GetSubsurfaceProfileId(float2 BufferUV)
+{
+    BufferUV = clamp(BufferUV, SubsurfaceInput0_UVViewportBilinearMinMax.xy, SubsurfaceInput0_UVViewportBilinearMinMax.zw);
+    return ExtractSubsurfaceProfileInt(BufferUV);
+}
+
+float3 GetSubsurfaceProfileBoundaryColorBleed(uint SubsurfaceProfileInt)
+{
+    //uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(UV);
+    return GetSubsurfaceProfileKernel(SSSS_BOUNDARY_COLOR_BLEED_OFFSET, SubsurfaceProfileInt).rgb;
+}
+
+float GetSubsurfaceStrength(float2 UV)
+{
+    //sample MDRI to get material channel info 
+    half packedChannel = _GBuffer1.SampleLevel(pointClampSampler, UV, 0).a;
+    uint ShadingModelID = ((uint)round(packedChannel * (float)0xFF)) & SHADINGMODELID_MASK;
+    float Mask = UseSubsurfaceProfile(ShadingModelID) ? 1.0f : 0.0f;
+    //sample Customdata to get ssss raw intensity 
+    half Custom_a = _GBuffer5.SampleLevel(pointClampSampler, UV, 0).a;
+    return Mask * Custom_a;
+}
+
+float4 SSSSBlurPS(float2 BufferUV, float2 dir, bool initStencil)
+{
+    //Fetch color of current pixel
+    float4 colorM = GetSceneColor(BufferUV);
+
+    //store the depth in alpha
+    float OutDepth = colorM.a;
+
+    colorM.a = GetMaskFromDepthInAlpha(colorM.a);
+
+    [branch]
+    if (!colorM.a) //do not process pixels that are not part of the suvsurface scattering 
+    {
+        return 0.0f;
+    }
+
+    //0..1
+    float SSSStrength = GetSubsurfaceStrength(BufferUV); 
+
+    float SSSScaleX = SubsurfaceParams.x;
+    float scale = SSSScaleX / OutDepth;
+
+    //Calculate the final step to fetch the surrounding pixels
+    float2 finalStep = scale * dir;
+
+    finalStep *= SSSStrength;  // Modulate it using the opacity (0..1 range)
+
+    // 0..255, which SubSurface profile to pick
+	// ideally this comes from a half res buffer as well - there are some minor artifacts
+    uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(BufferUV);
+
+    // Accumulate the center sample:
+    float3 colorAccum = 0;
+	// >0 to avoid division by 0, not 100% correct to not visible
+	float3 colorInvDiv = 0.00001f;
+
+    //center sample
+    colorInvDiv += GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb;     
+    colorAccum = colorM.rgb * GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb; 
+
+    float3 BoundaryColorBleed = GetSubsurfaceProfileBoundaryColorBleed(SubsurfaceProfileInt); 
+
+    [unroll]
+    for (int i = 1; i < SSSS_N_KERNELWEIGHTCOUNT; i++)
+    {
+        // Kernel.a = 0..SUBSURFACE_KERNEL_SIZE (radius)
+		half4 Kernel = GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET + i, SubsurfaceProfileInt);
+
+		float4 LocalAccum = 0;
+
+		float2 UVOffset = Kernel.a * finalStep;
+
+        [unroll]
+        for (int Side = -1; Side <= 1; Side += 2)   //The kernel is symtrical 
+        {
+            // Fetch color and depth for current sample:
+			float2 LocalUV = BufferUV + UVOffset * Side;
+			float4 color = GetSceneColor(LocalUV);
+			uint LocalSubsurfaceProfileInt = GetSubsurfaceProfileId(LocalUV);
+			float3 ColorTint = LocalSubsurfaceProfileInt == SubsurfaceProfileInt ? 1.0f : BoundaryColorBleed;
+
+			float LocalDepth = color.a;
+			color.a = GetMaskFromDepthInAlpha(color.a);
+
+            // If the difference in depth is huge, we weight the sample less or not at all
+            float s = saturate(12000.0f / 400000 * SubsurfaceParams.y *
+	        //float s = saturate(300.0f/400000 * SubsurfaceParams.y *
+				abs(OutDepth - LocalDepth));
+
+			color.a *= 1 - s;
+
+            // approximation, ideally we would reconstruct the mask with GetMaskFromDepthInAlpha() and do manual bilinear filter
+			// needed?
+			color.rgb *= color.a * ColorTint;
+
+			// Accumulate left and right 
+			LocalAccum += color;
+        }
+
+        // Accumulate to final value (left and right sample with the same weight)
+		colorAccum += Kernel.rgb * LocalAccum.rgb;
+		colorInvDiv += Kernel.rgb * LocalAccum.a;
+    }
+
+    // normalize (some samples are rejected because of depth or the other material is no SSS, compensate for that)
+	// done for each color channel to avoid color shift
+	float3 OutColor = colorAccum / colorInvDiv; 
+
+	// alpha stored the SceneDepth (0 if there is no subsurface scattering)
+    return float4(OutColor, OutDepth);
+}
+
+
+[numthreads(THREAD_SIZE_X * THREAD_SIZE_Y, 1, 1)]
+void MainIndirectDispatchCS(uint3 IndirectG_ID : SV_GroupID, uint GI : SV_GroupIndex)
+{
+    uint2 G_ID = uint2(GroupBuffer[2*(IndirectG_ID.x + 1) + 0], GroupBuffer[2 * (IndirectG_ID.x + 1) + 1]);         //获取目标GroupID 
+    uint2 DT_ID = G_ID * float2(THREAD_SIZE_X, THREAD_SIZE_Y) + float2(GI % THREAD_SIZE_X, GI / THREAD_SIZE_X);     //解码获取目标 DispatchThreadID 
+
+    uint2 Pos = DT_ID.xy * SUBSURFACE_GROUP_SIZE / THREAD_SIZE_1D + Output_ViewportMinMax.xy;  //buffer position 
+    float2 BufferUV = ConvertGridPos2UV(Pos);
+
+    //float4 Input_ExtentInverse;     //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY] -> half res 
+    //float4 Input_ViewportSize;      //[pixelSizeX, pixelSizeY, 0, 0] -> half res 
+    #if SUBSURFACE_PASS_ONE
+        //horizontal 
+        float2 ViewportDirectionUV = float2(1, 0) * SUBSURFACE_RADIUS_SCALE;
+    #else
+        //vertical 
+        float2 ViewportDirectionUV = float2(0, 1) * SUBSURFACE_RADIUS_SCALE * (Input_ExtentInverse.x * Input_ExtentInverse.w);
+    #endif
+
+    ViewportDirectionUV *= (Input_ViewportSize.x * Input_ExtentInverse.z); 
+
+    float4 OutColor = SSSSBlurPS(BufferUV, ViewportDirectionUV, false);
+
+    #if SUBSURFACE_PASS_ONE
+        //do nothing 
+    #else
+        // second pass prepares the setup from the recombine pass which doesn't need depth but wants to reconstruct the color
+        OutColor.a = GetMaskFromDepthInAlpha(OutColor.a); 
+    #endif
+
+    if (all(Pos < Output_ViewportMinMax.zw))
+    {
+        SSSColorUAV[Pos] = OutColor;
+    }
+
+    return;
+}
 
 
 

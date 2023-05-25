@@ -1217,8 +1217,11 @@ namespace UnityEngine.Rendering.Universal.Internal
             //TODO: 找个更加合适的方式加载和设置这些辅助纹理 
             var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr"); 
             if (lut != null)
-                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut);
-
+            {
+                m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut); 
+                //由于后处理的SSSS材质也需要这个，在这里统一丢到全局纹理了 
+                Shader.SetGlobalTexture(Shader.PropertyToID("_LUT"), lut); 
+            }
             var ibl = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/IBL.png");
             if (ibl != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_IBL"), ibl);
