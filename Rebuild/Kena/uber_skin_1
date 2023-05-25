@@ -32,7 +32,7 @@ cs_5_0
    1: iadd r0.x, r0.x, l(2)
    2: ld_indexable(buffer)(uint,uint,uint,uint) r0.y, r0.xxxx, t4.yxzw        -> GroupBuffer[2*(IndirectG_ID.x + 1) + 0] 
    3: iadd r0.x, r0.x, l(1)
-   4: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw        -> GroupBuffer[2*(IndirectG_ID.x + 1)+1] 
+   4: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw        -> GroupBuffer[2*(IndirectG_ID.x + 1) + 1] 
    5: utof r1.xyzw, r0.yxxx                                                   -> uint2 G_ID
 
    6: and r0.x, vThreadIDInGroupFlattened.x, l(7)                             -> GI % THREAD_SIZE_X 
@@ -60,7 +60,7 @@ cs_5_0
 
   23: if_nz r3.x
 
-  24:   mul r3.x, cb0[28].z, cb0[31].x                                        -> 0.00117 * 854.0 = 0.99918 
+  24:   mul r3.x, cb0[28].z, cb0[31].x                                        -> 0.00117 * 854.0 = 0.99918  cb0_v28=[854.00, 480.00, 0.00117, 0.00208] 
   25:   mul r3.xy, r3.xxxx, l(1024.0000, 0.0000, 0.0000, 0.0000)              -> float2 ViewportDirectionUV = float2(1, 0) * SUBSURFACE_RADIUS_SCALE; 
                                                                               -> SUBSURFACE_RADIUS_SCALE 由cpp端设置，数值为 1024 
 
