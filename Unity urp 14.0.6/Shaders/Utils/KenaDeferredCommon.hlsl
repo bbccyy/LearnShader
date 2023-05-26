@@ -104,6 +104,8 @@ struct FGBufferData
 	float3 SpecularColor;
 	// 0..1, white for SHADINGMODELID_SUBSURFACE_PROFILE and SHADINGMODELID_EYE (apply BaseColor after scattering is more correct and less blurry)
 	float3 BaseColor;
+	float3 StoredBaseColor;
+	float StoredSpecular;
 	float4 CustomData;
 	float Metallic; // 0..1
 	float Specular; // 0..1
@@ -415,6 +417,9 @@ FGBufferData DecodeGBufferData(float3 Normal_Raw, float4 Albedo_Raw, float4 Comp
 	GBuffer.SelectiveOutputMask = DecodeSelectiveOutputMask(Comp_M_D_R_F_Raw.a);
 
 	GBuffer.BaseColor = Albedo_Raw.rgb;
+
+	GBuffer.StoredBaseColor = Albedo_Raw.rgb; 
+	GBuffer.StoredSpecular = Comp_M_D_R_F_Raw.g; 
 
 	GBuffer.GBufferAO = Albedo_Raw.a; //非 static_lighting 模式下，使用传入的a通道作为 GBufferAO 
 	GBuffer.IndirectIrradiance = 1;   //环境光强没有波动 

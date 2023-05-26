@@ -455,9 +455,8 @@ namespace UnityEngine.Rendering.Universal
             {
                 using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.Subsurface)))
                 {
-                    DoSubsurfacePost(ref cameraData, cmd, GetSource(), GetDestination());  //todo 
-
-                    Blitter.BlitCameraTexture(cmd, GetSource(), GetDestination(), RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurface, 0);
+                    DoSubsurfacePost(ref cameraData, cmd, GetSource(), GetDestination()); 
+                    //Blitter.BlitCameraTexture(cmd, GetSource(), GetDestination(), RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurface, 0);
                     Swap(ref renderer);
 
                 }
@@ -775,9 +774,19 @@ namespace UnityEngine.Rendering.Universal
                 cmd.DispatchCompute(subsurfaceCS, 3, SeprableIndirectDispatchArgs, 0);
             }
 
+            using(new ProfilingScope(cmd, new ProfilingSampler("SubsurfaceRecombinePS")))
+            {
+                cmd.SetGlobalTexture(Shader.PropertyToID("SubsurfaceInput1_Texture"), Shader.PropertyToID("SubsurfacePassTwo"));
+                cmd.SetGlobalVector(Shader.PropertyToID("SubsurfaceParams"), SubsurfaceParams);
+                cmd.SetGlobalVector(Shader.PropertyToID("Input_ExtentInverse"), Input_ExtentInverse);
+                cmd.SetGlobalTexture(Shader.PropertyToID("_BlitTexture"), source);
+                //cmd.Blit(source, dest, m_Materials.subsurfaceRecombine, 0);
+                Blitter.BlitCameraTexture(cmd, source, dest, RenderBufferLoadAction.DontCare, RenderBufferStoreAction.Store, m_Materials.subsurfaceRecombine, 0);
+            }
 
-            //do not forget to release Tmp RT 
-            
+            cmd.ReleaseTemporaryRT(Shader.PropertyToID("SetupTexture"));
+            cmd.ReleaseTemporaryRT(Shader.PropertyToID("SubsurfacePassOne"));
+            cmd.ReleaseTemporaryRT(Shader.PropertyToID("SubsurfacePassTwo"));
         }
 
         #endregion
@@ -1671,11 +1680,13 @@ namespace UnityEngine.Rendering.Universal
             public readonly Material finalPass;
             public readonly Material lensFlareDataDriven;
             public readonly Material subsurface;
+            public readonly Material subsurfaceRecombine;
             public ComputeShader subsurfaceCS;
 
             public MaterialLibrary(PostProcessData data)
             {
                 subsurface = Load(Shader.Find("Custom/Subsurface"));
+                subsurfaceRecombine = Load(Shader.Find("Custom/SubsurfaceRecombinePS"));
                 stopNaN = Load(data.shaders.stopNanPS);
                 subpixelMorphologicalAntialiasing = Load(data.shaders.subpixelMorphologicalAntialiasingPS);
                 subsurfaceCS = data.shaders.subsurfaceCS;
