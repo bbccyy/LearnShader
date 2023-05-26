@@ -2,6 +2,9 @@
 #pragma kernel InitValueBufferCS
 #pragma kernel BuildIndirectDispatchArgsCS 
 #pragma kernel SetupIndirectCS 
+#pragma kernel MainIndirectDispatchCS 
+
+#pragma multi_compile _ SUBSURFACE_PASS_ONE 
 
 #define THREAD_SIZE_1D 8
 #define THREAD_SIZE_X THREAD_SIZE_1D
@@ -321,6 +324,7 @@ float4 GetSceneColor(float2 BufferUV)
 float4 GetSubsurfaceProfileKernel(uint SampleIndex, uint SubsurfaceProfileInt)
 {
     const float4 TableMax = float4(1,1,1,SUBSURFACE_KERNEL_SIZE);
+    //return _LUT.Load(int3(SampleIndex, SubsurfaceProfileInt, 0)) * TableMax;
     return _LUT.Load(int3(SampleIndex, 64 - SubsurfaceProfileInt, 0)) * TableMax; //reverse y-axis in Unity 
 }
 
@@ -369,85 +373,90 @@ float4 SSSSBlurPS(float2 BufferUV, float2 dir, bool initStencil)
     [branch]
     if (!colorM.a) //do not process pixels that are not part of the suvsurface scattering 
     {
-        return 0.0f;
+        return (float4)0.0f; 
     }
-
-    //0..1
-    float SSSStrength = GetSubsurfaceStrength(BufferUV); 
-
-    float SSSScaleX = SubsurfaceParams.x;
-    float scale = SSSScaleX / OutDepth;
-
-    //Calculate the final step to fetch the surrounding pixels
-    float2 finalStep = scale * dir;
-
-    finalStep *= SSSStrength;  // Modulate it using the opacity (0..1 range)
-
-    // 0..255, which SubSurface profile to pick
-	// ideally this comes from a half res buffer as well - there are some minor artifacts
-    uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(BufferUV);
-
-    // Accumulate the center sample:
-    float3 colorAccum = 0;
-	// >0 to avoid division by 0, not 100% correct to not visible
-	float3 colorInvDiv = 0.00001f;
-
-    //center sample
-    colorInvDiv += GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb;     
-    colorAccum = colorM.rgb * GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb; 
-
-    float3 BoundaryColorBleed = GetSubsurfaceProfileBoundaryColorBleed(SubsurfaceProfileInt); 
-
-    [unroll]
-    for (int i = 1; i < SSSS_N_KERNELWEIGHTCOUNT; i++)
+    else
     {
-        // Kernel.a = 0..SUBSURFACE_KERNEL_SIZE (radius)
-		half4 Kernel = GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET + i, SubsurfaceProfileInt);
+        //0..1
+        float SSSStrength = GetSubsurfaceStrength(BufferUV); 
 
-		float4 LocalAccum = 0;
+        float SSSScaleX = SubsurfaceParams.x;
+        float scale = SSSScaleX / OutDepth;
 
-		float2 UVOffset = Kernel.a * finalStep;
+        //Calculate the final step to fetch the surrounding pixels
+        float2 finalStep = scale * dir;
+
+        finalStep *= SSSStrength;  // Modulate it using the opacity (0..1 range)
+
+        // 0..255, which SubSurface profile to pick
+        // ideally this comes from a half res buffer as well - there are some minor artifacts
+        uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(BufferUV);
+
+        // Accumulate the center sample:
+        float3 colorAccum = 0;
+        // >0 to avoid division by 0, not 100% correct to not visible
+        float3 colorInvDiv = 0.00001f;
+
+        //center sample
+        colorInvDiv += GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb;     
+        colorAccum = colorM.rgb * GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb; 
+
+        float3 BoundaryColorBleed = GetSubsurfaceProfileBoundaryColorBleed(SubsurfaceProfileInt); 
 
         [unroll]
-        for (int Side = -1; Side <= 1; Side += 2)   //The kernel is symtrical 
+        for (int i = 1; i < SSSS_N_KERNELWEIGHTCOUNT; i++)
         {
-            // Fetch color and depth for current sample:
-			float2 LocalUV = BufferUV + UVOffset * Side;
-			float4 color = GetSceneColor(LocalUV);
-			uint LocalSubsurfaceProfileInt = GetSubsurfaceProfileId(LocalUV);
-			float3 ColorTint = LocalSubsurfaceProfileInt == SubsurfaceProfileInt ? 1.0f : BoundaryColorBleed;
+            // Kernel.a = 0..SUBSURFACE_KERNEL_SIZE (radius)
+            half4 Kernel = GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET + i, SubsurfaceProfileInt);
 
-			float LocalDepth = color.a;
-			color.a = GetMaskFromDepthInAlpha(color.a);
+            float4 LocalAccum = 0;
 
-            // If the difference in depth is huge, we weight the sample less or not at all
-            float s = saturate(12000.0f / 400000 * SubsurfaceParams.y *
-	        //float s = saturate(300.0f/400000 * SubsurfaceParams.y *
-				abs(OutDepth - LocalDepth));
+            float2 UVOffset = Kernel.a * finalStep;
 
-			color.a *= 1 - s;
+            [unroll]
+            for (int Side = -1; Side <= 1; Side += 2)   //The kernel is symtrical 
+            {
+                // Fetch color and depth for current sample:
+                float2 LocalUV = BufferUV + UVOffset * Side;
+                float4 color = GetSceneColor(LocalUV);
+                uint LocalSubsurfaceProfileInt = GetSubsurfaceProfileId(LocalUV);
+                float3 ColorTint = LocalSubsurfaceProfileInt == SubsurfaceProfileInt ? 1.0f : BoundaryColorBleed;
 
-            // approximation, ideally we would reconstruct the mask with GetMaskFromDepthInAlpha() and do manual bilinear filter
-			// needed?
-			color.rgb *= color.a * ColorTint;
+                float LocalDepth = color.a;
+                color.a = GetMaskFromDepthInAlpha(color.a);
 
-			// Accumulate left and right 
-			LocalAccum += color;
+                // If the difference in depth is huge, we weight the sample less or not at all
+                float s = saturate(12000.0f / 400000 * SubsurfaceParams.y *
+                //float s = saturate(300.0f/400000 * SubsurfaceParams.y *
+                    abs(OutDepth - LocalDepth));
+
+                color.a *= 1 - s;
+
+                // approximation, ideally we would reconstruct the mask with GetMaskFromDepthInAlpha() and do manual bilinear filter
+                // needed?
+                color.rgb *= color.a * ColorTint;
+
+                // Accumulate left and right 
+                LocalAccum += color;
+            }
+
+            // Accumulate to final value (left and right sample with the same weight)
+            colorAccum += Kernel.rgb * LocalAccum.rgb;
+            colorInvDiv += Kernel.rgb * LocalAccum.a;
         }
 
-        // Accumulate to final value (left and right sample with the same weight)
-		colorAccum += Kernel.rgb * LocalAccum.rgb;
-		colorInvDiv += Kernel.rgb * LocalAccum.a;
+        // normalize (some samples are rejected because of depth or the other material is no SSS, compensate for that)
+        // done for each color channel to avoid color shift
+        float3 OutColor = colorAccum / colorInvDiv; 
+
+        // alpha stored the SceneDepth (0 if there is no subsurface scattering)
+        return float4(OutColor, OutDepth);
     }
 
-    // normalize (some samples are rejected because of depth or the other material is no SSS, compensate for that)
-	// done for each color channel to avoid color shift
-	float3 OutColor = colorAccum / colorInvDiv; 
-
-	// alpha stored the SceneDepth (0 if there is no subsurface scattering)
-    return float4(OutColor, OutDepth);
+    return (float4)0.0f;
 }
 
+//#define SUBSURFACE_PASS_ONE
 
 [numthreads(THREAD_SIZE_X * THREAD_SIZE_Y, 1, 1)]
 void MainIndirectDispatchCS(uint3 IndirectG_ID : SV_GroupID, uint GI : SV_GroupIndex)
@@ -460,7 +469,7 @@ void MainIndirectDispatchCS(uint3 IndirectG_ID : SV_GroupID, uint GI : SV_GroupI
 
     //float4 Input_ExtentInverse;     //[pixelSizeX, pixelSizeY, 1/pixelSizeX, 1/pixelSizeY] -> half res 
     //float4 Input_ViewportSize;      //[pixelSizeX, pixelSizeY, 0, 0] -> half res 
-    #if SUBSURFACE_PASS_ONE
+    #ifdef SUBSURFACE_PASS_ONE
         //horizontal 
         float2 ViewportDirectionUV = float2(1, 0) * SUBSURFACE_RADIUS_SCALE;
     #else
@@ -472,7 +481,7 @@ void MainIndirectDispatchCS(uint3 IndirectG_ID : SV_GroupID, uint GI : SV_GroupI
 
     float4 OutColor = SSSSBlurPS(BufferUV, ViewportDirectionUV, false);
 
-    #if SUBSURFACE_PASS_ONE
+    #ifdef SUBSURFACE_PASS_ONE
         //do nothing 
     #else
         // second pass prepares the setup from the recombine pass which doesn't need depth but wants to reconstruct the color

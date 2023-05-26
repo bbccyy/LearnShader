@@ -2,6 +2,7 @@ using Codice.CM.SEIDInfo;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using UnityEngine.Assertions.Must;
 using UnityEngine.Experimental.Rendering;
 
 namespace UnityEngine.Rendering.Universal
@@ -52,6 +53,11 @@ namespace UnityEngine.Rendering.Universal
         RTHandle m_TempTarget2;
 
         RTHandle m_SubsurfaceHalfResSetup;
+        RTHandle m_SubsurfacePassOne;
+        RTHandle m_SubsurfacePassTwo;
+
+        ComputeBuffer m_SeparableGroupBuffer;
+        ComputeBuffer m_SeprableIndirectDispatchArgs;
 
         const string k_RenderPostProcessingTag = "Render PostProcessing Effects";
         const string k_RenderFinalPostProcessingTag = "Render Final PostProcessing Pass";
@@ -216,6 +222,11 @@ namespace UnityEngine.Rendering.Universal
             m_TempTarget?.Release();
             m_TempTarget2?.Release();
             m_SubsurfaceHalfResSetup?.Release();
+            m_SubsurfacePassOne?.Release();
+            m_SubsurfacePassTwo?.Release();
+
+            m_SeparableGroupBuffer?.Dispose();
+            m_SeprableIndirectDispatchArgs?.Dispose();
         }
 
         /// <summary>
@@ -644,6 +655,25 @@ namespace UnityEngine.Rendering.Universal
                 Mathf.Max(1, Mathf.CeilToInt(depth / (float)z)));
         }
 
+        ComputeBuffer GetOrCreateSeparableGroupBuffer(int MaxGroupCount)
+        {
+            if (m_SeparableGroupBuffer != null && m_SeparableGroupBuffer.count == (2 * MaxGroupCount +1))
+            {
+                return m_SeparableGroupBuffer;
+            }
+            m_SeparableGroupBuffer?.Dispose();
+            m_SeparableGroupBuffer = new ComputeBuffer(2 * (MaxGroupCount + 1), sizeof(uint), ComputeBufferType.Raw);
+            return m_SeparableGroupBuffer;
+        }
+
+        ComputeBuffer GetOrCreateIndirectDispatchArgBuffer()
+        {
+            if (m_SeprableIndirectDispatchArgs != null)
+                return m_SeprableIndirectDispatchArgs;
+            m_SeprableIndirectDispatchArgs = new ComputeBuffer(1, sizeof(uint) * 3, ComputeBufferType.IndirectArguments);
+            return m_SeprableIndirectDispatchArgs;
+        }
+
         void DoSubsurfacePost(ref CameraData cameraData, CommandBuffer cmd, RTHandle source, RTHandle dest)
         {
             //commen factor 
@@ -659,24 +689,31 @@ namespace UnityEngine.Rendering.Universal
             Int32 MaxGroupCount = TileDimension.x * TileDimension.y;
             Vector4 Output_ViewportMinMax = new Vector4(0, 0, fullRes.x, fullRes.y);
             Vector4 Output_ExtentInverse = new Vector4((float)fullRes.x, (float)fullRes.y, (float)1 / (float)scaledRes.x, (float)1 / (float)scaledRes.y);
+            Vector4 Input_ExtentInverse = new Vector4((float)scaledRes.x, (float)scaledRes.y, (float)1 / (float)scaledRes.x, (float)1 / (float)scaledRes.y);
+            Vector4 Input_ViewportSize = new Vector4((float)scaledRes.x, (float)scaledRes.y, 0f, 0f);
+            Vector4 SubsurfaceParams = new Vector4(0.18515f, 1.11089f, 0.00f, 0.00f);   //[SSSScaleX, SSSScaleZ, SSSOverrideNumSamples, 0]
 
             //Half Res texture descriptor 
             RenderTextureDescriptor subsurfaceTexDec = new RenderTextureDescriptor(
                 Mathf.CeilToInt(source.rt.width / ScaleFactor), Mathf.CeilToInt(source.rt.height / ScaleFactor),
-                RenderTextureFormat.ARGB32, 0, 0);
+                GraphicsFormat.R16G16B16A16_SFloat, 0, 0);
             subsurfaceTexDec.enableRandomWrite = true;
             subsurfaceTexDec.msaaSamples = 1;
+            //subsurfaceTexDec.memoryless = RenderTextureMemoryless.Color | RenderTextureMemoryless.Depth;
 
             //Half Res with extra 6 Mips
             RenderTextureDescriptor subsurfaceTexWith6MipsDec = new RenderTextureDescriptor(
                 Mathf.CeilToInt(source.rt.width / ScaleFactor), Mathf.CeilToInt(source.rt.height / ScaleFactor),
-                RenderTextureFormat.ARGB32, 0, 6);
+                GraphicsFormat.R16G16B16A16_SFloat, 0, 6);
             subsurfaceTexWith6MipsDec.enableRandomWrite = true;
             subsurfaceTexWith6MipsDec.msaaSamples = 1;
 
+            //keywords
+            var SUBSURFACE_PASS_ONE = GlobalKeyword.Create("SUBSURFACE_PASS_ONE");
+
             //Initialize the group buffer -> TODO:ok to use Raw as the type of the buffer? 
             //这个GourpBuffer第一位存放了总长度，余下的成对 
-            ComputeBuffer SeparableGroupBuffer = new ComputeBuffer(2 * (MaxGroupCount + 1), sizeof(uint), ComputeBufferType.Raw);
+            ComputeBuffer SeparableGroupBuffer = GetOrCreateSeparableGroupBuffer(MaxGroupCount); 
 
             using (new ProfilingScope(cmd, new ProfilingSampler("InitGroupCounter")))
             {
@@ -687,8 +724,10 @@ namespace UnityEngine.Rendering.Universal
             using (new ProfilingScope(cmd, new ProfilingSampler("SetupIndirectCS")))
             {
                 cmd.SetComputeBufferParam(subsurfaceCS, 2, Shader.PropertyToID("RWSeparableGroupBuffer"), SeparableGroupBuffer);
-                RenderingUtils.ReAllocateIfNeeded(ref m_SubsurfaceHalfResSetup, subsurfaceTexDec, FilterMode.Point, TextureWrapMode.Clamp, name: "SetupTexture");
-                cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("SetupTexture"), m_SubsurfaceHalfResSetup);
+                //RenderingUtils.ReAllocateIfNeeded(ref m_SubsurfaceHalfResSetup, subsurfaceTexDec, FilterMode.Point, TextureWrapMode.Clamp, name: "SetupTexture");
+                cmd.GetTemporaryRT(Shader.PropertyToID("SetupTexture"), subsurfaceTexDec, FilterMode.Point);
+                cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("SetupTexture"), Shader.PropertyToID("SetupTexture"));
+                //cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("SetupTexture"), m_SubsurfaceHalfResSetup);
                 cmd.SetComputeTextureParam(subsurfaceCS, 2, Shader.PropertyToID("_CameraTexture"), source);
                 cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Output_ViewportMinMax"), Output_ViewportMinMax);
                 cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Output_ExtentInverse"), Output_ExtentInverse);
@@ -696,7 +735,7 @@ namespace UnityEngine.Rendering.Universal
                 DispatchCompute(subsurfaceCS, cmd, 2, scaledRes.x, scaledRes.y, 1);
             }
 
-            ComputeBuffer SeprableIndirectDispatchArgs = new ComputeBuffer(1, sizeof(uint) * 3, ComputeBufferType.IndirectArguments);
+            ComputeBuffer SeprableIndirectDispatchArgs = GetOrCreateIndirectDispatchArgBuffer();
             using (new ProfilingScope(cmd, new ProfilingSampler("BuildIndirectDispatchArgsCS")))
             {
                 cmd.SetComputeBufferParam(subsurfaceCS, 1, Shader.PropertyToID("RWIndirectDispatchArgsBuffer"), SeprableIndirectDispatchArgs);
@@ -705,10 +744,40 @@ namespace UnityEngine.Rendering.Universal
                 DispatchCompute(subsurfaceCS, cmd, 1, 1, 1, 1);
             }
 
-            //TODO: 2 x MainIndirectDispatchCS 
+            using (new ProfilingScope(cmd, new ProfilingSampler("MainIndirectDispatchCS_PassOne")))
             {
-                //subsurfaceCS.set
+                cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Input_ExtentInverse"), Input_ExtentInverse);
+                cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("Input_ViewportSize"), Input_ViewportSize);
+                cmd.SetComputeVectorParam(subsurfaceCS, Shader.PropertyToID("SubsurfaceParams"), SubsurfaceParams);
+                cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SubsurfaceInput0_Texture"), Shader.PropertyToID("SetupTexture"));
+                //cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SubsurfaceInput0_Texture"), m_SubsurfaceHalfResSetup);
+                //RenderingUtils.ReAllocateIfNeeded(ref m_SubsurfacePassOne, subsurfaceTexDec, FilterMode.Point, TextureWrapMode.Clamp, name: "SSSColorUAV_1");
+                cmd.GetTemporaryRT(Shader.PropertyToID("SubsurfacePassOne"), subsurfaceTexDec, FilterMode.Point);
+                cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SSSColorUAV"), Shader.PropertyToID("SubsurfacePassOne"));
+                //cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SSSColorUAV"), m_SubsurfacePassOne);
+                cmd.SetComputeBufferParam(subsurfaceCS, 3, Shader.PropertyToID("GroupBuffer"), SeparableGroupBuffer);
+                //var pass_one_on = subsurfaceCS.keywordSpace.FindKeyword("SUBSURFACE_PASS_ONE");
+                //subsurfaceCS.SetKeyword(pass_one_on, true);
+                cmd.SetKeyword(SUBSURFACE_PASS_ONE, true);
+                //subsurfaceCS.EnableKeyword("SUBSURFACE_PASS_ONE");
+                cmd.DispatchCompute(subsurfaceCS, 3, SeprableIndirectDispatchArgs, 0);  
+                
             }
+
+            using (new ProfilingScope(cmd, new ProfilingSampler("MainIndirectDispatchCS_PassTwo")))
+            {
+                cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SubsurfaceInput0_Texture"), Shader.PropertyToID("SubsurfacePassOne"));
+                cmd.GetTemporaryRT(Shader.PropertyToID("SubsurfacePassTwo"), subsurfaceTexDec, FilterMode.Point);
+                cmd.SetComputeTextureParam(subsurfaceCS, 3, Shader.PropertyToID("SSSColorUAV"), Shader.PropertyToID("SubsurfacePassTwo"));
+                //var pass_one_on = subsurfaceCS.keywordSpace.FindKeyword("SUBSURFACE_PASS_ONE");
+                //subsurfaceCS.SetKeyword(pass_one_on, false);
+                cmd.SetKeyword(SUBSURFACE_PASS_ONE, false);
+                cmd.DispatchCompute(subsurfaceCS, 3, SeprableIndirectDispatchArgs, 0);
+            }
+
+
+            //do not forget to release Tmp RT 
+            
         }
 
         #endregion

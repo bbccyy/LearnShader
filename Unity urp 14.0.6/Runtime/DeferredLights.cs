@@ -1215,7 +1215,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 m_StencilDeferredPasses[pass] = m_StencilDeferredMaterial.FindPass(k_StencilDeferredPassNames[pass]);
 
             //TODO: 找个更加合适的方式加载和设置这些辅助纹理 
-            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr"); 
+            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr");   
             if (lut != null)
             {
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut); 
