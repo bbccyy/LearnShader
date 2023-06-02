@@ -2,7 +2,7 @@
 #pragma kernel InitValueBufferCS
 #pragma kernel BuildIndirectDispatchArgsCS 
 #pragma kernel SetupIndirectCS 
-#pragma kernel MainIndirectDispatchCS 
+#pragma kernel MainIndirectDispatchCS   
 
 #pragma multi_compile _ SUBSURFACE_PASS_ONE   
 
