@@ -30,7 +30,7 @@ Shader "Custom/SubsurfaceRecombinePS"
 
 #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/KenaDeferredCommon.hlsl"
 
-    static const int SUBSURFACE_RADIUS_SCALE = 1024;
+static const int SUBSURFACE_RADIUS_SCALE = 1024;
 #define	SSSS_N_KERNELWEIGHTCOUNT    6 
 #define	SSSS_N_KERNELWEIGHTOFFSET  28
 
