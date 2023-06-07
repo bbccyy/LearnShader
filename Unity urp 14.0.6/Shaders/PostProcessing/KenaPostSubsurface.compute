@@ -12,7 +12,7 @@
 struct SDiffuseAndSpecular
 {
     float3 Diffuse;
-    float3 Specular;
+    float3 Specular; 
 };
 
 
