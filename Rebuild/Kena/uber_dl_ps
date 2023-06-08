@@ -1,3 +1,5 @@
+DeferredLightPixelShaders.usf
+
 
 ps_5_0
       dcl_globalFlags refactoringAllowed
