@@ -16,7 +16,7 @@ struct SDiffuseAndSpecular
 };
 
 
-// 0, no subsurface
+// 0, no subsurface    
 // 1, Separable
 // 2, Burley
 // 3, Both
