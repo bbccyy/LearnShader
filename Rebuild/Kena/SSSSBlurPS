@@ -1,0 +1,121 @@
+SSSSBlurPS
+
+// @param dir Direction of the blur: First pass:   float2(1.0, 0.0), Second pass:  float2(0.0, 1.0)
+float4 SSSSBlurPS(float2 BufferUV, float2 dir)
+{
+    ...
+
+    // 获取艺术家通过贴图传递来的次表面强度值：0..1
+    float SSSStrength = GetSubsurfaceStrength(BufferUV);
+
+    // finalStep用于确定如何步进，以便采样四周辐照度
+    // 步进反比与“像素深度”，正比于“次表面强度”，而SubsurfaceParams.x存放的是全局缩放系数 
+    float2 finalStep = SubsurfaceParams.x / PixelDepth * dir * SSSStrength; 
+    
+    FGBufferData GBufferData = GetGBufferData(BufferUV);
+
+    // 当前像素对应的散射剖面索引：0..255，举例，Kena的皮肤和飞鸟的皮肤分属不同的散射剖面 
+    uint SubsurfaceProfileInt = ExtractSubsurfaceProfileInt(GBufferData); 
+
+    ...
+
+    // 对当前卷积窗口的中心点采样，使用第一个Kernel来初始化如下变量 
+    // InvDiv 用于累积误差，确保卷积结果能量守恒，因为在一些情况下卷积窗口可能超出了材质范围 
+    colorInvDiv += GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb; 
+    // Accum 用于累积散射能量，并最终被InvDiv修正 
+    colorAccum = colorM.rgb * GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET, SubsurfaceProfileInt).rgb; 
+
+    float3 BoundaryColorBleed = GetSubsurfaceProfileBoundaryColorBleed(GBufferData); //处理边界点时所用的替代颜色 
+
+    //卷积主循环 
+    for (int i = 1; i < SSSS_N_KERNELWEIGHTCOUNT; i++)  //COUNT == 6 -> 共需要步进5次，采样对应的Kernel 
+    {
+        // Kernel.a = 0..SUBSURFACE_KERNEL_SIZE (radius) -> 对应距离r
+        // Kernel.rgb 对应各颜色通道在给定距离r时的散射比率 
+        half4 Kernel = GetSubsurfaceProfileKernel(SSSS_N_KERNELWEIGHTOFFSET + i, SubsurfaceProfileInt);
+
+        float4 LocalAccum = 0;
+
+        float2 UVOffset = Kernel.a * finalStep;  //这是UV偏移的绝对值 
+        
+        //由于是对称的，一个Kernel需要连续采样正负偏移下的坐标点 
+        for (int Side = -1; Side <= 1; Side += 2)
+        {
+            float2 LocalUV = BufferUV + UVOffset * Side;
+            float4 color = SSSSSampleSceneColor(LocalUV); //采样获得附近点的辐照度（注意a通道存放了像素深度）
+
+            // 需要排除的情况（一）：附近获取的采样点与当前点不属于同一个散射剖面（或者说不属于同一个角色）
+            uint LocalSubsurfaceProfileInt = SSSSSampleProfileId(LocalUV);
+            float3 ColorTint = LocalSubsurfaceProfileInt == SubsurfaceProfileInt ? 1.0f : BoundaryColorBleed;
+
+
+            float LocalDepth = color.a;
+            color.a = GetMaskFromDepthInAlpha(color.a);
+
+
+            // 需要排除的情况（一）：附近获取的采样点深度与当前点深度差距过大（几何差距过大，默认也不属于同一个角色） 
+            float s = saturate(12000.0f / 400000 * SubsurfaceParams.y * abs(PixelDepth - LocalDepth));
+            color.a *= 1 - s;
+
+            color.rgb *= color.a * ColorTint; //这里的ColorTin用于处理边界颜色，非边界状态时恒为1 
+
+            LocalAccum += color;
+        }
+
+        // 卷积的过程被近似为连续求和的过程 
+        colorAccum += Kernel.rgb * LocalAccum.rgb;
+        colorInvDiv += Kernel.rgb * LocalAccum.a;
+    }
+
+    // 归一化，返回 
+    float3 OutColor = colorAccum / colorInvDiv; 
+    return float4(OutColor, PixelDepth);
+}
+
+
+
+
+
+
+
+
+SDiffuseAndSpecular ReconstructLighting(float2 UVSceneColor)
+{
+    SDiffuseAndSpecular Ret;
+
+    bool bChecker = CheckerFromSceneColorUV(UVSceneColor);
+
+    float3 Quant0 = LookupSceneColor(UVSceneColor, int2(0, 0)); 
+    float3  Quant1 = 0.5f * (
+        LookupSceneColor(UVSceneColor, int2( 1, 0)) +
+        LookupSceneColor(UVSceneColor, int2(-1, 0)));
+
+    Ret.Diffuse = lerp(Quant1, Quant0, bChecker);
+    Ret.Specular = lerp(Quant0, Quant1, bChecker);
+
+    return Ret;
+}
+
+
+void SubsurfaceRecombinePS(...)
+{
+    ...
+
+    // 避免在远距离时次表面材质因为模糊而看不清，这里修正了权重因子，方法内部使用到了“像素深度”，“全局调节系数”和“预计算的次表面弧度(radius)”等参数 
+    LerpFactor = ComputeFullResLerp(ScreenSpaceData, BufferUV, SubsurfaceInput1_ExtentInverse); 
+
+    ... 
+
+    SDiffuseAndSpecular DiffuseAndSpecular = ReconstructLighting(BufferUV, ReconstructMethod); //重建全分辨率 Diffuse + Specular 
+    
+    float3 ExtractedNonSubsurface = DiffuseAndSpecular.Specular;
+
+    float3 SubsurfaceColor = GetSubsurfaceProfileColor(ScreenSpaceData.GBuffer);  //查找LUT图，获取 SUBSURFACE_COLOR 对应颜色 
+
+    float3 FadedSubsurfaceColor = SubsurfaceColor * LerpFactor;
+
+    // combine potentially half res with full res
+    float3 SubsurfaceLighting = lerp(DiffuseAndSpecular.Diffuse, SSSColor, FadedSubsurfaceColor); //注意只涉及 Diffuse 部分 
+
+    OutColor = float4(SubsurfaceLighting * StoredBaseColor + ExtractedNonSubsurface, 0); //合成 Diffuse 和 Specular 
+}
