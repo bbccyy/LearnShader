@@ -30,7 +30,7 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t8               -> ? RGBA noise 
       dcl_resource_texture2d (float,float,float,float) t9               -> SSStrength R 
 
-      dcl_input_ps linear centroid v0.xyz                               -> tangent ?
+      dcl_input_ps linear centroid v0.xyz                               -> tangent ? 
       dcl_input_ps linear centroid v1.xyzw                              -> bitangent ? 
       dcl_input_ps linear v2.xy                                         -> uv 
       dcl_input_ps linear v3.xy                                         -> ?
@@ -41,7 +41,7 @@ ps_5_0
       dcl_output o1.xyzw                                                -> World normal 
       dcl_output o2.xyzw                                                -> Comp_M_D_R_F 
       dcl_output o3.xyzw                                                -> Albedo 
-      dcl_output o4.xyzw                                                -> Custom 
+      dcl_output o4.xyzw                                                -> Custom   
       dcl_temps 10
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
