@@ -21,7 +21,7 @@ ps_5_0
 
       dcl_resource_texture2d (float,float,float,float) t0               -> SSProfileTex  
       dcl_resource_texture2d (float,float,float,float) t1               -> Packed_Normal 
-      dcl_resource_texture2d (float,float,float,float) t2               -> ? 64 x 64 RG Noise 
+      dcl_resource_texture2d (float,float,float,float) t2               -> ? 64 x 64 RG Noise -> Disturbing Normal -> D_Norm
       dcl_resource_texture2d (float,float,float,float) t3               -> ? 2048 x 2048 R Noise 
       dcl_resource_texture2d (float,float,float,float) t4               -> ? blood vessel && tooth 
       dcl_resource_texture2d (float,float,float,float) t5               -> Albedo 
@@ -30,10 +30,10 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t8               -> ? RGBA noise 
       dcl_resource_texture2d (float,float,float,float) t9               -> SSStrength R 
 
-      dcl_input_ps linear centroid v0.xyz                               -> tangent ? 
-      dcl_input_ps linear centroid v1.xyzw                              -> bitangent ? 
+      dcl_input_ps linear centroid v0.xyz                               -> normal 
+      dcl_input_ps linear centroid v1.xyzw                              -> tangent 
       dcl_input_ps linear v2.xy                                         -> uv 
-      dcl_input_ps linear v3.xy                                         -> ?
+      dcl_input_ps linear v3.xy                                         -> ? 
       dcl_input_ps linear v4.x                                          -> 120.0f ~ 140.0f 左右的值 
       dcl_input_ps_siv linear noperspective v5.xyz, position            -> SV Position 
 
@@ -41,45 +41,52 @@ ps_5_0
       dcl_output o1.xyzw                                                -> World normal 
       dcl_output o2.xyzw                                                -> Comp_M_D_R_F 
       dcl_output o3.xyzw                                                -> Albedo 
-      dcl_output o4.xyzw                                                -> Custom   
+      dcl_output o4.xyzw                                                -> Custom 
       dcl_temps 10
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
-   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
-   3: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t1.xyzw, s0, cb0[142].y
-   4: mad r1.xy, r1.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
-   5: dp2 r0.w, r1.xyxx, r1.xyxx
-   6: add r0.w, -r0.w, l(1.0000)
-   7: max r0.w, r0.w, l(0)
-   8: sqrt r0.w, r0.w
-   9: add r1.z, r0.w, l(1.0000)
-  10: mul r2.xy, v2.xyxx, cb3[12].xxxx
-  11: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t2.zwxy, s1, cb0[142].y
-  12: add r3.xy, r2.zwzz, r2.zwzz
-  13: mad r2.zw, r2.zzzw, l(0.0000, 0.0000, 2.0000, 2.0000), l(0.0000, 0.0000, -1.0000, -1.0000)
-  14: dp2 r0.w, r2.zwzz, r2.zwzz
-  15: add r0.w, -r0.w, l(1.0000)
-  16: max r0.w, r0.w, l(0)
-  17: sqrt r3.z, r0.w
-  18: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0.0000, 0.0000, 1.0000, 0.0000)
-  20: mul r3.xyw, r3.xyxz, l(-2.0000, -2.0000, 0.0000, 2.0000)
-  21: mad r3.xyz, r3.zzzz, l(0.0000, 0.0000, 4.0000, 0.0000), -r3.xywx
-  22: mul r3.xyz, r3.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)
-  23: dp3 r0.w, r1.xyzx, r3.xyzx
-  24: mul r3.xyz, r1.zzzz, r3.xyzx
-  25: mad r1.xyz, r1.xyzx, r0.wwww, -r3.xyzx
-  26: dp3 r0.w, r1.xyzx, r1.xyzx
+   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx                            -> cross(v1, v0) -> tangent X normal 
+   2: mul r0.xyz, r0.xyzx, v1.wwww                                      -> bitangent = cross(tangent, normal) * tangent.w 
+
+   3: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t1.xyzw, s0, cb0[142].y      -> sampele packed normal RG 
+
+   4: mad r1.xy, r1.xyxx, l(2, 2, 0, 0), l(-1, -1, 0, 0)                -> p_norm.xy = p_norm.xy * 2 - 1 -> 取值范围[-1, 1] 
+   5: dp2 r0.w, r1.xyxx, r1.xyxx                                        -> x^2 + y^2 
+   6: add r0.w, -r0.w, l(1.0000)                                        -> 1 - ~ 
+   7: max r0.w, r0.w, l(0) 
+   8: sqrt r0.w, r0.w                                                   -> z = sqrt(max(1-x^2-y^2, 0)) 
+   9: add r1.z, r0.w, l(1.0000)                                         -> p_norm.z = z + 1 -> 取值范围 [0, 2] 
+
+  10: mul r2.xy, v2.xyxx, cb3[12].xxxx                                  -> uv * 29.0f 
+  11: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t2.zwxy, s1, cb0[142].y -> sample D_Raw_Norm 
+  12: add r3.xy, r2.zwzz, r2.zwzz                                       -> d_norm.xy = 2 * D_Raw_Norm.xy  -> 区间[0, 2] 
+  13: mad r2.zw, r2.zzzw, l(0, 0, 2, 2), l(0, 0, -1, -1)                -> D_Raw_Norm.xy = D_Raw_Norm.xy * 2 - 1 
+  14: dp2 r0.w, r2.zwzz, r2.zwzz                                        -> dot(D_Raw_Norm.xy, D_Raw_Norm.xy)
+  15: add r0.w, -r0.w, l(1.0000)                                        -> 1 - ~ 
+  16: max r0.w, r0.w, l(0)                                              -> max(~, 0) 
+  17: sqrt r3.z, r0.w                                                   -> d_norm.z = sqrt(~) -> 求归一化扰动法线的z分量 区间[0, 1] 
+
+  18: add r3.xyz, r3.xyzx, l(-1, -1, -1, 0)                             -> d_norm -= 1 -> 区间xy[-1, 1]  区间z[-1, 0] 
+  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0, 0, 1, 0)                  -> d_norm = 0.6 * d_norm + float3(0,0,1) -> 区间xy[-0.6, 0.6] 区间z[0,0.6] 
+  20: mul r3.xyw, r3.xyxz, l(-2, -2, 0, 2)                              -> tmp.xyz = d_norm.xyz * float3(-2,-2, 2) 
+  21: mad r3.xyz, r3.zzzz, l(0, 0, 4, 0), -r3.xywx                      -> d_norm = d_norm.z * 4 - tmp.xyz 
+  22: mul r3.xyz, r3.xyzx, l(-1, -1, 1, 0)                              -> d_norm *= float3(-1, -1, 1) 
+
+  23: dp3 r0.w, r1.xyzx, r3.xyzx                                        -> pod = dot(p_norm, d_norm) 
+  24: mul r3.xyz, r1.zzzz, r3.xyzx                                      -> d_norm *= p_norm.z 
+  25: mad r1.xyz, r1.xyzx, r0.wwww, -r3.xyzx                            -> p_norm = p_norm * pod - d_norm 
+  26: dp3 r0.w, r1.xyzx, r1.xyzx 
   27: sqrt r0.w, r0.w
-  28: div r1.xyz, r1.xyzx, r0.wwww
-  29: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx
-  30: dp3 r0.w, r1.xyzx, r1.xyzx
+  28: div r1.xyz, r1.xyzx, r0.wwww                                      -> norm = normalize(p_norm) 
+
+  29: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx                 -> norm = norm * 1 + 0 -> scale and offset 
+  30: dp3 r0.w, r1.xyzx, r1.xyzx  
   31: rsq r0.w, r0.w
-  32: mul r1.xyz, r0.wwww, r1.xyzx
+  32: mul r1.xyz, r0.wwww, r1.xyzx                                      -> norm = normalize(norm) -> 没必要，因为scale+offset没有对norm产生影响 
+
   33: mul r0.xyz, r0.xyzx, r1.yyyy
   34: mad r0.xyz, r1.xxxx, v0.xyzx, r0.xyzx
-  35: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx
+  35: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx                             -> mul(norm, Matrix_TBN) -> 其中tbn矩阵的第一行为t，第二行为b，最后一行为n 
   36: dp3 r0.w, r0.xyzx, r0.xyzx
   37: rsq r0.w, r0.w
   38: mul r0.xyz, r0.wwww, r0.xyzx
