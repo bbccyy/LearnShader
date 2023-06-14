@@ -91,25 +91,28 @@ ps_5_0
   37: rsq r0.w, r0.w
   38: mul r0.xyz, r0.wwww, r0.xyzx                                      -> normalize(nDirWS) 
 
-  39: lt r0.w, l(0.0000), abs(cb3[13].x)                                -> 0 < cb3[13]=0 ? -> false 
-  40: ge r1.x, cb3[13].x, l(0)                                          -> cb3[13]=0 >= 0 ? -> true 
-  41: and r1.x, r1.x, cb3[13].z
-  42: and r0.w, r0.w, r1.x
-  43: mul r1.xy, v2.xyxx, cb3[13].wwww
-  44: sample_b(texture2d)(float,float,float,float) r1.x, r1.xyxx, t3.xyzw, s2, cb0[142].y
-  45: add r1.y, r0.w, -r1.x
-  46: lt r1.y, l(0.0000), abs(r1.y)
-  47: ge r0.w, r0.w, r1.x
-  48: and r1.xzw, r0.wwww, cb3[2].xxyz
-  49: and r1.xyz, r1.xzwx, r1.yyyy
-  50: mad r0.w, cb3[14].z, cb2[0].x, cb3[14].w
-  51: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t4.yzwx, s3, cb0[142].y
-  52: add r3.xyz, r1.wwww, cb3[5].xyzx
-  53: mul r3.xyz, r0.wwww, r3.xyzx
-  54: mul r3.xyz, r3.xyzx, cb3[4].xyzx
-  55: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx
-  56: add r3.xyz, -r1.xyzx, cb3[6].xyzx
-  57: mad r1.xyz, cb3[15].xxxx, r3.xyzx, r1.xyzx
+//以下似乎无用 
+  39: lt r0.w, l(0.0000), abs(cb3[13].x)                                -> 0 < cb3[13].x=0 ? -> false 
+  40: ge r1.x, cb3[13].x, l(0)                                          -> cb3[13].x=0 >= 0 ? -> true 
+  41: and r1.x, r1.x, cb3[13].z                                         -> true && cb3[13].z=0.02 -> 0.02 
+  42: and r0.w, r0.w, r1.x                                              -> false && 0.2 -> 0 
+  43: mul r1.xy, v2.xyxx, cb3[13].wwww                                  -> uv * cb3[13].w=1 
+  44: sample_b(texture2d)(float,float,float,float) r1.x, r1.xyxx, t3.xyzw, s2, cb0[142].y -> sample Noise_R_2048 
+  45: add r1.y, r0.w, -r1.x                                             -> 0 - noise 
+  46: lt r1.y, l(0.0000), abs(r1.y)                                     -> 0 < abs(~) ? true 
+  47: ge r0.w, r0.w, r1.x                                               -> 0 > noise ? false 
+  48: and r1.xzw, r0.wwww, cb3[2].xxyz                                  -> false && cb3[2].xyz=[0,0.5,1] -> 0 
+  49: and r1.xyz, r1.xzwx, r1.yyyy                                      -> 0 && true -> 0 
+  50: mad r0.w, cb3[14].z, cb2[0].x, cb3[14].w                          -> 0 * 1 + 0 = 0 
+  51: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t4.yzwx, s3, cb0[142].y  -> sample blood vessel -> channel R 
+  52: add r3.xyz, r1.wwww, cb3[5].xyzx                                  -> bv.rgb = bv.r + 0 
+  53: mul r3.xyz, r0.wwww, r3.xyzx                                      -> bv.rgb = bv.rgb * 0 
+  54: mul r3.xyz, r3.xyzx, cb3[4].xyzx                                  -> bv.rgb * cb3[4].xyz=[0.99, 1.00259, 1.10] 
+  55: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx                        -> 0 * cb3[14].x=50 + 0 -> 0
+  56: add r3.xyz, -r1.xyzx, cb3[6].xyzx                                 -> cb3[6].xyz=0 - 0 -> 0
+  57: mad r1.xyz, cb3[15].xxxx, r3.xyzx, r1.xyzx                        -> cb3[15].x=0 * 0 + 0 -> 0
+
+// 
   58: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y
   59: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y
   60: dp3 r0.w, r4.xyzx, cb3[8].xyzx
