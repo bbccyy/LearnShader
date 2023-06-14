@@ -26,7 +26,7 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t4               -> ? blood vessel && tooth 
       dcl_resource_texture2d (float,float,float,float) t5               -> Albedo 
       dcl_resource_texture2d (float,float,float,float) t6               -> Cloth splash-ink, stained pattern 
-      dcl_resource_texture2d (float,float,float,float) t7               -> Combine RGB - Speclar/Rough/AO ? 
+      dcl_resource_texture2d (float,float,float,float) t7               -> Combine RGB - AO/Rough/?  
       dcl_resource_texture2d (float,float,float,float) t8               -> ? RGBA noise 
       dcl_resource_texture2d (float,float,float,float) t9               -> SSStrength R 
 
@@ -38,7 +38,7 @@ ps_5_0
       dcl_input_ps_siv linear noperspective v5.xyz, position            -> SV Position 
 
       dcl_output o0.xyzw                                                -> Emission 
-      dcl_output o1.xyzw                                                -> World normal 
+      dcl_output o1.xyzw                                                -> World_Normal 
       dcl_output o2.xyzw                                                -> Comp_M_D_R_F 
       dcl_output o3.xyzw                                                -> Albedo 
       dcl_output o4.xyzw                                                -> Custom 
@@ -91,7 +91,7 @@ ps_5_0
   37: rsq r0.w, r0.w
   38: mul r0.xyz, r0.wwww, r0.xyzx                                      -> normalize(nDirWS) 
 
-//以下似乎无用 
+//以下似乎无用 -> 有关noise 
   39: lt r0.w, l(0.0000), abs(cb3[13].x)                                -> 0 < cb3[13].x=0 ? -> false 
   40: ge r1.x, cb3[13].x, l(0)                                          -> cb3[13].x=0 >= 0 ? -> true 
   41: and r1.x, r1.x, cb3[13].z                                         -> true && cb3[13].z=0.02 -> 0.02 
@@ -110,106 +110,120 @@ ps_5_0
   54: mul r3.xyz, r3.xyzx, cb3[4].xyzx                                  -> bv.rgb * cb3[4].xyz=[0.99, 1.00259, 1.10] 
   55: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx                        -> 0 * cb3[14].x=50 + 0 -> 0
   56: add r3.xyz, -r1.xyzx, cb3[6].xyzx                                 -> cb3[6].xyz=0 - 0 -> 0
-  57: mad r1.xyz, cb3[15].xxxx, r3.xyzx, r1.xyzx                        -> cb3[15].x=0 * 0 + 0 -> 0
+  57: mad r1.xyz, cb3[15].xxxx, r3.xyzx, r1.xyzx                        -> neo_noise = cb3[15].x=0 * 0 + 0 -> 0
 
-// 
-  58: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y
-  59: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y
-  60: dp3 r0.w, r4.xyzx, cb3[8].xyzx
-  61: add r4.xyz, r0.wwww, cb3[10].xyzx
-  62: add r4.xyz, r4.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  63: mad r4.xyz, cb2[0].wwww, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  64: mul r3.xyw, r3.xyxz, r4.xyxz
-  65: sample_b(texture2d)(float,float,float,float) r2.zw, v2.xyxx, t7.zwxy, s6, cb0[142].y
-  66: add r0.w, r2.z, cb3[15].y
-  67: max r0.w, r0.w, cb3[15].z
-  68: min r0.w, r0.w, l(1.0000)
-  69: mul r3.xyw, r0.wwww, r3.xyxw
-  70: mul r3.xyw, r3.xyxw, cb3[15].wwww
-  71: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz
-  72: add r0.w, -cb3[16].y, cb3[16].x
-  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y
-  74: max r0.w, cb2[0].z, l(0)
-  75: min r0.w, r0.w, cb3[16].z
-  76: add r0.w, r0.w, l(-1.0000)
-  77: max r5.xy, cb2[1].xyxx, l(0.0000, 0.0000, 0.0000, 0.0000)
-  78: min r1.w, r5.x, cb3[16].z
-  79: add r1.w, r1.w, l(-1.0000)
-  80: mul r5.xzw, v3.yyyy, cb1[1].xxyz
+// 采样albedo 与 ink混合（实际上ink被0屏蔽掉了） 
+  58: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y     -> sample albedo 
+  59: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y     -> sample ink 
+  60: dp3 r0.w, r4.xyzx, cb3[8].xyzx                                    -> dot(ink.rgb, cb3[8].xyz=[1,0,0])  
+  61: add r4.xyz, r0.wwww, cb3[10].xyzx                                 -> (~) + cb3[10].xyz=[0.10069, 0.06172, 0.03881] 
+  62: add r4.xyz, r4.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)         -> (~) - 1
+  63: mad r4.xyz, cb2[0].wwww, r4.xyzx, l(1, 1, 1, 0)                   -> cb2[0].w=0 * (~) + 1 -> 1 
+  64: mul r3.xyw, r3.xyxz, r4.xyxz                                      -> albedo.rgb *= 1 
+
+//采样Comp，将albedo与AO混合 
+  65: sample_b(texture2d)(float,float,float,float) r2.zw, v2.xyxx, t7.zwxy, s6, cb0[142].y      -> sample Comp.rg -> AO and Roughness 
+  66: add r0.w, r2.z, cb3[15].y                                         -> Comp.r + cb3[15].y=0.15 
+  67: max r0.w, r0.w, cb3[15].z                                         -> max(~, cb3[15].z=0) -> ~ 
+  68: min r0.w, r0.w, l(1.0000)                                         -> min(~, 1) 
+  69: mul r3.xyw, r0.wwww, r3.xyxw                                      -> albedo.rgb * AO 
+  70: mul r3.xyw, r3.xyxw, cb3[15].wwww                                 -> (~) * cb3[15].w=1.4 
+  71: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz                             -> albedo = saturate((~) * cb3[11].xyz=[0.76769, 0.89215, 1.10]) 
+
+  72: add r0.w, -cb3[16].y, cb3[16].x                                   -> cb3[16].xy=[1.2, 0.01] -> 1.2 - 0.01 
+  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 - 0.01) 
+
+  74: max r0.w, cb2[0].z, l(0)                                          -> max(cb2[0].z=0, 0) -> 0 
+  75: min r0.w, r0.w, cb3[16].z                                         -> min(~, cb3[16].z=0.6) -> 0 
+  76: add r0.w, r0.w, l(-1.0000)                                        -> (~) - 1 -> -1 
+  77: max r5.xy, cb2[1].xyxx, l(0.00001, 0.00001, 0.0000, 0.0000)       -> max(cb2[1].xy=[0,0], 0.00001) -> 很小的数  
+  78: min r1.w, r5.x, cb3[16].z                                         -> min(~, cb3[16].z=0.6) -> 0 
+  79: add r1.w, r1.w, l(-1.0000)                                        -> (~) - 1 -> -1 
+
+  80: mul r5.xzw, v3.yyyy, cb1[1].xxyz 
   81: mad r5.xzw, v3.xxxx, cb1[0].xxyz, r5.xxzw
   82: mad r5.xzw, v4.xxxx, cb1[2].xxyz, r5.xxzw
   83: add r5.xzw, r5.xxzw, cb1[3].xxyz
-  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz
-  85: dp3 r3.z, r5.xzwx, r5.xzwx
-  86: sqrt r3.z, r3.z
-  87: div r5.x, l(1.0000, 1.0000, 1.0000, 1.0000), r5.y
-  88: mad r3.z, -r3.z, r5.x, l(1.0000)
-  89: mul_sat r3.z, r3.z, l(6.6667)
-  90: add r1.w, abs(r1.w), -r3.z
-  91: add r1.w, r1.w, l(1.0000)
-  92: min r1.w, r1.w, l(1.0000)
-  93: mul r0.w, abs(r0.w), r1.w
-  94: mul r0.w, r0.w, cb3[16].w
-  95: mul r0.w, r0.w, r2.w
-  96: sample_b(texture2d)(float,float,float,float) r1.w, r2.xyxx, t8.xyzw, s7, cb0[142].y
-  97: mad r0.w, r1.w, cb3[12].y, r0.w
-  98: add_sat r0.w, r0.w, l(-0.1000)
-  99: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t9.xzwy, s8, cb0[142].y
- 100: add r2.x, -cb3[17].y, cb3[17].x
- 101: mad_sat r2.y, r1.w, r2.x, cb3[17].y
- 102: mov_sat r2.z, r2.z
- 103: mad r4.y, r0.w, cb0[138].y, cb0[138].x
- 104: lt r0.w, l(0.1000), r2.y
- 105: if_nz r0.w
- 106:   mad r0.w, cb3[17].z, l(255.0000), l(0.5000)
- 107:   ftou r5.y, r0.w
- 108:   mov r5.xzw, l(5, 0, 0, 0)
- 109:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw
- 110:   add r1.w, r2.y, l(-0.1000)
- 111:   mul_sat r1.w, r1.w, l(10.0000)
- 112:   mad r0.w, r0.w, l(2.0000), l(-1.0000)
- 113:   mad r0.w, r1.w, r0.w, l(1.0000)
- 114:   mul_sat r4.y, r0.w, r4.y
- 115:   mov r2.x, cb3[17].z
- 116:   mov r0.w, l(5)
+  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz                                 -> 先假设是模型空间向量 
+
+  85: dp3 r3.z, r5.xzwx, r5.xzwx 
+  86: sqrt r3.z, r3.z                                                   -> [向量长度] 
+  87: div r5.x, l(1.0000, 1.0000, 1.0000, 1.0000), r5.y                 -> 1 / 极小的数 -> 100000
+  88: mad r3.z, -r3.z, r5.x, l(1.0000)                                  -> 1 - [向量长度] * 100000 
+  89: mul_sat r3.z, r3.z, l(6.6667)                                     -> saturate(~ * 0.6667) -> 推测趋于1 
+  90: add r1.w, abs(r1.w), -r3.z                                        -> 1 - (~)
+  91: add r1.w, r1.w, l(1.0000)                                         -> (~) + 1
+  92: min r1.w, r1.w, l(1.0000)                                         -> min(~, 1) 
+  93: mul r0.w, abs(r0.w), r1.w                                         -> (~) * 1 -> 1 
+  94: mul r0.w, r0.w, cb3[16].w                                         -> cb3[16].w=1.1 * (~) -> 1.1 
+  95: mul r0.w, r0.w, r2.w                                              -> (~) * Comp.g -> roughness 
+
+  96: sample_b(texture2d)(float,float,float,float) r1.w, r2.xyxx, t8.xyzw, s7, cb0[142].y       -> sample Noise_2.a -> noise2_a 
+  97: mad r0.w, r1.w, cb3[12].y, r0.w                                   -> noise2_a * cb3[12].y=0.6 + 1.1*Comp.g 
+  98: add_sat r0.w, r0.w, l(-0.1000)                                    -> saturate((~) - 0.1) -> neo_roughness 
+
+  99: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t9.xzwy, s8, cb0[142].y       -> sample SSSStrength.y 
+ 100: add r2.x, -cb3[17].y, cb3[17].x                                   -> cb3[17].xy=[1.5, 0.5] -> 1.5 - 0.5 -> 1 
+ 101: mad_sat r2.y, r1.w, r2.x, cb3[17].y                               -> neo_strength = saturate(Strength * 1 + 0.5) 
+
+ 102: mov_sat r2.z, r2.z                                                -> saturate(raw_AO) 
+ 103: mad r4.y, r0.w, cb0[138].y, cb0[138].x                            -> scaled_rough = neo_roughness * 1 + 0
+
+ 104: lt r0.w, l(0.1000), r2.y                                          -> 0.1 < 0.5+ -> true 
+ 105: if_nz r0.w                                                        -> 必然进入的分支 
+ 106:   mad r0.w, cb3[17].z, l(255.0000), l(0.5000)                     -> cb3[17].z=0.01569 * 255 + 0.5 -> 4.5 
+ 107:   ftou r5.y, r0.w                                                 -> 4 
+ 108:   mov r5.xzw, l(5, 0, 0, 0)                                       -> r5 = [5,4,0,0] 
+ 109:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw     -> sample SSProfileTex -> Duel_specular_data.a -> MaterialRoughnessToAverage 
+ 110:   add r1.w, r2.y, l(-0.1000)                                      -> neo_strength - 0.1 
+ 111:   mul_sat r1.w, r1.w, l(10.0000)                                  -> neo_str_10times = saturate(~ * 10) 
+ 112:   mad r0.w, r0.w, l(2.0000), l(-1.0000)                           -> average_Roughness * 2 - 1 -> decode ave roughness 
+ 113:   mad r0.w, r1.w, r0.w, l(1.0000)                                 -> neo_str_10times * (~) + 1 
+ 114:   mul_sat r4.y, r0.w, r4.y                                        -> scaled_rough = saturate(~ * scaled_rough) 
+ 115:   mov r2.x, cb3[17].z                                             -> r2.x = 0.01569 
+ 116:   mov r0.w, l(5)                                                  -> r0.w = 5 -> SubsurfaceProfileShadingMode 
  117: else
  118:   mov r2.xy, l(0, 0, 0, 0)
  119:   mov r0.w, l(1)
  120: endif
- 121: mul r1.w, r4.x, l(0.0800)
- 122: ftou r5.xy, v5.xyxx
- 123: ftou r2.w, cb0[151].x
- 124: iadd r3.z, r5.y, r5.x
- 125: iadd r2.w, r2.w, r3.z
- 126: and r2.w, r2.w, l(1)
- 127: ieq r3.z, r0.w, l(5)
- 128: lt r5.x, l(0), cb0[155].x
- 129: lt r5.y, l(0), cb0[200].z
- 130: and r5.z, r5.y, r5.x
- 131: ne r5.w, l(0, 0, 0, 0), cb0[155].x
- 132: movc r6.xyz, r5.wwww, l(1.0000, 1.0000, 1.0000, 0.0000), r3.xywx
- 133: movc r7.xy, r2.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
- 134: mul r2.w, r1.w, r7.y
- 135: movc r6.xyz, r5.zzzz, r7.xxxx, r6.xyzx
- 136: movc r2.w, r5.z, r2.w, r1.w
- 137: movc r6.xyz, r3.zzzz, r6.xyzx, r3.xywx
- 138: movc r1.w, r3.z, r2.w, r1.w
- 139: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx
- 140: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz
- 141: ne r1.w, l(0, 0, 0, 0), cb0[177].w
- 142: mad r8.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
- 143: movc r6.xyz, r1.wwww, r8.xyzx, r6.xyzx
- 144: movc r7.xzw, r1.wwww, l(0, 0, 0, 0), r7.xxzw
- 145: dp3 r1.w, r7.xzwx, l(0.3000, 0.5900, 0.1100, 0.0000)
- 146: mad r8.xyz, r1.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
- 147: mad r1.w, r2.z, r8.x, r8.y
- 148: mad r1.w, r1.w, r2.z, r8.z
- 149: mul r1.w, r2.z, r1.w
- 150: max o3.w, r1.w, r2.z
- 151: mad r6.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
- 152: max r1.xyz, r1.xyzx, l(0, 0, 0, 0)
- 153: lt r1.w, l(0), cb0[139].x
- 154: if_nz r1.w
+
+ 121: mul r1.w, r4.x, l(0.0800)                                         -> blue * 0.08 
+ 122: ftou r5.xy, v5.xyxx                                               -> (uint)pos_CS -> pos_CS.xy 存放像素偏移格子数 + 0.5 
+ 123: ftou r2.w, cb0[151].x                                             -> 3 
+ 124: iadd r3.z, r5.y, r5.x 
+ 125: iadd r2.w, r2.w, r3.z                                             -> screenPos.x + screenPos.y + TAASampleIndex 
+ 126: and r2.w, r2.w, l(1)                                              -> (~) % 2
+
+ 127: ieq r3.z, r0.w, l(5)                                              -> true 
+ 128: lt r5.x, l(0), cb0[155].x                                         -> 0 < 1 ? true 
+ 129: lt r5.y, l(0), cb0[200].z                                         -> 0 < 1 ? true 
+ 130: and r5.z, r5.y, r5.x                                              -> true -> 0xFFFF 
+ 131: ne r5.w, l(0, 0, 0, 0), cb0[155].x                                -> 0 != 1 ? true 
+ 132: movc r6.xyz, r5.wwww, l(1, 1, 1, 0), r3.xywx                      -> r6.xyz = 1
+ 133: movc r7.xy, r2.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)                 -> r7.xy = [1,0] or [0,1] 
+ 134: mul r2.w, r1.w, r7.y                                              -> r2.w = (0.08*blue) * (~) -> !bCheck * 0.08blue 
+ 135: movc r6.xyz, r5.zzzz, r7.xxxx, r6.xyzx                            -> r6.xyz = bCheck
+ 136: movc r2.w, r5.z, r2.w, r1.w                                       -> r2.w = r2.w 
+ 137: movc r6.xyz, r3.zzzz, r6.xyzx, r3.xywx                            -> r6.xyz = r6.xyz 
+ 138: movc r1.w, r3.z, r2.w, r1.w                                       -> r1.w = r2.w 
+ 139: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx                 -> r6.xyz = r6.xyz * cb0[135].w=1 + cb0[135].xyz=0 
+ 140: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz                 -> r7.xzw = r1.www * cb0[136].w=1 + cb0[136].xyz=0 
+
+ 141: ne r1.w, l(0, 0, 0, 0), cb0[177].w                                -> 0 != cb0[177].w=0 ? false 
+ 142: mad r8.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx   -> r8.xyz = 0.45 * r7.xzw + r6.xyz 
+ 143: movc r6.xyz, r1.wwww, r8.xyzx, r6.xyzx                            -> r6.xyz = r6.xyz 
+ 144: movc r7.xzw, r1.wwww, l(0, 0, 0, 0), r7.xxzw                      -> r7.xzw = r7.xzw 
+ 145: dp3 r1.w, r7.xzwx, l(0.3000, 0.5900, 0.1100, 0.0000)              -> luma(r7.xzw) 
+ 146: mad r8.xyz, r1.wwww, l(2.0404, -4.7951, 2.7552, 0), l(-0.3324, 0.6417, 0.6903, 0) -> luma * v[2.0404, -4.7951, 2.7552] + v[-0.3324, 0.6417, 0.6903] 
+ 147: mad r1.w, r2.z, r8.x, r8.y                                        
+ 148: mad r1.w, r1.w, r2.z, r8.z                                        
+ 149: mul r1.w, r2.z, r1.w                                              -> {[saturate(raw_AO) * (~).x + (~).y] * saturate(raw_AO) + (~).z} * saturate(raw_AO) 
+ 150: max o3.w, r1.w, r2.z                                              -> Out_Albedo.a = max(~, saturate(raw_AO)) -> 这就是face texture AO 
+ 151: mad r6.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx   -> r6.xyz = 0.45 * r7.xzw + r6.xyz 
+ 152: max r1.xyz, r1.xyzx, l(0, 0, 0, 0)                                -> neo_noise = max(neo_noise, 0) -> 0
+
+ 153: lt r1.w, l(0), cb0[139].x                                         -> 0 < cb0[139].x=0 ? false 
+ 154: if_nz r1.w                                                        -> 不进入 
  155:   mul r8.xyzw, v5.yyyy, cb0[45].xyzw
  156:   mad r8.xyzw, v5.xxxx, cb0[44].xyzw, r8.xyzw
  157:   mad r8.xyzw, v5.zzzz, cb0[46].xyzw, r8.xyzw
@@ -228,21 +242,22 @@ ps_5_0
  170:   movc r7.xzw, r2.zzzz, l(0.0000, 0.0000, 1.0000, 1.0000), l(1.0000, 0.0000, 1.0000, 0.0000)
  171:   movc r1.xyz, r1.wwww, r7.xzwx, r1.xyzx
  172: endif
- 173: mad r1.xyz, cb0[144].yyyy, r6.xyzx, r1.xyzx
- 174: and r1.w, r3.z, r5.x
- 175: and r1.w, r5.y, r1.w
- 176: mul r5.xyz, r7.yyyy, r1.xyzx
- 177: movc r1.xyz, r1.wwww, r5.xyzx, r1.xyzx
- 178: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 179: or r0.x, r0.w, l(161)
- 180: utof r0.x, r0.x
- 181: mul r4.z, r0.x, l(0.0039)
- 182: mul o0.xyz, r1.xyzx, cb0[134].yyyy
- 183: mov o0.w, l(0)
- 184: mov o1.w, cb1[20].y
- 185: mov r4.w, l(0)
- 186: mov o2.xyzw, r4.wxyz
- 187: mov o3.xyz, r3.xywx
- 188: mov o4.xw, r2.xxxy
+
+ 173: mad r1.xyz, cb0[144].yyyy, r6.xyzx, r1.xyzx                       -> neo_noise = (r6.xyz * cb0[144].y=0) + r1.xyz -> 0
+ 174: and r1.w, r3.z, r5.x                                              -> true && true = 0xFFFF 
+ 175: and r1.w, r5.y, r1.w                                              -> true -> 0xFFFF 
+ 176: mul r5.xyz, r7.yyyy, r1.xyzx                                      
+ 177: movc r1.xyz, r1.wwww, r5.xyzx, r1.xyzx                            -> neo_noise * !bCheck -> 所以这货是Emission！ 
+ 178: mad o1.xyz, r0.xyzx, l(0.5, 0.5, 0.5, 0), l(0.5, 0.5, 0.5, 0)     -> World_Normal.rgb = normalize(nDirWS) * 0.5 + 0.5
+ 179: or r0.x, r0.w, l(161)                                             -> 5 | 161 = 165 
+ 180: utof r0.x, r0.x                                                   -> 165.0f 
+ 181: mul r4.z, r0.x, l(0.0039)                                         -> 0.0039 * 165.0 = 0.6435 
+ 182: mul o0.xyz, r1.xyzx, cb0[134].yyyy                                -> Emission.rgb = r1.xyz * 1 = 0 
+ 183: mov o0.w, l(0)                                                    -> Emission.a = 0 
+ 184: mov o1.w, cb1[20].y                                               -> World_Normal.a = 0.66667 
+ 185: mov r4.w, l(0) 
+ 186: mov o2.xyzw, r4.wxyz                                              -> Comp_M_D_R_F.xyzw = [0, blue, scaled_rough, 0.6435]  where blue=saturate(raw_albedo.z * 1.19 - 0.01) 
+ 187: mov o3.xyz, r3.xywx                                               -> Albedo.rgb = albedo 
+ 188: mov o4.xw, r2.xxxy                                                -> Custom.xw = [0.01569, neo_strength] 
  189: mov o4.yz, l(0, 0, 0, 0)
  190: ret
