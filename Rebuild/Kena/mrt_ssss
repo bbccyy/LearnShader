@@ -86,12 +86,13 @@ ps_5_0
 
   33: mul r0.xyz, r0.xyzx, r1.yyyy
   34: mad r0.xyz, r1.xxxx, v0.xyzx, r0.xyzx
-  35: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx                             -> mul(norm, Matrix_TBN) -> 其中tbn矩阵的第一行为t，第二行为b，最后一行为n 
+  35: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx                             -> nDirWS = mul(norm, Matrix_TBN) -> 其中tbn矩阵的第一行为t，第二行为b，最后一行为n 
   36: dp3 r0.w, r0.xyzx, r0.xyzx
   37: rsq r0.w, r0.w
-  38: mul r0.xyz, r0.wwww, r0.xyzx
-  39: lt r0.w, l(0.0000), abs(cb3[13].x)
-  40: ge r1.x, cb3[13].x, l(0)
+  38: mul r0.xyz, r0.wwww, r0.xyzx                                      -> normalize(nDirWS) 
+
+  39: lt r0.w, l(0.0000), abs(cb3[13].x)                                -> 0 < cb3[13]=0 ? -> false 
+  40: ge r1.x, cb3[13].x, l(0)                                          -> cb3[13]=0 >= 0 ? -> true 
   41: and r1.x, r1.x, cb3[13].z
   42: and r0.w, r0.w, r1.x
   43: mul r1.xy, v2.xyxx, cb3[13].wwww
