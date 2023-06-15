@@ -7,16 +7,21 @@ vs_5_0
       dcl_constantbuffer cb0[128], immediateIndexed
       dcl_constantbuffer cb1[5], immediateIndexed
       dcl_resource_buffer (float,float,float,float) t0
-      dcl_input v0.xyz
-      dcl_input v1.xyz
-      dcl_input v2.xyzw
-      dcl_input v3.xyzw
-      dcl_input v4.xyzw
-      dcl_input v5.xyzw
-      dcl_input v6.xyzw
-      dcl_input v7.xy
-      dcl_input v8.xyz
-      dcl_input v9.xyz
+
+      dcl_input v0.xyz              position                      -> Attr_0
+      dcl_input v1.xyz              TangentX                      -> Attr_1
+      dcl_input v2.xyzw             TangentZ (w refs to sign)     -> Attr_2
+
+      dcl_input v3.xyzw             BlendIndices                  -> Attr_3 
+      dcl_input v4.xyzw             BlendIndicesExtra             -> Attr_14 
+      dcl_input v5.xyzw             BlendWeights                  -> Attr_4 
+      dcl_input v6.xyzw             BlendWeightsExtra             -> Attr_15 
+
+      dcl_input v7.xy               TexCoords                     -> Attr_5         UV 
+      
+      dcl_input v8.xyz              DeltaPosition                 -> Attr_9         GPUSKIN_MORPH_BLEND::POSITION1
+      dcl_input v9.xyz              DeltaTangentZ                 -> Attr_10        GPUSKIN_MORPH_BLEND::NORMAL1 
+
       dcl_output o0.xyzw
       dcl_output o1.xyzw
       dcl_output o2.xy
@@ -25,6 +30,7 @@ vs_5_0
       dcl_output_siv o5.xyzw, position
       dcl_output_siv o6.x, clipdistance
       dcl_temps 12
+
    0: imul null, r0.xyzw, v3.xyzw, l(3, 3, 3, 3)
    1: ld_indexable(buffer)(float,float,float,float) r1.xyzw, r0.yyyy, t0.xyzw
    2: mul r1.xyzw, r1.xyzw, v5.yyyy
