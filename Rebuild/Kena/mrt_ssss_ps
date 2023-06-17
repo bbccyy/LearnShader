@@ -21,7 +21,7 @@ ps_5_0
 
       dcl_resource_texture2d (float,float,float,float) t0               -> SSProfileTex  
       dcl_resource_texture2d (float,float,float,float) t1               -> Packed_Normal 
-      dcl_resource_texture2d (float,float,float,float) t2               -> ? 64 x 64 RG Noise -> Disturbing Normal -> D_Norm
+      dcl_resource_texture2d (float,float,float,float) t2               -> ? 64 x 64 RG Noise -> Disturbing Normal -> D_Norm 
       dcl_resource_texture2d (float,float,float,float) t3               -> ? 2048 x 2048 R Noise 
       dcl_resource_texture2d (float,float,float,float) t4               -> ? blood vessel && tooth 
       dcl_resource_texture2d (float,float,float,float) t5               -> Albedo 
@@ -33,8 +33,8 @@ ps_5_0
       dcl_input_ps linear centroid v0.xyz                               -> normal 
       dcl_input_ps linear centroid v1.xyzw                              -> tangent 
       dcl_input_ps linear v2.xy                                         -> uv 
-      dcl_input_ps linear v3.xy                                         -> ? 
-      dcl_input_ps linear v4.x                                          -> 120.0f ~ 140.0f 左右的值 
+      dcl_input_ps linear v3.xy                                         -> posOS.xy  左耳对应x=-9，右耳对应x=9； 鼻子对应y=17，后脑勺对应y=-2 
+      dcl_input_ps linear v4.x                                          -> posOS.z   113.0f ~ 144.0f 左右的值 -> 人物头部模型的下底z值大概在113左右，头顶z值在144左右 
       dcl_input_ps_siv linear noperspective v5.xyz, position            -> SV Position 
 
       dcl_output o0.xyzw                                                -> Emission 
@@ -123,7 +123,7 @@ ps_5_0
 
 //采样Comp，将albedo与AO混合 
   65: sample_b(texture2d)(float,float,float,float) r2.zw, v2.xyxx, t7.zwxy, s6, cb0[142].y      -> sample Comp.rg -> AO and Roughness 
-  66: add r0.w, r2.z, cb3[15].y                                         -> Comp.r + cb3[15].y=0.15 
+  66: add r0.w, r2.z, cb3[15].y                                         -> raw_AO + cb3[15].y=0.15 
   67: max r0.w, r0.w, cb3[15].z                                         -> max(~, cb3[15].z=0) -> ~ 
   68: min r0.w, r0.w, l(1.0000)                                         -> min(~, 1) 
   69: mul r3.xyw, r0.wwww, r3.xyxw                                      -> albedo.rgb * AO 
@@ -131,7 +131,7 @@ ps_5_0
   71: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz                             -> albedo = saturate((~) * cb3[11].xyz=[0.76769, 0.89215, 1.10]) 
 
   72: add r0.w, -cb3[16].y, cb3[16].x                                   -> cb3[16].xy=[1.2, 0.01] -> 1.2 - 0.01 
-  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 - 0.01) 
+  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 + 0.01) 
 
   74: max r0.w, cb2[0].z, l(0)                                          -> max(cb2[0].z=0, 0) -> 0 
   75: min r0.w, r0.w, cb3[16].z                                         -> min(~, cb3[16].z=0.6) -> 0 
@@ -144,7 +144,7 @@ ps_5_0
   81: mad r5.xzw, v3.xxxx, cb1[0].xxyz, r5.xxzw
   82: mad r5.xzw, v4.xxxx, cb1[2].xxyz, r5.xxzw
   83: add r5.xzw, r5.xxzw, cb1[3].xxyz
-  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz                                 -> 先假设是模型空间向量 
+  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz                                 -> 先假设是模型空间向量 -> 方法：先localToWorld，在减去世界坐标中的偏移，保留旋转和缩放 
 
   85: dp3 r3.z, r5.xzwx, r5.xzwx 
   86: sqrt r3.z, r3.z                                                   -> [向量长度] 
