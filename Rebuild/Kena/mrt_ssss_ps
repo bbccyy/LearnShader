@@ -200,7 +200,7 @@ ps_5_0
  130: and r5.z, r5.y, r5.x                                              -> true -> 0xFFFF 
  131: ne r5.w, l(0, 0, 0, 0), cb0[155].x                                -> 0 != 1 ? true 
  132: movc r6.xyz, r5.wwww, l(1, 1, 1, 0), r3.xywx                      -> r6.xyz = 1
- 133: movc r7.xy, r2.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)                 -> r7.xy = [1,0] or [0,1] 
+ 133: movc r7.xy, r2.wwww, l(1, 0, 0, 0), l(0, 1, 0, 0)                 -> r7.xy = [1,0] or [0,1]  -> r7.x 对应bCheck，r7.y 对应!bCheck 
  134: mul r2.w, r1.w, r7.y                                              -> r2.w = (0.08*blue) * (~) -> !bCheck * 0.08blue 
  135: movc r6.xyz, r5.zzzz, r7.xxxx, r6.xyzx                            -> r6.xyz = bCheck
  136: movc r2.w, r5.z, r2.w, r1.w                                       -> r2.w = r2.w 
@@ -258,6 +258,6 @@ ps_5_0
  185: mov r4.w, l(0) 
  186: mov o2.xyzw, r4.wxyz                                              -> Comp_M_D_R_F.xyzw = [0, blue, scaled_rough, 0.6435]  where blue=saturate(raw_albedo.z * 1.19 - 0.01) 
  187: mov o3.xyz, r3.xywx                                               -> Albedo.rgb = albedo 
- 188: mov o4.xw, r2.xxxy                                                -> Custom.xw = [0.01569, neo_strength] 
+ 188: mov o4.xw, r2.xxxy                                                -> Custom.xw = [0.01569, neo_strength]   
  189: mov o4.yz, l(0, 0, 0, 0)
  190: ret
