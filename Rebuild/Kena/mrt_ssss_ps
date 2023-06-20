@@ -243,7 +243,7 @@ ps_5_0
  171:   movc r1.xyz, r1.wwww, r7.xzwx, r1.xyzx
  172: endif
 
- 173: mad r1.xyz, cb0[144].yyyy, r6.xyzx, r1.xyzx                       -> neo_noise = (r6.xyz * cb0[144].y=0) + r1.xyz -> 0
+ 173: mad r1.xyz, cb0[144].yyyy, r6.xyzx, r1.xyzx                       -> neo_noise = (r6.xyz * cb0[144].y=0) + r1.xyz -> 0 
  174: and r1.w, r3.z, r5.x                                              -> true && true = 0xFFFF 
  175: and r1.w, r5.y, r1.w                                              -> true -> 0xFFFF 
  176: mul r5.xyz, r7.yyyy, r1.xyzx                                      

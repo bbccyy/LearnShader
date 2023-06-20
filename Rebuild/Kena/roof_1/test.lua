@@ -23,3 +23,5 @@ print((0x1FBD1DF5))
 print(2^(16))
 print(v1[1]^(2))
 print("DONE")
+
+print(math.pow(0.2, 0.45))
