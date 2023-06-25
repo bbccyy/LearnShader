@@ -5,7 +5,7 @@ Shader hash 2c4b3dda-d71d0920-42cbb351-d0064a49
 
 ps_5_0
       dcl_globalFlags refactoringAllowed
-      dcl_constantbuffer cb0[201], immediateIndexed
+      dcl_constantbuffer cb0[201], immediateIndexed  
       dcl_constantbuffer cb1[21], immediateIndexed
       dcl_constantbuffer cb2[5], immediateIndexed
       dcl_constantbuffer cb3[18], immediateIndexed
