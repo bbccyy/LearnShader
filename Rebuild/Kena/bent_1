@@ -50,7 +50,8 @@ cs_5_0
   25:   mad r0.xyz, r1.wwww, cb1[50].xyzx, r0.xyzx
   26:   add r0.xyz, r0.xyzx, cb1[51].xyzx                               -> Reconstruct the world position 
 
-  27:   imad r0.w, vThreadID.y, cb0[12].z, vThreadID.x
+  27:   imad r0.w, vThreadID.y, cb0[12].z, vThreadID.x                  -> OutputBaseIndex -> 对应Grid索引，从二维xy变成一维index 
+
   28:   add r4.xyz, r0.xyzx, -cb0[14].xyzx
   29:   add r4.xyz, r4.xyzx, cb0[14].wwww
   30:   max r4.xyz, r4.xyzx, l(0, 0, 0, 0)
@@ -58,8 +59,9 @@ cs_5_0
   32:   add r5.xyz, -r0.xyzx, r5.xyzx
   33:   max r5.xyz, r5.xyzx, l(0, 0, 0, 0)
   34:   min r4.xyz, r4.xyzx, r5.xyzx
-  35:   min r1.w, r4.z, r4.y
-  36:   min r1.w, r1.w, r4.x
+  35:   min r1.w, r4.z, r4.y 
+  36:   min r1.w, r1.w, r4.x                                            -> float DistanceFromClipmap = ComputeDistanceFromBoxToPointInside(...) 
+
   37:   lt r1.w, cb0[9].y, r1.w
   38:   if_nz r1.w
   39:     mul r1.w, cb0[14].w, l(0.0067)
