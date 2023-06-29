@@ -64,18 +64,21 @@ cs_5_0
 
   37:   lt r1.w, cb0[9].y, r1.w
   38:   if_nz r1.w
-  39:     mul r1.w, cb0[14].w, l(0.0067)
-  40:     div r2.w, l(1.0000, 1.0000, 1.0000, 1.0000), cb0[9].y
-  41:     mul r3.w, cb0[8].z, l(10.0000)
-  42:     mad r3.w, r3.w, r3.w, l(1.0000)
-  43:     mul r3.w, r3.w, cb0[8].y
+  39:     mul r1.w, cb0[14].w, l(0.0067)                                -> AABB_Extent * 2 / 300.0f  
+  40:     div r2.w, l(1.0000, 1.0000, 1.0000, 1.0000), cb0[9].y         -> InvAOGlobalMaxOcclusionDistance = 1.0f / AOGlobalMaxOcclusionDistance; 
+
+  41:     mul r3.w, cb0[8].z, l(10.0000)                                -> AOStepExponentScale=0.5 
+  42:     mad r3.w, r3.w, r3.w, l(1.0000)                               -> 5 * 5 + 1 = 26 
+  43:     mul r3.w, r3.w, cb0[8].y                                      -> return AOStepScale=2.91636 * (temp * temp + 1); 
+                                                                        -> float InitialOffset = GetStepOffset(NUM_CONE_STEPS);  
+
   44:     mov r4.x, l(0)
   45:     loop
   46:       uge r4.y, r4.x, l(9)
   47:       breakc_nz r4.y
-  48:       mul r4.yzw, r3.xxyz, cb2[r4.x + 0].yyyy
+  48:       mul r4.yzw, r3.xxyz, cb2[r4.x + 0].yyyy                     -> cb2[r4.x + 0].xyz == AOSamples2.SampleDirections[ConeIndex].xyz 
   49:       mad r4.yzw, cb2[r4.x + 0].xxxx, r2.xxyz, r4.yyzw
-  50:       mad r4.yzw, cb2[r4.x + 0].zzzz, r1.xxyz, r4.yyzw
+  50:       mad r4.yzw, cb2[r4.x + 0].zzzz, r1.xxyz, r4.yyzw            -> Sample Direction 
   51:       mov r5.y, r3.w
   52:       mov r5.xz, l(1.0000, 0.0000, 0.0000, 0.0000)
   53:       loop
@@ -83,30 +86,37 @@ cs_5_0
   55:         lt r6.x, r5.y, cb0[9].y
   56:         and r5.w, r5.w, r6.x
   57:         breakc_z r5.w
-  58:         mad r6.xyz, r4.yzwy, r5.yyyy, r0.xyzx
-  59:         mad r6.xyz, r6.xyzx, cb0[18].wwww, cb0[18].xyzx
-  60:         sample_l(texture3d)(float,float,float,float) r5.w, r6.xyzx, t1.yzwx, s1, l(0)
-  61:         mul r6.x, r5.y, cb0[22].z
-  62:         iadd r6.x, -r6.x, l(161547303404896380000000000000000000000.0000)
-  63:         mul_sat r6.x, r5.w, r6.x
-  64:         add r6.y, r5.w, r5.y
-  65:         mul r6.y, r2.w, r6.y
+  58:         mad r6.xyz, r4.yzwy, r5.yyyy, r0.xyzx                     -> WorldPosition 获取光追位置的世界坐标 
+  59:         mad r6.xyz, r6.xyzx, cb0[18].wwww, cb0[18].xyzx           -> ComputeGlobalUV(float3 WorldPosition, uint ClipmapIndex) 
+
+  60:         sample_l(texture3d)(float,float,float,float) r5.w, r6.xyzx, t1.yzwx, s1, l(0) -> DistanceToOccluder = SampleGlobalDistanceField(ClipmapIndex, StepVolumeUV).x;
+
+  61:         mul r6.x, r5.y, cb0[22].z                                 -> float SphereRadius = WorldStepOffset * TanConeHalfAngle=0.51539 
+  62:         iadd r6.x, -r6.x, l(161547303404896380000000000000000000000.0000)     -> rcpFast 
+
+  63:         mul_sat r6.x, r5.w, r6.x                                  -> float Visibility = saturate(DistanceToOccluder * InvSphereRadius);
+
+  64:         add r6.y, r5.w, r5.y                                      -> WorldStepOffset + DistanceToOccluder
+  65:         mul r6.y, r2.w, r6.y                                      -> float OccluderDistanceFraction = (~) * InvAOGlobalMaxOcclusionDistance; 
   66:         mul r6.y, r6.y, r6.y
-  67:         mul r6.y, r6.y, l(0.6000)
-  68:         min r6.y, r6.y, l(1.0000)
-  69:         max r6.x, r6.y, r6.x
-  70:         min r5.x, r5.x, r6.x
-  71:         max r5.w, r1.w, r5.w
-  72:         add r5.y, r5.w, r5.y
-  73:         iadd r5.z, r5.z, l(1)
+  67:         mul r6.y, r6.y, l(0.6000)                                 
+  68:         min r6.y, r6.y, l(1.0000)                                 -> saturate(OccluderDistanceFraction * OccluderDistanceFraction * .6f)
+  69:         max r6.x, r6.y, r6.x                                      -> Visibility = max(Visibility, ~); 
+  70:         min r5.x, r5.x, r6.x                                      -> MinVisibility = min(MinVisibility, Visibility);
+
+  71:         max r5.w, r1.w, r5.w                                      -> max(DistanceToOccluder, MinStepSize) 
+  72:         add r5.y, r5.w, r5.y                                      -> WorldStepOffset += max(DistanceToOccluder, MinStepSize); 
+  73:         iadd r5.z, r5.z, l(1)                                     -> StepIndex++ 
   74:       endloop
+
   75:       imul null, r4.y, r4.x, cb0[12].z
-  76:       imad r4.y, r4.y, cb0[12].w, r0.w
-  77:       atomic_umin u0, r4.y, r5.x
+  76:       imad r4.y, r4.y, cb0[12].w, r0.w                -> ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + OutputBaseIndex
+  77:       atomic_umin u0, r4.y, r5.x                                  -> InterlockedMin(RWScreenGridConeVisibility[~], asuint(MinVisibility)) 
+
   78:       iadd r4.x, r4.x, l(1)
   79:     endloop
   80:   else
-  81:     add r4.xyz, r0.xyzx, -cb0[15].xyzx
+  81:     add r4.xyz, r0.xyzx, -cb0[15].xyzx                -> GlobalVolumeCenterAndExtent[1].xyz
   82:     add r4.xyz, r4.xyzx, cb0[15].wwww
   83:     max r4.xyz, r4.xyzx, l(0, 0, 0, 0)
   84:     add r5.xyz, cb0[15].wwww, cb0[15].xyzx
@@ -114,11 +124,12 @@ cs_5_0
   86:     max r5.xyz, r5.xyzx, l(0, 0, 0, 0)
   87:     min r4.xyz, r4.xyzx, r5.xyzx
   88:     min r1.w, r4.z, r4.y
-  89:     min r1.w, r1.w, r4.x
+  89:     min r1.w, r1.w, r4.x                              -> 用LOD=1级别的AABB中心点数据重新计算DistanceFromClipmap 
+
   90:     lt r1.w, cb0[9].y, r1.w
   91:     if_nz r1.w
   92:       mul r1.w, cb0[15].w, l(0.0067)
-  93:       div r2.w, l(1.0000, 1.0000, 1.0000, 1.0000), cb0[9].y
+  93:       div r2.w, l(1.0000, 1.0000, 1.0000, 1.0000), cb0[9].y -> InvAOGlobalMaxOcclusionDistance = 1.0f / AOGlobalMaxOcclusionDistance;
   94:       mul r3.w, cb0[8].z, l(10.0000)
   95:       mad r3.w, r3.w, r3.w, l(1.0000)
   96:       mul r3.w, r3.w, cb0[8].y
@@ -158,6 +169,7 @@ cs_5_0
  130:         atomic_umin u0, r4.y, r5.x
  131:         iadd r4.x, r4.x, l(1)
  132:       endloop
+
  133:     else
  134:       add r4.xyz, r0.xyzx, -cb0[16].xyzx
  135:       add r4.xyz, r4.xyzx, cb0[16].wwww
