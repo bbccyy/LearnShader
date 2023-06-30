@@ -12,23 +12,26 @@ cs_5_0
       dcl_constantbuffer cb2[9], dynamicIndexed
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
-      dcl_resource_texture3d (float,float,float,float) t0
+      dcl_resource_texture3d (float,float,float,float) t0                     -> Texture3D  
       dcl_resource_structured t1, 16
       dcl_resource_structured t2, 16
       dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_buffer (uint,uint,uint,uint) t4
+      dcl_resource_buffer (uint,uint,uint,uint) t4                            -> Buffer<uint> CulledTileDataArray 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0
       dcl_input vThreadGroupID.x
       dcl_input vThreadIDInGroup.x
       dcl_temps 14
       dcl_thread_group 64, 1, 1
-   0: ushr r0.x, vThreadIDInGroup.x, l(4)
-   1: ishl r0.y, vThreadGroupID.x, l(3)
-   2: imad r0.x, r0.x, l(2), r0.y
-   3: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw
-   4: udiv r1.x, r2.x, r0.x, cb0[9].z
-   5: and r3.x, vThreadIDInGroup.x, l(3)
-   6: ubfe r3.y, l(2), l(2), vThreadIDInGroup.x
+   0: ushr r0.x, vThreadIDInGroup.x, l(4)                                     -> SubCulledTileIndex = GroupThreadId.x / (CONE_TILE_SIZEX * CONE_TILE_SIZEX);
+   1: ishl r0.y, vThreadGroupID.x, l(3)                                       -> GroupId.x * 8 
+   2: imad r0.x, r0.x, l(2), r0.y                                             -> uint CulledTileDataBaseIndex = GroupId.x * CONE_TRACE_TILES_PER_THREADGROUP;
+                                                                              -> uint CulledTileIndex = CulledTileDataBaseIndex + SubCulledTileIndex;
+                                                                              -> uint index = CulledTileIndex * CULLED_TILE_DATA_STRIDE + 0 
+
+   3: ld_indexable(buffer)(uint,uint,uint,uint) r0.x, r0.xxxx, t4.xyzw        -> uint TileIndex = CulledTileDataArray[~];
+   4: udiv r1.x, r2.x, r0.x, cb0[9].z                                         -> cb0[9].z=54 -> 除数放在r1.x，余数放在r2.x 
+   5: and r3.x, vThreadIDInGroup.x, l(3)                                      -> ThreadIDInGroup.x & 0b0011 -> mod 4 
+   6: ubfe r3.y, l(2), l(2), vThreadIDInGroup.x                               -> uint PixelIndex = GroupThreadId.x % (CONE_TILE_SIZEX * CONE_TILE_SIZEX);
    7: mov r2.y, r1.x
    8: bfi r0.yz, l(0, 30, 30, 0), l(0, 2, 2, 0), r2.xxyx, r3.xxyx
    9: ine r0.x, r0.x, l(0x0000ffff)
