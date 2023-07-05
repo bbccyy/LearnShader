@@ -71,15 +71,22 @@ cs_5_0
   39:     imul null, r0.w, r0.x, l(17)
   40:     imad r3.xyzw, r0.xxxx, l(17, 17, 17, 17), l(3, 1, 2, 4)
   41:     ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r4.xyz, r3.x, l(0), t2.xyzx
+                                                                              -> float3 LocalPositionExtent = LoadObjectLocalPositionExtent(ObjectIndex);
+
   42:     ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r5.xyzw, r0.w, l(0), t2.xyzw
   43:     ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyzw, r3.y, l(0), t2.xyzw
   44:     ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyzw, r3.z, l(0), t2.xyzw
+                                                                              -> float4x4 WorldToVolume = LoadObjectWorldToVolume(ObjectIndex);
+
   45:     ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r3.xyzw, r3.w, l(0), t2.xyzw
+                                                                              -> float4 UVScaleAndVolumeScale = LoadObjectUVScale(ObjectIndex, bGeneratedAsTwoSided);
+
   46:     mov r1.w, l(1.0000)
   47:     dp4 r8.x, r1.xyzw, r5.xyzw
   48:     dp4 r8.y, r1.xyzw, r6.xyzw
-  49:     dp4 r8.z, r1.xyzw, r7.xyzw
-  50:     lt r1.xyz, r8.xyzx, -r4.xyzx
+  49:     dp4 r8.z, r1.xyzw, r7.xyzw                                          -> float3 VolumeShadingPosition = mul(float4(WorldShadingPosition, 1), WorldToVolume).xyz;
+
+  50:     lt r1.xyz, r8.xyzx, -r4.xyzx                                        -> ComputeDistanceFromBoxToPoint 
   51:     add r9.xyz, r4.xyzx, r8.xyzx
   52:     mov r9.xyz, abs(r9.xyzx)
   53:     and r1.xyz, r1.xyzx, r9.xyzx
@@ -91,7 +98,8 @@ cs_5_0
   59:     dp3 r1.x, r9.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
   60:     add r0.w, r0.w, r1.x
   61:     mul r0.w, abs(r3.w), r0.w
-  62:     lt r0.w, r0.w, cb0[8].x
+
+  62:     lt r0.w, r0.w, cb0[8].x                                             -> if (BoxDistance < AOObjectMaxDistance=100) 
   63:     if_nz r0.w
   64:       imad r0.y, r0.z, cb0[12].z, r0.y
   65:       lt r0.z, abs(r2.z), l(0.9990)
@@ -147,7 +155,7 @@ cs_5_0
  115:           add r9.w, r9.w, r10.w
  116:           mul r10.w, abs(r3.w), r9.w
  117:           mul r11.x, r6.w, cb0[22].z
- 118:           iadd r11.x, -r11.x, l(161547303404896380000000000000000000000.0000)
+ 118:           iadd r11.x, -r11.x, l(161547303404896380000000000000000000000.0000) 
  119:           mul_sat r11.y, r10.w, r11.x
  120:           mul_sat r11.x, r0.x, r11.x
  121:           mul_sat r11.z, r1.w, r6.w
@@ -173,8 +181,8 @@ cs_5_0
  141:           mov r7.w, r11.x
  142:         endloop
  143:         imul null, r6.w, r4.w, cb0[12].z
- 144:         imad r6.w, r6.w, cb0[12].w, r0.y
- 145:         atomic_umin u0, r6.w, r5.w
+ 144:         imad r6.w, r6.w, cb0[12].w, r0.y                                -> ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + OutputBaseIndex
+ 145:         atomic_umin u0, r6.w, r5.w                                      -> InterlockMin(RWScreenGridConeVisibility[~], asuint(MinVisibility));
  146:         iadd r4.w, r4.w, l(1)
  147:       endloop
  148:     endif
