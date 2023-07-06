@@ -1,0 +1,192 @@
+bent_3
+
+UpdateHistoryDepthRejectionPS
+Engine\Shaders\Private\DistanceFieldLightingPost.usf
+
+Shader hash 45d75dd3-870cbd47-a61fbebb-b7446923
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[19], immediateIndexed
+      dcl_constantbuffer cb1[132], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_sampler s2, mode_default
+      dcl_sampler s3, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_resource_texture2d (float,float,float,float) t1
+      dcl_resource_texture2d (float,float,float,float) t2
+      dcl_resource_texture2d (float,float,float,float) t3
+      dcl_input_ps linear v0.xyzw
+      dcl_output o0.xyzw
+      dcl_temps 12
+   0: add r0.xy, v0.xyxx, -cb0[17].zwzz                                             -> UVAndScreenPos.xy - DistanceFieldGBufferJitterOffset
+   1: mul r0.xy, r0.xyxx, cb0[18].xyxx                                              -> ~ * LowResBufferSize 
+   2: round_ni r0.xy, r0.xyxx                                                       -> floor(~) 
+   3: mad r0.zw, -r0.xxxy, cb0[18].zzzw, v0.xxxy                                    -> UVAndScreenPos.xy - Corner00UV -> where Corner00UV = ~ * LowResTexelSize 
+   4: add r0.zw, r0.zzzw, -cb0[17].zzzw                                             -> UVAndScreenPos.xy - Corner00UV - DistanceFieldGBufferJitterOffset 
+   5: mul r1.xy, r0.zwzz, cb0[18].xyxx                                              -> float2 BilinearWeights = (~) * LowResBufferSize; 
+
+   6: mad r0.zw, -r0.wwwz, cb0[18].yyyx, l(0.0000, 0.0000, 1.0000, 1.0000)          -> 1 - BilinearWeights.yx  
+   7: mul r2.yz, r1.xxyx, r0.zzwz
+   8: mul r2.w, r1.x, r1.y
+   9: mul r2.x, r0.w, r0.z                                                          -> r2.xyzw = float4 CornerWeights = float4(
+                                                                                          (1 - BilinearWeights.y) * (1 - BilinearWeights.x),
+                                                                                          (1 - BilinearWeights.y) * BilinearWeights.x,
+                                                                                          BilinearWeights.y * (1 - BilinearWeights.x),
+                                                                                          BilinearWeights.y * BilinearWeights.x);
+
+  10: mul r0.zw, r0.xxxy, cb0[18].zzzw                                              -> float2 Corner00UV 
+
+  11: mad r0.xy, r0.xyxx, cb0[18].zwzz, cb0[17].zwzz                                -> Corner00UV + DistanceFieldGBufferJitterOffset 
+  12: mad r0.xy, cb0[17].xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r0.xyxx           -> float2 FullResCorner00UV = ~ + 0.5f * DistanceFieldGBufferTexelSize; 
+  13: mad r0.zw, cb0[18].zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), r0.zzzw           -> float2 LowResCorner00UV = Corner00UV + .5f * LowResTexelSize; 
+  14: add r1.xy, r0.zwzz, -cb1[66].wzww
+  15: div r1.xy, r1.xyxx, cb1[66].xyxx
+  16: sample_l(texture2d)(float,float,float,float) r3.xyzw, r0.zwzz, t1.xyzw, s1, l(0)
+  17: mul r1.xy, r1.xyxx, r3.wwww
+  18: mul r1.yzw, r1.yyyy, cb1[49].xxyz
+  19: mad r1.xyz, r1.xxxx, cb1[48].xyzx, r1.yzwy
+  20: mad r1.xyz, r3.wwww, cb1[50].xyzx, r1.xyzx
+  21: add r1.xyz, r1.xyzx, cb1[51].xyzx
+  22: mov r1.w, l(1.0000)
+  23: sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t0.xyzw, s0, l(0)
+  24: mul r5.xy, r4.wwww, v0.zwzz
+  25: mul r5.yzw, r5.yyyy, cb1[49].xxyz
+  26: mad r5.xyz, r5.xxxx, cb1[48].xyzx, r5.yzwy
+  27: mad r5.xyz, r4.wwww, cb1[50].xyzx, r5.xyzx
+  28: add r5.xyz, r5.xyzx, cb1[51].xyzx
+  29: dp3 r5.w, r5.xyzx, r4.xyzx
+  30: mov r6.w, -r5.w
+  31: mov r6.xyz, r4.xyzx
+  32: dp4 r1.x, r6.xyzw, r1.xyzw
+  33: mul r1.x, abs(r1.x), l(1000.0000)
+  34: div r1.x, r1.x, r3.w
+  35: add r1.x, r1.x, l(0.0001)
+  36: div r1.x, l(10.0000), r1.x
+  37: min r1.x, r1.x, l(1.0000)
+  38: add r4.xy, r0.zwzz, cb0[18].zwzz
+  39: add r7.xy, r4.xyxx, -cb1[66].wzww
+  40: sample_l(texture2d)(float,float,float,float) r8.xyzw, r4.xyxx, t1.xyzw, s1, l(0)
+  41: div r4.xy, r7.xyxx, cb1[66].xyxx
+  42: mul r4.xy, r8.wwww, r4.xyxx
+  43: mul r7.xyz, r4.yyyy, cb1[49].xyzx
+  44: mad r4.xyz, r4.xxxx, cb1[48].xyzx, r7.xyzx
+  45: mad r4.xyz, r8.wwww, cb1[50].xyzx, r4.xyzx
+  46: add r7.xyz, r4.xyzx, cb1[51].xyzx
+  47: mov r7.w, l(1.0000)
+  48: dp4 r3.w, r6.xyzw, r7.xyzw
+  49: mul r3.w, abs(r3.w), l(1000.0000)
+  50: div r3.w, r3.w, r8.w
+  51: add r3.w, r3.w, l(0.0001)
+  52: div r3.w, l(10.0000), r3.w
+  53: min r1.w, r3.w, l(1.0000)
+  54: mov r7.xw, cb0[18].zzzw
+  55: mov r7.yz, l(0, 0, 0, 0)
+  56: add r9.xyzw, r0.zwzw, r7.xyzw
+  57: add r7.xyzw, r0.xyxy, r7.xyzw
+  58: add r10.xyzw, r9.xyzw, -cb1[66].wzwz
+  59: div r10.xyzw, r10.xyzw, cb1[66].xyxy
+  60: sample_l(texture2d)(float,float,float,float) r11.xyzw, r9.xyxx, t1.xyzw, s1, l(0)
+  61: sample_l(texture2d)(float,float,float,float) r9.xyzw, r9.zwzz, t1.xyzw, s1, l(0)
+  62: mul r0.zw, r10.xxxy, r11.wwww
+  63: mul r4.xy, r9.wwww, r10.zwzz
+  64: mul r10.xyz, r0.wwww, cb1[49].xyzx
+  65: mad r10.xyz, r0.zzzz, cb1[48].xyzx, r10.xyzx
+  66: mad r10.xyz, r11.wwww, cb1[50].xyzx, r10.xyzx
+  67: add r10.xyz, r10.xyzx, cb1[51].xyzx
+  68: mov r10.w, l(1.0000)
+  69: dp4 r0.z, r6.xyzw, r10.xyzw
+  70: mul r0.z, abs(r0.z), l(1000.0000)
+  71: div r0.z, r0.z, r11.w
+  72: add r0.z, r0.z, l(0.0001)
+  73: div r0.z, l(10.0000), r0.z
+  74: min r1.y, r0.z, l(1.0000)
+  75: mul r10.xyz, r4.yyyy, cb1[49].xyzx
+  76: mad r4.xyz, r4.xxxx, cb1[48].xyzx, r10.xyzx
+  77: mad r4.xyz, r9.wwww, cb1[50].xyzx, r4.xyzx
+  78: add r10.xyz, r4.xyzx, cb1[51].xyzx
+  79: mov r10.w, l(1.0000)
+  80: dp4 r0.z, r6.xyzw, r10.xyzw
+  81: mul r0.z, abs(r0.z), l(1000.0000)
+  82: div r0.z, r0.z, r9.w
+  83: add r0.z, r0.z, l(0.0001)
+  84: div r0.z, l(10.0000), r0.z
+  85: min r1.z, r0.z, l(1.0000)
+  86: mul r1.xyzw, r1.xyzw, r2.xyzw
+  87: add r0.zw, r0.xxxy, cb0[18].zzzw
+  88: sample_l(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t0.xyzw, s0, l(0)
+  89: dp3 r2.x, r2.xyzx, r6.xyzx
+  90: sample_l(texture2d)(float,float,float,float) r0.xyz, r0.zwzz, t0.xyzw, s0, l(0)
+  91: dp3 r2.w, r0.xyzx, r6.xyzx
+  92: sample_l(texture2d)(float,float,float,float) r0.xyz, r7.xyxx, t0.xyzw, s0, l(0)
+  93: sample_l(texture2d)(float,float,float,float) r4.xyz, r7.zwzz, t0.xyzw, s0, l(0)
+  94: dp3 r2.z, r4.xyzx, r6.xyzx
+  95: dp3 r2.y, r0.xyzx, r6.xyzx
+  96: max r0.xyzw, r2.xyzw, l(0.0001, 0.0001, 0.0001, 0.0001)
+  97: mul r0.xyzw, r0.xyzw, r1.xyzw
+  98: mul r1.xyz, r11.xyzx, r0.yyyy
+  99: mad r1.xyz, r0.xxxx, r3.xyzx, r1.xyzx
+ 100: mad r1.xyz, r0.zzzz, r9.xyzx, r1.xyzx
+ 101: mad r1.xyz, r0.wwww, r8.xyzx, r1.xyzx
+ 102: dp4 r0.x, r0.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
+ 103: max r0.x, r0.x, l(0.0000)
+ 104: div r0.x, l(1.0000, 1.0000, 1.0000, 1.0000), r0.x
+ 105: mul r0.xyz, r0.xxxx, r1.xyzx
+ 106: dp3 r0.w, r0.xyzx, r0.xyzx
+ 107: sqrt r0.w, r0.w
+ 108: max r1.x, r0.w, l(0.0001)
+ 109: div r0.xyz, r0.xyzx, r1.xxxx
+ 110: mul r1.xyz, r0.wwww, r0.xyzx
+ 111: lt r1.w, cb1[31].w, l(1.0000)
+ 112: add r2.x, r4.w, cb1[65].w
+ 113: mul r2.x, r2.x, cb1[65].z
+ 114: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r2.x
+ 115: mad r2.y, r4.w, cb1[30].z, cb1[31].z
+ 116: movc r1.w, r1.w, r2.x, r2.y
+ 117: mul r2.xyz, v0.wwww, cb1[123].xywx
+ 118: mad r2.xyz, v0.zzzz, cb1[122].xywx, r2.xyzx
+ 119: mad r2.xyz, r1.wwww, cb1[124].xywx, r2.xyzx
+ 120: add r2.xyz, r2.xyzx, cb1[125].xywx
+ 121: div r2.xy, r2.xyxx, r2.zzzz
+ 122: add r2.xy, -r2.xyxx, v0.zwzz
+ 123: mad r2.zw, -cb1[131].zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), v0.xxxy
+ 124: sample_l(texture2d)(float,float,float,float) r2.zw, r2.zwzz, t3.zwxy, s3, l(0)
+ 125: lt r1.w, l(0), r2.z
+ 126: mad r2.zw, r2.zzzw, l(0.0000, 0.0000, 4.0080, 4.0080), l(0.0000, 0.0000, -2.0040, -2.0040)
+ 127: movc r2.xy, r1.wwww, r2.zwzz, r2.xyxx
+ 128: add r2.xy, -r2.xyxx, v0.zwzz
+ 129: mad r2.zw, r2.xxxy, cb0[15].xxxy, cb0[15].wwwz
+ 130: max r3.xy, r2.zwzz, cb0[16].xyxx
+ 131: min r3.xy, r3.xyxx, cb0[16].zwzz
+ 132: sample_l(texture2d)(float,float,float,float) r3.xyzw, r3.xyxx, t2.xyzw, s2, l(0)
+ 133: mad r0.xyz, -r0.xyzx, r0.wwww, r3.xyzx
+ 134: mul r2.xy, r2.xyxx, r3.wwww
+ 135: mul r3.xyz, r2.yyyy, cb1[119].xyzx
+ 136: mad r3.xyz, r2.xxxx, cb1[118].xyzx, r3.xyzx
+ 137: mad r3.xyz, r3.wwww, cb1[120].xyzx, r3.xyzx
+ 138: add r3.xyz, r3.xyzx, cb1[121].xyzx
+ 139: add r3.xyz, r3.xyzx, -cb1[113].xyzx
+ 140: add r3.xyz, -r5.xyzx, r3.xyzx
+ 141: dp3 r0.w, r3.xyzx, r3.xyzx
+ 142: sqrt r0.w, r0.w
+ 143: div r0.w, r0.w, r4.w
+ 144: mul r1.w, cb0[13].w, l(0.0010)
+ 145: lt r0.w, r1.w, r0.w
+ 146: lt r2.xy, cb0[16].zwzz, r2.zwzz
+ 147: lt r2.zw, r2.zzzw, cb0[16].xxxy
+ 148: or r1.w, r2.w, r2.z
+ 149: or r2.x, r2.y, r2.x
+ 150: or r1.w, r1.w, r2.x
+ 151: or r0.w, r0.w, r1.w
+ 152: movc r0.w, r0.w, l(0), cb0[13].z
+ 153: mad r0.xyz, r0.wwww, r0.xyzx, r1.xyzx
+ 154: lt r0.w, l(0), r0.w
+ 155: movc r0.w, r0.w, l(1.0000), l(-1.0000)
+ 156: mul r0.w, r0.w, r4.w
+ 157: and r1.xyz, r0.xyzx, l(0x7f800000, 0x7f800000, 0x7f800000, 0)
+ 158: ieq r1.xyz, r1.xyzx, l(0x7f800000, 0x7f800000, 0x7f800000, 0)
+ 159: movc o0.xyz, r1.xyzx, l(0, 0, 0, 0), r0.xyzx
+ 160: lt r0.x, l(0), cb0[14].x
+ 161: movc o0.w, r0.x, r0.w, r4.w
+ 162: ret
