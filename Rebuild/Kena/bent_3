@@ -128,7 +128,7 @@ ps_5_0
   98: mul r1.xyz, r11.xyzx, r0.yyyy
   99: mad r1.xyz, r0.xxxx, r3.xyzx, r1.xyzx
  100: mad r1.xyz, r0.zzzz, r9.xyzx, r1.xyzx
- 101: mad r1.xyz, r0.wwww, r8.xyzx, r1.xyzx
+ 101: mad r1.xyz, r0.wwww, r8.xyzx, r1.xyzx  
  102: dp4 r0.x, r0.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  103: max r0.x, r0.x, l(0.0000)
  104: div r0.x, l(1.0000, 1.0000, 1.0000, 1.0000), r0.x
@@ -137,13 +137,14 @@ ps_5_0
  107: sqrt r0.w, r0.w
  108: max r1.x, r0.w, l(0.0001)
  109: div r0.xyz, r0.xyzx, r1.xxxx
- 110: mul r1.xyz, r0.wwww, r0.xyzx
+ 110: mul r1.xyz, r0.wwww, r0.xyzx                                                  -> NewValue = NormalizedBentNormal * BentNormalLength;
+
  111: lt r1.w, cb1[31].w, l(1.0000)
  112: add r2.x, r4.w, cb1[65].w                                                     -> r4.w == SceneDepth 
  113: mul r2.x, r2.x, cb1[65].z
- 114: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r2.x           -> 1.0f / ((SceneDepth + View.InvDeviceZToWorldZTransform[3]) * View.InvDeviceZToWorldZTransform[2]); 
+ 114: div r2.x, l(1, 1, 1, 1), r2.x                   -> 1.0f / ((SceneDepth + View.InvDeviceZToWorldZTransform[3]) * View.InvDeviceZToWorldZTransform[2]); 
  115: mad r2.y, r4.w, cb1[30].z, cb1[31].z
- 116: movc r1.w, r1.w, r2.x, r2.y                                                   -> float4 ThisClip = float4(UVAndScreenPos.zw, ConvertToDeviceZ(SceneDepth), 1); 
+ 116: movc r1.w, r1.w, r2.x, r2.y                     -> float4 ThisClip = float4(UVAndScreenPos.zw, ConvertToDeviceZ(SceneDepth), 1); 
  117: mul r2.xyz, v0.wwww, cb1[123].xywx
  118: mad r2.xyz, v0.zzzz, cb1[122].xywx, r2.xyzx
  119: mad r2.xyz, r1.wwww, cb1[124].xywx, r2.xyzx
@@ -163,34 +164,44 @@ ps_5_0
 
  132: sample_l(texture2d)(float,float,float,float) r3.xyzw, r3.xyxx, t2.xyzw, s2, l(0)    -> float4 HistoryValue = 
                                                                         Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVs, 0);
-                                                                        
- 133: mad r0.xyz, -r0.xyzx, r0.wwww, r3.xyzx
- 134: mul r2.xy, r2.xyxx, r3.wwww
+
+ 133: mad r0.xyz, -r0.xyzx, r0.wwww, r3.xyzx                                        -> HistoryValue - NewValue 
+
+ 134: mul r2.xy, r2.xyxx, r3.wwww                                                   -> ComputeHistoryWeightBasedOnPosition(...) 
  135: mul r3.xyz, r2.yyyy, cb1[119].xyzx
  136: mad r3.xyz, r2.xxxx, cb1[118].xyzx, r3.xyzx
  137: mad r3.xyz, r3.wwww, cb1[120].xyzx, r3.xyzx
  138: add r3.xyz, r3.xyzx, cb1[121].xyzx
  139: add r3.xyz, r3.xyzx, -cb1[113].xyzx
- 140: add r3.xyz, -r5.xyzx, r3.xyzx
+ 140: add r3.xyz, -r5.xyzx, r3.xyzx                                                 -> PrevWorldPosition - WorldPosition
  141: dp3 r0.w, r3.xyzx, r3.xyzx
- 142: sqrt r0.w, r0.w
- 143: div r0.w, r0.w, r4.w
- 144: mul r1.w, cb0[13].w, l(0.0010)
- 145: lt r0.w, r1.w, r0.w
- 146: lt r2.xy, cb0[16].zwzz, r2.zwzz
+ 142: sqrt r0.w, r0.w                                                               -> float DistanceToHistoryValue = length(~);
+ 143: div r0.w, r0.w, r4.w                                                          -> DistanceToHistoryValue / SceneDepth 
+
+ 144: mul r1.w, cb0[13].w, l(0.0010)                                    -> float RelativeHistoryDistanceThreshold = HistoryDistanceThreshold / 1000.0f;
+ 145: lt r0.w, r1.w, r0.w                                               -> RelativeHistoryDistanceThreshold < (DistanceToHistoryValue / SceneDepth ) ?
+
+ 146: lt r2.xy, cb0[16].zwzz, r2.zwzz           -> if (any(OldDistanceFieldUVs > HistoryUVMinMax.zw) || any(OldDistanceFieldUVs < HistoryUVMinMax.xy))
  147: lt r2.zw, r2.zzzw, cb0[16].xxxy
  148: or r1.w, r2.w, r2.z
  149: or r2.x, r2.y, r2.x
  150: or r1.w, r1.w, r2.x
  151: or r0.w, r0.w, r1.w
- 152: movc r0.w, r0.w, l(0), cb0[13].z
- 153: mad r0.xyz, r0.wwww, r0.xyzx, r1.xyzx
- 154: lt r0.w, l(0), r0.w
+
+ 152: movc r0.w, r0.w, l(0), cb0[13].z                                              -> HistoryWeight = cb0[13].z = 0.85 -> EffectiveHistoryWeight
+
+ 153: mad r0.xyz, r0.wwww, r0.xyzx, r1.xyzx                                         -> (H - N) * r + N
+                                                                                    -> r0.xyz = HistoryVal - NewVal; r1.xyz = NewVal 
+                                                                  -> OutBentNormal.rgb = lerp(NewValue.rgb, HistoryValue.rgb, EffectiveHistoryWeight); 
+
+ 154: lt r0.w, l(0), r0.w 
  155: movc r0.w, r0.w, l(1.0000), l(-1.0000)
- 156: mul r0.w, r0.w, r4.w
- 157: and r1.xyz, r0.xyzx, l(0x7f800000, 0x7f800000, 0x7f800000, 0)
+ 156: mul r0.w, r0.w, r4.w                                                          -> OutBentNormal.a *= EffectiveHistoryWeight > 0 ? 1 : -1;
+
+ 157: and r1.xyz, r0.xyzx, l(0x7f800000, 0x7f800000, 0x7f800000, 0)                 -> OutBentNormal.rgb = MakeFinite(OutBentNormal.rgb); 
  158: ieq r1.xyz, r1.xyzx, l(0x7f800000, 0x7f800000, 0x7f800000, 0)
  159: movc o0.xyz, r1.xyzx, l(0, 0, 0, 0), r0.xyzx
- 160: lt r0.x, l(0), cb0[14].x
+
+ 160: lt r0.x, l(0), cb0[14].x                                                      -> if (UseHistoryFilter > 0) 
  161: movc o0.w, r0.x, r0.w, r4.w
  162: ret
