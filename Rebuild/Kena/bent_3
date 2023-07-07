@@ -50,7 +50,7 @@ ps_5_0
   20: mad r1.xyz, r3.wwww, cb1[50].xyzx, r1.xyzx
   21: add r1.xyz, r1.xyzx, cb1[51].xyzx
   22: mov r1.w, l(1.0000)
-  23: sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t0.xyzw, s0, l(0)
+  23: sample_l(texture2d)(float,float,float,float) r4.xyzw, v0.xyxx, t0.xyzw, s0, l(0) -> 
   24: mul r5.xy, r4.wwww, v0.zwzz
   25: mul r5.yzw, r5.yyyy, cb1[49].xxyz
   26: mad r5.xyz, r5.xxxx, cb1[48].xyzx, r5.yzwy
@@ -139,27 +139,31 @@ ps_5_0
  109: div r0.xyz, r0.xyzx, r1.xxxx
  110: mul r1.xyz, r0.wwww, r0.xyzx
  111: lt r1.w, cb1[31].w, l(1.0000)
- 112: add r2.x, r4.w, cb1[65].w
+ 112: add r2.x, r4.w, cb1[65].w                                                     -> r4.w == SceneDepth 
  113: mul r2.x, r2.x, cb1[65].z
- 114: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r2.x
+ 114: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r2.x           -> 1.0f / ((SceneDepth + View.InvDeviceZToWorldZTransform[3]) * View.InvDeviceZToWorldZTransform[2]); 
  115: mad r2.y, r4.w, cb1[30].z, cb1[31].z
- 116: movc r1.w, r1.w, r2.x, r2.y
+ 116: movc r1.w, r1.w, r2.x, r2.y                                                   -> float4 ThisClip = float4(UVAndScreenPos.zw, ConvertToDeviceZ(SceneDepth), 1); 
  117: mul r2.xyz, v0.wwww, cb1[123].xywx
  118: mad r2.xyz, v0.zzzz, cb1[122].xywx, r2.xyzx
  119: mad r2.xyz, r1.wwww, cb1[124].xywx, r2.xyzx
- 120: add r2.xyz, r2.xyzx, cb1[125].xywx
- 121: div r2.xy, r2.xyxx, r2.zzzz
+ 120: add r2.xyz, r2.xyzx, cb1[125].xywx                                            -> float4 PrevClip = mul( ThisClip, View.ClipToPrevClip ); 
+ 121: div r2.xy, r2.xyxx, r2.zzzz                                                   -> float2 PrevScreen = PrevClip.xy / PrevClip.w; 
  122: add r2.xy, -r2.xyxx, v0.zwzz
  123: mad r2.zw, -cb1[131].zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), v0.xxxy
- 124: sample_l(texture2d)(float,float,float,float) r2.zw, r2.zwzz, t3.zwxy, s3, l(0)
+ 124: sample_l(texture2d)(float,float,float,float) r2.zw, r2.zwzz, t3.zwxy, s3, l(0)      -> float2 VelocityN = 
+                                                                                                Texture2DSampleLevel(VelocityTexture, VelocityTextureSampler, FullResTexel, 0).xy; 
  125: lt r1.w, l(0), r2.z
- 126: mad r2.zw, r2.zzzw, l(0.0000, 0.0000, 4.0080, 4.0080), l(0.0000, 0.0000, -2.0040, -2.0040)
+ 126: mad r2.zw, r2.zzzw, l(0, 0, 4.0080, 4.0080), l(0, 0, -2.0040, -2.0040)        -> Screenvelocity = DecodeVelocityFromTexture(VelocityN);
  127: movc r2.xy, r1.wwww, r2.zwzz, r2.xyxx
- 128: add r2.xy, -r2.xyxx, v0.zwzz
- 129: mad r2.zw, r2.xxxy, cb0[15].xxxy, cb0[15].wwwz
+ 128: add r2.xy, -r2.xyxx, v0.zwzz                                                  -> float2 OldScreenPosition = (UVAndScreenPos.zw - Screenvelocity); 
+ 129: mad r2.zw, r2.xxxy, cb0[15].xxxy, cb0[15].wwwz                                -> OldDistanceFieldUVs 
  130: max r3.xy, r2.zwzz, cb0[16].xyxx
- 131: min r3.xy, r3.xyxx, cb0[16].zwzz
- 132: sample_l(texture2d)(float,float,float,float) r3.xyzw, r3.xyxx, t2.xyzw, s2, l(0)
+ 131: min r3.xy, r3.xyxx, cb0[16].zwzz                                              -> OldDistanceFieldUVs = clamp(OldDistanceFieldUVs, HistoryUVMinMax.xy, HistoryUVMinMax.zw); 
+
+ 132: sample_l(texture2d)(float,float,float,float) r3.xyzw, r3.xyxx, t2.xyzw, s2, l(0)    -> float4 HistoryValue = 
+                                                                        Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVs, 0);
+                                                                        
  133: mad r0.xyz, -r0.xyzx, r0.wwww, r3.xyzx
  134: mul r2.xy, r2.xyxx, r3.wwww
  135: mul r3.xyz, r2.yyyy, cb1[119].xyzx
