@@ -1,0 +1,62 @@
+bent_4
+
+FilterHistoryPS
+Engine\Shaders\Private\DistanceFieldLightingPost.usf
+
+Shader hash d4ebfafa-0420f1f3-3234009e-725ea0a0
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[21], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_resource_texture2d (float,float,float,float) t0
+      dcl_input_ps linear v0.xy
+      dcl_output o0.xyzw
+      dcl_temps 6
+   0: min r0.xy, v0.xyxx, cb0[20].xyxx
+   1: sample_l(texture2d)(float,float,float,float) r0.xyzw, r0.xyxx, t0.xyzw, s0, l(0)    -> HistoryValue
+   2: lt r1.x, r0.w, l(0)
+   3: if_nz r1.x                                                              -> Only do the spatial search for pixels who discarded their history value 
+   4:   mov r1.xyzw, l(0, 0, 0, 0)
+   5:   mov r2.y, l(-2.0000)
+   6:   loop
+   7:     lt r2.z, l(2.0000), r2.y
+   8:     breakc_nz r2.z
+   9:     mov r3.xyz, r1.xyzx
+  10:     mov r2.z, r1.w
+  11:     mov r2.x, l(-2.0000)
+  12:     loop
+  13:       lt r2.w, l(2.0000), r2.x
+  14:       breakc_nz r2.w
+  15:       mad r4.xy, cb0[19].yzyy, r2.xyxx, v0.xyxx
+  16:       min r4.xy, r4.xyxx, cb0[20].xyxx
+  17:       sample_l(texture2d)(float,float,float,float) r4.xyzw, r4.xyxx, t0.xyzw, s0, l(0)
+  18:       lt r2.w, l(0), r4.w
+  19:       and r2.w, r2.w, l(1.0000)
+  20:       add r3.w, abs(r0.w), -abs(r4.w)
+  21:       mul r3.w, abs(r3.w), l(-1000.0000)
+  22:       div r3.w, r3.w, abs(r0.w)
+  23:       exp r3.w, r3.w
+  24:       mul r5.xy, r2.xyxx, l(5.0000, 5.0000, 0.0000, 0.0000)
+  25:       exp r5.xy, -abs(r5.xyxx)
+  26:       max r4.w, r5.y, r5.x
+  27:       mul r2.w, r2.w, r4.w
+  28:       mul r4.w, r3.w, r2.w
+  29:       mad r3.xyz, r4.xyzx, r4.wwww, r3.xyzx
+  30:       mad r2.z, r2.w, r3.w, r2.z
+  31:       add r2.x, r2.x, l(1.0000)
+  32:     endloop
+  33:     mov r1.xyz, r3.xyzx
+  34:     mov r1.w, r2.z
+  35:     add r2.y, r2.y, l(1.0000)
+  36:   endloop
+  37:   lt r2.x, l(0), r1.w
+  38:   div r1.w, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
+  39:   mad r1.xyz, r1.xyzx, r1.wwww, -r0.xyzx
+  40:   mad r1.xyz, cb0[13].zzzz, r1.xyzx, r0.xyzx
+  41:   movc o0.xyz, r2.xxxx, r1.xyzx, r0.xyzx
+  42: else
+  43:   mov o0.xyz, r0.xyzx
+  44: endif
+  45: mov o0.w, abs(r0.w)
+  46: ret
