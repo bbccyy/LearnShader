@@ -27,7 +27,7 @@ cs_5_0
    1: and r0.x, r0.y, r0.x
    2: and r0.x, r0.z, r0.x
    3: if_nz r0.x                                                              -> if (all(GroupThreadId == 0)) 
-   4:   store_raw g1.x, l(0), l(0)                                            ->    NumTileCulledObjects = 0;
+   4:   store_raw g1.x, l(0), l(0)                                            ->    NumTileCulledObjects = 0; 
    5: endif
    6: sync_g_t
    7: ishl r0.x, vThreadIDInGroup.z, l(4)
@@ -42,7 +42,7 @@ cs_5_0
   16: mul r1.yzw, r1.yyzw, cb0[25].xxyz
   17: mul r1.yzw, r1.yyzw, cb0[r1.x + 14].wwww
   18: mad r1.yzw, r1.yyzw, l(0.0000, 2.0000, 2.0000, 2.0000), cb0[26].xxyz
-  19: ushr r2.xyz, vThreadID.xyzx, l(4, 4, 4, 0)
+  19: ushr r2.xyz, vThreadID.xyzx, l(4, 4, 4, 0)                              -> ComputeCullTileIndex 
   20: imad r2.y, r2.z, cb0[27].z, r2.y
   21: imad r2.x, r2.y, cb0[27].y, r2.x
   22: ld_indexable(buffer)(uint,uint,uint,uint) r2.y, r2.xxxx, t3.yxzw
@@ -124,7 +124,7 @@ cs_5_0
   98:     sample_l(texture3d)(float,float,float,float) r3.x, r3.xyzx, t0.xyzw, s0, l(0)
   99:     add r1.w, r1.w, r3.x
  100:     mul r1.w, abs(r4.w), r1.w
- 101:     min r0.z, r0.z, r1.w
+ 101:     min r0.z, r0.z, r1.w                                                -> MinDistance = min(MinDistance, DistanceToOccluder);
  102:   endif
  103:   iadd r0.w, r0.w, l(1)
  104: endloop
