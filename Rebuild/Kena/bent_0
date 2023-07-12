@@ -30,8 +30,8 @@ cs_5_0
    4:   store_raw g1.x, l(0), l(0)                                            ->    NumTileCulledObjects = 0; 
    5: endif
    6: sync_g_t
-   7: ishl r0.x, vThreadIDInGroup.z, l(4)
-   8: imad r0.x, vThreadIDInGroup.y, l(4), r0.x
+   7: ishl r0.x, vThreadIDInGroup.z, l(4)                                     -> ThreadID.z * 16 
+   8: imad r0.x, vThreadIDInGroup.y, l(4), r0.x  
    9: iadd r0.x, r0.x, vThreadIDInGroup.x
   10: add r0.yzw, cb0[25].xxyz, cb0[25].xxyz
   11: mov r1.x, cb0[24].y
