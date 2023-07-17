@@ -41,7 +41,7 @@ cs_5_0
   17:   mad r3.xyz, r1.yzxy, r2.zxyz, -r3.xyzx
   18:   mad r0.xy, r0.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), cb1[129].xyxx
   19:   add r0.xy, r0.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000)
-  20:   mad r0.xy, r0.xyxx, cb1[131].zwzz, -cb1[66].wzww
+  20:   mad r0.xy, r0.xyxx, cb1[131].zwzz, -cb1[66].wzww                -> cb1[131].zw = View_BufferSizeAndInvSize.zw
   21:   div r0.xy, r0.xyxx, cb1[66].xyxx                                -> float2 ScreenPosition = 
                                                                               (ScreenUV.xy - View.ScreenPositionScaleBias.wz) / View.ScreenPositionScaleBias.xy; 
   22:   mul r0.xy, r1.wwww, r0.xyxx
