@@ -8,6 +8,7 @@ using Unity.Mathematics;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
 using static Unity.Mathematics.math;
 using UnityEditor;
+using Unity.Profiling;
 //#define URP_HAS_BURST
 
 // TODO SimpleLit material, make sure when variant is !defined(_SPECGLOSSMAP) && !defined(_SPECULAR_COLOR), specular is correctly silenced.
@@ -164,14 +165,14 @@ namespace UnityEngine.Rendering.Universal.Internal
             else if (index == GBufferLightingIndex) // Emissive+baked: Most likely B10G11R11_UFloatPack32 or R16G16B16A16_SFloat
                 return GraphicsFormat.B10G11R11_UFloatPack32;
             else if (index == GbufferDepthIndex) // Render-pass on mobiles: reading back real depth-buffer is either inefficient (Arm Vulkan) or impossible (Metal).
-                return GraphicsFormat.R16_SFloat;
+                return GraphicsFormat.R32_SFloat;
             else if (index == GBufferShadowMask) // Optional: shadow mask is outputed in mixed lighting subtractive mode for non-static meshes only
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferRenderingLayers) // Optional: rendering layers is outputed when light layers are enabled (subset of rendering layers)
                 return RenderingLayerUtils.GetFormat(RenderingLayerMaskSize);
-            else if (index == GBufferKenaExtraAIndex)
-                return GraphicsFormat.R8G8B8A8_UNorm;
-            else if (index == GBufferKenaExtraBIndex)
+            else if (index == GBufferKenaExtraAIndex) //when KenaExtraAIndex was enabled, it refs to the Depth Texture @wyx
+                return GraphicsFormat.R16_SFloat;
+            else if (index == GBufferKenaExtraBIndex) //KenaExtraBIndex refs to the CustomData Texture @wyx 
                 return GraphicsFormat.R8G8B8A8_UNorm; 
             else
                 return GraphicsFormat.None; 
@@ -256,6 +257,8 @@ namespace UnityEngine.Rendering.Universal.Internal
         ProfilingSampler m_ProfilingSamplerDeferredStencilPass = new ProfilingSampler(k_DeferredStencilPass);
         ProfilingSampler m_ProfilingSamplerDeferredFogPass = new ProfilingSampler(k_DeferredFogPass);
         ProfilingSampler m_ProfilingSamplerClearStencilPartialPass = new ProfilingSampler(k_ClearStencilPartial);
+
+        static readonly ProfilerMarker k_mycodemaker = new ProfilerMarker("The Code");
 
         private LightCookieManager m_LightCookieManager;
 
@@ -752,10 +755,11 @@ namespace UnityEngine.Rendering.Universal.Internal
 
                 if (HasStencilLightsOfType(LightType.Directional))
                 {
+                    k_mycodemaker.Begin();
                     RenderKenaAmbient(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                     RenderKenaDirLight(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                     RenderKenaGI(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
-                    
+                    k_mycodemaker.End();
                     //RenderKenaDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                     //RenderStencilDirectionalLights(cmd, ref renderingData, visibleLights, renderingData.lightData.mainLightIndex);
                 }
@@ -1215,26 +1219,26 @@ namespace UnityEngine.Rendering.Universal.Internal
                 m_StencilDeferredPasses[pass] = m_StencilDeferredMaterial.FindPass(k_StencilDeferredPassNames[pass]);
 
             //TODO: 找个更加合适的方式加载和设置这些辅助纹理 
-            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT.exr");   
+            var lut = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestUEPipeline/Src/LUT.exr");   
             if (lut != null)
             {
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT"), lut); 
                 //由于后处理的SSSS材质也需要这个，在这里统一丢到全局纹理了 
                 Shader.SetGlobalTexture(Shader.PropertyToID("_LUT"), lut); 
             }
-            var ibl = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/IBL.png");
+            var ibl = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestUEPipeline/Src/IBL.png");
             if (ibl != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_IBL"), ibl);
 
-            var sky = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/Sky.png");
+            var sky = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestUEPipeline/Src/Sky.png");
             if (sky != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_Sky"), sky);
 
-            var lut2 = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestMRT/Src/LUT2.png"); 
+            var lut2 = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/TestUEPipeline/Src/LUT2.png"); 
             if (lut2 != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_LUT2"), lut2);
 
-            var ambient = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestMRT/Src/kena_EnvLitCube.exr");
+            var ambient = AssetDatabase.LoadAssetAtPath<Texture>("Assets/TestUEPipeline/Src/kena_EnvLitCube.exr");
             if (ambient != null)
                 m_StencilDeferredMaterial.SetTexture(Shader.PropertyToID("_Ambientmap"), ambient);
 

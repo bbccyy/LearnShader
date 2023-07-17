@@ -71,7 +71,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             
             if (cmd != null) //只有在上层ScriptableRenderer::Execute()方法内唤起的本方法，才会待有关cmd实例，进入下面分支 
             {
-                var allocateGbufferDepth = true;
+                var allocateGbufferDepth = true; 
                 if (m_DeferredLights.UseRenderPass && (m_DeferredLights.DepthCopyTexture != null && m_DeferredLights.DepthCopyTexture.rt != null))
                 {
                     m_DeferredLights.GbufferAttachments[m_DeferredLights.GbufferDepthIndex] = m_DeferredLights.DepthCopyTexture;
@@ -96,7 +96,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                     if (m_DeferredLights.UseRenderPass 
                         && i != m_DeferredLights.GBufferShadowMask 
                         && i != m_DeferredLights.GBufferRenderingLayers
-                        && i != m_DeferredLights.GBufferKenaExtraAIndex
+                        && i != m_DeferredLights.GBufferKenaExtraAIndex 
                         && i != m_DeferredLights.GBufferKenaExtraBIndex
                         && (i != m_DeferredLights.GbufferDepthIndex && !m_DeferredLights.HasDepthPrepass)) //TODO:最后这个判断条件有点古怪
                         continue;
@@ -120,7 +120,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             // We must explicitly specify we don't want any clear to avoid unwanted side-effects.
             // ScriptableRenderer will implicitly force a clear the first time the camera color/depth targets are bound.
-            ConfigureClear(ClearFlag.None, Color.black);
+            ConfigureClear(ClearFlag.All, Color.black);  //TODO: 原始是ClearFlag.None，不知何故，但是如果不修改为All，MRT会有拖影 @wyx 
         }
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)

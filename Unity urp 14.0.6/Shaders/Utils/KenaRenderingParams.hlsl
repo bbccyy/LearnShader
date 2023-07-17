@@ -47,7 +47,12 @@ static float4 View_SkyIrradianceEnvironmentMap[] = {
 
 static float4 InvDeviceZToWorldZTransform = float4(0.00, 0.00, 0.10, -1.00000E-08); //CB0[65] 对应Unity的zBufferParams  
 static float4 ScreenPositionScaleBias = float4(0.49971, -0.50, 0.50, 0.49971); //CB0[66] 从NDC变换到UV空间 
-static float4 CameraPosWS = float4(-58625.35547, 27567.39453, -6383.71826, 0); //世界空间中摄像机的坐标值 
+
+#if USE_UNITY_BUILT_IN_PARAMS
+	#define CameraPosWS _WorldSpaceCameraPos 
+#else
+	#define CameraPosWS float3(-58625.35547, 27567.39453, -6383.71826) //世界空间中摄像机的坐标值 
+#endif 
 
 static float view_minRoughness = 0.02; //cb0[219].y 
 
@@ -80,4 +85,10 @@ static float4x4 Matrix_Inv_VP = float4x4(
 	float4(0,				0,			0,				1.00)
 );
 
+static float4x4 Matrix_X = float4x4(
+	float4(-0.63371,	0.77357,	0,		-58752.92578),
+	float4(-0.77357,	-0.63371,	0,		 27381.30273),
+	float4(0,			0,			1,		 -6430.16309),
+	float4(0,			0,			0,				1.00)
+);
 

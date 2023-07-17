@@ -133,15 +133,19 @@ uint DecodeSelectiveOutputMask(float InPackedChannel)
     return ((uint)round(InPackedChannel * (float)0xFF)) & (~SHADINGMODELID_MASK);
 }
 
-float ConvertFromDeviceZ(float DeviceZ)
+float ConvertFromDeviceZ(float DeviceZ) 
 {
-	// Supports ortho and perspective, see CreateInvDeviceZToWorldZTransform()
-	return DeviceZ * InvDeviceZToWorldZTransform[0] + InvDeviceZToWorldZTransform[1] + 1.0f / (DeviceZ * InvDeviceZToWorldZTransform[2] - InvDeviceZToWorldZTransform[3]);
+	#if USE_UNITY_BUILT_IN_PARAMS
+		return LinearEyeDepth(DeviceZ, _ZBufferParams);
+	#else
+		// Supports ortho and perspective, see CreateInvDeviceZToWorldZTransform()
+		return DeviceZ * InvDeviceZToWorldZTransform[0] + InvDeviceZToWorldZTransform[1] + 1.0f / (DeviceZ * InvDeviceZToWorldZTransform[2] - InvDeviceZToWorldZTransform[3]);
+	#endif 
 }
 
 bool CheckerFromSceneColorUV(float2 UVSceneColor)
 {
-	// relative to left top of the rendertarget (not viewport)
+	// relative to left top of the rendertarget (not viewport) 
 	//uint2 PixelPos = uint2(UVSceneColor * View_BufferSizeAndInvSize.xy); 
 	uint2 PixelPos = uint2(UVSceneColor * _ScreenParams.xy);
 	uint TemporalAASampleIndex = 3;

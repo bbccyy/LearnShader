@@ -787,10 +787,10 @@ namespace UnityEngine.Rendering.Universal
             cmd.ReleaseTemporaryRT(Shader.PropertyToID("SetupTexture"));
             cmd.ReleaseTemporaryRT(Shader.PropertyToID("SubsurfacePassOne"));
             cmd.ReleaseTemporaryRT(Shader.PropertyToID("SubsurfacePassTwo"));
+
         }
 
         #endregion
-
 
         #region Sub-pixel Morphological Anti-aliasing
 

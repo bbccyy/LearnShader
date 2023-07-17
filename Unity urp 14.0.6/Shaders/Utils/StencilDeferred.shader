@@ -127,9 +127,13 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #endif
 
         #if defined(_NEED_REBUILD_POSWS)
-        float2 ndc_xy = output.screenUV.xy * 2 - 0.75;      //放到[-1,1]区间 -> TODO: 为何这里用"-0.75"看起来比"-1"效果好？ 
+        float2 ndc_xy = output.screenUV.xy * 2 - 1;         //放到[-1,1]区间  
 		ndc_xy = ndc_xy * float2(1.0, 1.0);                 //TODO -> 经过研究，Unity里无需 Revers-Y 
-        output.viewDirWS = mul((float3x3)Matrix_Inv_VP, float3(ndc_xy.xy, 1)); 
+            #if USE_UNITY_BUILT_IN_PARAMS 
+            output.viewDirWS = mul((float3x3)unity_MatrixInvVP, float3(ndc_xy.xy, 1));  //unity_MatrixInvVP
+            #else
+            output.viewDirWS = mul((float3x3)Matrix_Inv_VP, float3(ndc_xy.xy, 1));  
+            #endif
         #endif 
 
         return output;

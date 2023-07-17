@@ -12,11 +12,11 @@
 struct SDiffuseAndSpecular
 {
     float3 Diffuse;
-    float3 Specular; 
+    float3 Specular;
 };
 
 
-// 0, no subsurface    
+// 0, no subsurface
 // 1, Separable
 // 2, Burley
 // 3, Both
@@ -61,7 +61,7 @@ float2 ConvertGridPos2UV(uint2 GridPosition)
     return Output_ExtentInverse.zw * (GripPositionF + 0.5f);
 }
 
-
+//TODO: convert to Unity context 
 float ConvertFromDeviceZ(float DeviceZ)
 {
     // Supports ortho and perspective, see CreateInvDeviceZToWorldZTransform()
@@ -223,20 +223,21 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID,
     // --------------SUBSURFACE_HALF_RES START--------------
     // order aligned with Gather() hardware implementation
     // RGB: color*A, A:weight 0 if no subsurface scattering
+    // 注意，此处BufferUV是半分辨率的，所以后面的0.5偏移对应了全分辨率中的1个像素 
     float4 A = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
     float4 B = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, 0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
     float4 C = SetupSubsurfaceForOnePixel(min(BufferUV + float2(0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
     float4 D = SetupSubsurfaceForOnePixel(min(BufferUV + float2(-0.5, -0.5f) * SubsurfaceInput0_ExtentInverse.zw, SubsurfaceInput0_UVViewportBilinearMinMax.zw));
 
     float4 Sum = (A + B) + (C + D);
-    float Div = 1.0f / max(Sum.a, 0.00001f);
+    float Div = 1.0f / max(Sum.a, 0.00001f);  //如果ABCD全是次表面材质，那么Div = 1 / (1 + 1 + 1 + 1) = 1/4 
     OutColor.rgb = Sum.rgb * Div;
 
-    float4 FourDepth = GatherSceneDepth(BufferUV, SubsurfaceInput0_ExtentInverse.zw);
+    float4 FourDepth = GatherSceneDepth(BufferUV, SubsurfaceInput0_ExtentInverse.zw); //ABCD对应的SceneDepth x 4 
     // average all valid depth values to a single one
-    float SingleDepth = dot(FourDepth, float4(A.a, B.a, C.a, D.a)) * Div;
+    float SingleDepth = dot(FourDepth, float4(A.a, B.a, C.a, D.a)) * Div; //平均深度 
 
-    OutColor.a = SingleDepth;
+    OutColor.a = SingleDepth; // put average depth to alpha channel 
 
     if (OutColor.a > 0)
     {
@@ -252,7 +253,7 @@ void SetupIndirectCS(uint3 DT_ID : SV_DispatchThreadID, uint3 G_ID : SV_GroupID,
 
     if (all(Pos < Output_ViewportMinMax.zw)) 
     {
-        SetupTexture[Pos] = OutColor;
+        SetupTexture[Pos] = OutColor;  //周围4邻域全分辨率像素的Diffuse颜色平均值，a通道是平均深度 
     }
 
     AddSubsurfaceComputeGroup(GI, Type, G_ID.xy);

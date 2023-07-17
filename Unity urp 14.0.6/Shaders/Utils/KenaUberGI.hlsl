@@ -496,7 +496,7 @@ half4 FragKenaGI (Varyings IN) : SV_Target
 
     uint ShadingModelID = GBuffer.ShadingModelID;
     float3 BentNormal = UpsampleDFAO(BufferUV, GBuffer.Depth, GBuffer.WorldNormal);
-
+    
     float4 OutColor = 0; 
 
     UNITY_BRANCH

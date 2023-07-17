@@ -851,7 +851,7 @@ namespace UnityEngine.Rendering.Universal
         public static readonly int globalMipBias = Shader.PropertyToID("_GlobalMipBias");
 
         public static readonly int screenSize = Shader.PropertyToID("_ScreenSize");
-        public static readonly int screenCoordScaleBias = Shader.PropertyToID("_ScreenCoordScaleBias");  
+        public static readonly int screenCoordScaleBias = Shader.PropertyToID("_ScreenCoordScaleBias");
         public static readonly int screenSizeOverride = Shader.PropertyToID("_ScreenSizeOverride");
 
         public static readonly int viewMatrix = Shader.PropertyToID("unity_MatrixV");

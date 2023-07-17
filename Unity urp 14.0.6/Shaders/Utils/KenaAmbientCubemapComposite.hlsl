@@ -109,7 +109,7 @@ half4 FragKenaAmbientCube(Varyings IN) : SV_Target
 	finalCol.rgb = (NonSpecularContribution + SpecularContribution) * AmbientCubemapColor.rgb;
 
 	UNITY_BRANCH
-	if (bCheckerboardSubsurfaceProfileRendering == 0 && bNeedsSeparateSubsurfaceLightAccumulation)
+	if (bCheckerboardSubsurfaceProfileRendering == 0 && bNeedsSeparateSubsurfaceLightAccumulation) 
 	{
 		finalCol.a = LuminanceUE(NonSpecularContribution * AmbientCubemapColor.rgb);
 	}

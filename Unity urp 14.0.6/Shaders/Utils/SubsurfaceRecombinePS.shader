@@ -138,8 +138,8 @@ static const int SUBSURFACE_RADIUS_SCALE = 1024;
             LookupSceneColor(UVSceneColor, half2(1, 0)) +
             LookupSceneColor(UVSceneColor, half2(-1, 0)));
 
-        Ret.Diffuse = lerp(Quant1, Quant0, bChecker);
-        Ret.Specular = lerp(Quant0, Quant1, bChecker);
+        Ret.Diffuse = lerp(Quant1, Quant0, bChecker);  //checker为true时，Quant1代表Diffuse，Quant0代表Specular 
+        Ret.Specular = lerp(Quant0, Quant1, bChecker); 
         return Ret;
     }
 

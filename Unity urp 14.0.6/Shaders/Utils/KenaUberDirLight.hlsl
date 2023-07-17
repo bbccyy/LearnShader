@@ -740,34 +740,59 @@ float4 FragKenaDirectLight(Varyings IN) : SV_Target
 {
     //init all local buffer data
     //TODO: 向Unity兼容 
-    kena_LightData.ShadowedBits = 3;		  //cb1[2].x=3 -> 需用uint4查看 
-    kena_LightData.ContactShadowLength = 0.2; //cb1[1].z=0.2 
-    kena_LightData.Direction = float3(0.51555, -0.29836, 0.80324);  //cb1[5].xyz
-    kena_LightData.Tangent = float3(0.51555, -0.29836, 0.80324);    //cb1[6].xyz
-    kena_LightData.ShadowMapChannelMask = float4(0, 0, 0, 0);	    //cb1[0].xyzw 
-    kena_LightData.SourceLength = 0;		//cb1[7].w=0
-    kena_LightData.SourceRadius = 0.00467;	//cb1[6].w=0.00467
-    kena_LightData.SoftSourceRadius = 0;	//cb1[7].z=0 
-    kena_LightData.bInverseSquared = true;	//todo  uint4
-    kena_LightData.SpecularScale = 1;		//cb1[5].w=1.0     
-    kena_LightData.Color = float4(17.99882, 18.66276, 19.00, 0.00);	//cb1[5].w=1.0  
-    //init done! 
+    #if USE_UNITY_BUILT_IN_PARAMS
+        kena_LightData.ShadowedBits = 3;		  //cb1[2].x=3 -> 需用uint4查看 
+        kena_LightData.ContactShadowLength = 0.2; //cb1[1].z=0.2 
+        kena_LightData.Direction = -GetMainLight().direction;  //cb1[5].xyz 
+        kena_LightData.Tangent = -GetMainLight().direction;    //cb1[6].xyz 
+        kena_LightData.ShadowMapChannelMask = float4(0, 0, 0, 0);	    //cb1[0].xyzw 
+        kena_LightData.SourceLength = 0;		//cb1[7].w=0
+        kena_LightData.SourceRadius = 0.00467;	//cb1[6].w=0.00467
+        kena_LightData.SoftSourceRadius = 0;	//cb1[7].z=0 
+        kena_LightData.bInverseSquared = true;	//todo  uint4
+        kena_LightData.SpecularScale = 0.2;		//cb1[5].w=1.0     
+        kena_LightData.Color = float4(17.99882, 18.66276, 19.00, 0.00) * 0.3;	//cb1[5].w=1.0  
+    #else
+        kena_LightData.ShadowedBits = 3;		  //cb1[2].x=3 -> 需用uint4查看 
+        kena_LightData.ContactShadowLength = 0.2; //cb1[1].z=0.2 
+        kena_LightData.Direction = float3(0.51555, -0.29836, 0.80324);  //cb1[5].xyz 
+        kena_LightData.Tangent = float3(0.51555, -0.29836, 0.80324);    //cb1[6].xyz 
+        kena_LightData.ShadowMapChannelMask = float4(0, 0, 0, 0);	    //cb1[0].xyzw 
+        kena_LightData.SourceLength = 0;		//cb1[7].w=0
+        kena_LightData.SourceRadius = 0.00467;	//cb1[6].w=0.00467
+        kena_LightData.SoftSourceRadius = 0;	//cb1[7].z=0 
+        kena_LightData.bInverseSquared = true;	//todo  uint4
+        kena_LightData.SpecularScale = 1;		//cb1[5].w=1.0  
+        kena_LightData.Color = float4(17.99882, 18.66276, 19.00, 0.00);	//cb1[5].w=1.0 
+        //init done! 
+    #endif
 
     half4 test = half4(0,0,0,1);  //用于测试输出 
 	half4 FinalColor = half4(0,0,0,1);  //用于测试输出 
 
     FGBufferData GBuffer = GetGBufferData(IN.screenUV.xy);
-    float3 ViewDirWS = normalize(IN.viewDirWS);
-	float3 WorldPosition = ViewDirWS * GBuffer.Depth + CameraPosWS.xyz;
+    
+    #if USE_UNITY_BUILT_IN_PARAMS
+        //float2 UV = IN.positionCS.xy / _ScaledScreenParams.xy; //也能使用 IN.screenUV.xy 
+        float depth = SAMPLE_TEXTURE2D_X_LOD(_GBuffer4, my_point_clamp_sampler, IN.screenUV.xy, 0).x; 
+        //float depth = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, my_point_clamp_sampler, IN.screenUV.xy).r; //also OK 
+        float3 WorldPosition = ComputeWorldSpacePosition(IN.screenUV.xy, depth, UNITY_MATRIX_I_VP); 
+        //TODO: why using viewDirWS while rebuilding WorldPosition not work? 
+    #else
+        float3 ViewDirWS = normalize(IN.viewDirWS);
+	    float3 WorldPosition = ViewDirWS * GBuffer.Depth + CameraPosWS.xyz;
+    #endif
+
     float3 CameraVector = normalize(WorldPosition - CameraPosWS.xyz);
 
     //验证世界坐标正确性用
-	//float4 shouldBeHClipPos = mul(Matrix_VP, float4(WorldPosition - CameraPosWS.xyz, 1));
-	//test.rgb = shouldBeHClipPos.xyz / shouldBeHClipPos.w; 
-
+    //float4 shouldBeHClipPos = mul(unity_MatrixVP, float4(CameraVector, 0)); 
+	//test.rgb = shouldBeHClipPos.xyz / shouldBeHClipPos.w * float3(1, -1, 0); 
+    //return test.xyzz; 
     //验证渲染通道 
-    //uint see_flag = GBuffer.ShadingModelID == (uint)SHADINGMODELID_HAIR;
+    //uint see_flag = GBuffer.ShadingModelID == (uint)SHADINGMODELID_SUBSURFACE_PROFILE; 
     //test.rgb = see_flag; 
+    //return test;
 
     UNITY_BRANCH 
     if (GBuffer.ShadingModelID > 0)  //当前像素使用延迟渲染的才能进入 
