@@ -87,7 +87,7 @@ cs_5_0
   56:         and r5.w, r5.w, r6.x
   57:         breakc_z r5.w
   58:         mad r6.xyz, r4.yzwy, r5.yyyy, r0.xyzx                     -> WorldPosition 获取光追位置的世界坐标 
-  59:         mad r6.xyz, r6.xyzx, cb0[18].wwww, cb0[18].xyzx           -> ComputeGlobalUV(float3 WorldPosition, uint ClipmapIndex) 
+  59:         mad r6.xyz, r6.xyzx, cb0[18].wwww, cb0[18].xyzx           -> ComputeGlobalUV(float3 WorldPosition, uint ClipmapIndex)  
 
   60:         sample_l(texture3d)(float,float,float,float) r5.w, r6.xyzx, t1.yzwx, s1, l(0) -> DistanceToOccluder = SampleGlobalDistanceField(ClipmapIndex, StepVolumeUV).x;
 
