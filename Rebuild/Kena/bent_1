@@ -91,7 +91,7 @@ cs_5_0
 
   60:         sample_l(texture3d)(float,float,float,float) r5.w, r6.xyzx, t1.yzwx, s1, l(0) -> DistanceToOccluder = SampleGlobalDistanceField(ClipmapIndex, StepVolumeUV).x;
 
-  61:         mul r6.x, r5.y, cb0[22].z                                 -> float SphereRadius = WorldStepOffset * TanConeHalfAngle=0.51539 
+  61:         mul r6.x, r5.y, cb0[22].z                                 -> float SphereRadius = WorldStepOffset * TanConeHalfAngle=0.51539  
   62:         iadd r6.x, -r6.x, l(161547303404896380000000000000000000000.0000)     -> rcpFast 
 
   63:         mul_sat r6.x, r5.w, r6.x                                  -> float Visibility = saturate(DistanceToOccluder * InvSphereRadius);
