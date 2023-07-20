@@ -18,19 +18,19 @@ SamplerState my_bilinear_clamp_sampler;
 uniform Texture2D<float4> _GBuffer2;			//Normal 
 uniform Texture2D<float> _GBuffer4;				//Depth 
 
-uniform Texture2D<float4> _NormalDepth;		// the output RT of ComputeDistanceFieldNormalPS 
+Texture2D<float4> _NormalDepth;		// the output RT of ComputeDistanceFieldNormalPS -> Half Resolution 
 
 Texture3D<half> _GlobalDistanceFieldTexture0; 
 Texture3D<half> _GlobalDistanceFieldTexture1; 
 
 RWBuffer<uint> RWScreenGridConeVisibility; 
 
-float4 View_BufferSizeAndInvSize;	//[1708, 960, 1/1708, 1/960]
-float4 View_ScreenPositionScaleBias; //[0.5, +-0.5, 0.5, 0.5] 
+float4 View_BufferSizeAndInvSize;		//[1708, 960, 1/1708, 1/960]
+float4 View_ScreenPositionScaleBias;	//[0.5, +-0.5, 0.5, 0.5] 
 
-uint2 ScreenGridConeVisibilitySize;  //213,120
+uint2 ScreenGridConeVisibilitySize;		//213,120
 float2 JitterOffset;
-float2 BaseLevelTexelSize;
+float4 BaseLevelSizeAndTexelSize;		//[854, 480, 1/854, 1/480]
 
 float4 GlobalVolumeCenterAndExtent[2];		//float array 
 float4 GlobalVolumeWorldToUVAddAndMul[2]; 
@@ -60,7 +60,7 @@ float rcpFast(float x)
 //期间经过Jitter（像素级偏移）以及0.5像素的Offset，最后通过乘以对应像素尺寸（基于UV的尺寸：1/854, 1/480），映射回屏幕UV 
 float2 GetBaseLevelScreenUVFromScreenGrid(uint2 OutputCoordinate, float JitterScale) //input: DispatchThreadId.xy, 1 
 {
-	float2 BaseLevelScreenUV = (OutputCoordinate * TRACE_DOWNSAMPLE_FACTOR + JitterOffset * JitterScale + float2(.5f, .5f)) * BaseLevelTexelSize; 
+	float2 BaseLevelScreenUV = (OutputCoordinate * TRACE_DOWNSAMPLE_FACTOR + JitterOffset * JitterScale + float2(.5f, .5f)) * BaseLevelSizeAndTexelSize.zw;
 	return BaseLevelScreenUV;
 }
 
@@ -80,9 +80,10 @@ float2 GetFullResUVFromBufferGrid(uint2 PixelCoordinate, float JitterScale = 1.0
 //Return Wolrd Normal and DeviceZ Depth 
 void GetNormalDepthGBuffer(float2 UV, out float3 Norm, out float Depth)
 {
-	float4 norm_depth = _NormalDepth.Sample(my_point_clamp_sampler, UV);
+	//float4 norm_depth =  _NormalDepth.SampleLevel(my_point_clamp_sampler, UV, 0).xyzw;
+	float4 norm_depth = SAMPLE_TEXTURE2D_LOD(_NormalDepth, my_point_clamp_sampler, UV, 0).xyzw;
 	Norm = norm_depth.xyz;
-	Depth = norm_depth.w;
+	Depth = norm_depth.w <= 0 ? 1 : norm_depth.w;  //TODO 
 }
 
 //Build Tangent and Bitangent to form TBN matrix 
@@ -125,12 +126,19 @@ float SampleGlobalDistanceField(int ClipmapIndex, float3 UV)
 	float rawDist = 0;
 	if (ClipmapIndex == 0)
 	{
-		rawDist = _GlobalDistanceFieldTexture0.Sample(my_bilinear_clamp_sampler, UV).r;
+		//rawDist = _GlobalDistanceFieldTexture0.SampleLevel(my_bilinear_clamp_sampler, UV, 0).r;
+		rawDist = SAMPLE_TEXTURE2D_LOD(_GlobalDistanceFieldTexture0, my_bilinear_clamp_sampler, UV, 0).r;
 	}
 	else  
 	{
-		rawDist = _GlobalDistanceFieldTexture1.Sample(my_bilinear_clamp_sampler, UV).r;
+		//rawDist = _GlobalDistanceFieldTexture1.SampleLevel(my_bilinear_clamp_sampler, UV, 0).r;
+		rawDist = SAMPLE_TEXTURE2D_LOD(_GlobalDistanceFieldTexture1, my_bilinear_clamp_sampler, UV, 0).r;
 	}
 
 	return ConvertSampleSDFToRealDistance(rawDist, ClipmapIndex).x;
+}
+
+uint2 GridIndexToCoordination(uint GridIndex)
+{
+	return uint2(GridIndex % ScreenGridConeVisibilitySize.x, GridIndex / ScreenGridConeVisibilitySize.x);
 }
