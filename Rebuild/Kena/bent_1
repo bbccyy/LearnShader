@@ -97,7 +97,7 @@ cs_5_0
   63:         mul_sat r6.x, r5.w, r6.x                                  -> float Visibility = saturate(DistanceToOccluder * InvSphereRadius);
 
   64:         add r6.y, r5.w, r5.y                                      -> WorldStepOffset + DistanceToOccluder
-  65:         mul r6.y, r2.w, r6.y                                      -> float OccluderDistanceFraction = (~) * InvAOGlobalMaxOcclusionDistance; 
+  65:         mul r6.y, r2.w, r6.y                                      -> float OccluderDistanceFraction = (~) * InvAOGlobalMaxOcclusionDistance;  
   66:         mul r6.y, r6.y, r6.y
   67:         mul r6.y, r6.y, l(0.6000)                                 
   68:         min r6.y, r6.y, l(1.0000)                                 -> saturate(OccluderDistanceFraction * OccluderDistanceFraction * .6f)
