@@ -28,7 +28,7 @@ cs_5_0
    4:   utof r0.xy, r0.xyxx
    5:   add r0.xy, r0.xyxx, cb0[13].xyxx                                -> cb0[13].xy = JitterOffset = [0, 2]
    6:   add r0.zw, r0.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000)
-   7:   mul r0.zw, r0.zzzw, cb0[11].xxxy                                -> cb0[11].xy = BaseLevelTexelSize = [0.00117, 0.00208] 
+   7:   mul r0.zw, r0.zzzw, cb0[11].xxxy                                -> cb0[11].xy = BaseLevelTexelSize = [ 0.00117, 0.00208] 
    8:   sample_l(texture2d)(float,float,float,float) r1.xyzw, r0.zwzz, t0.xyzw, s0, l(0)
    9:   lt r0.z, abs(r1.z), l(0.9990) 
   10:   movc r2.xyz, r0.zzzz, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
