@@ -31,7 +31,7 @@ cs_5_0
    7:   mul r0.zw, r0.zzzw, cb0[11].xxxy                                -> cb0[11].xy = BaseLevelTexelSize = [ 0.00117, 0.00208] 
    8:   sample_l(texture2d)(float,float,float,float) r1.xyzw, r0.zwzz, t0.xyzw, s0, l(0)
    9:   lt r0.z, abs(r1.z), l(0.9990) 
-  10:   movc r2.xyz, r0.zzzz, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
+  10:   movc r2.xyz, r0.zzzz, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000) 
   11:   mul r3.xyz, r1.yzxy, r2.xyzx
   12:   mad r2.xyz, r2.zxyz, r1.zxyz, -r3.xyzx
   13:   dp3 r0.z, r2.xyzx, r2.xyzx
