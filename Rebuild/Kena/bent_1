@@ -15,7 +15,7 @@ cs_5_0
       dcl_resource_texture2d (float,float,float,float) t0 
       dcl_resource_texture3d (float,float,float,float) t1
       dcl_resource_texture3d (float,float,float,float) t2  
-      dcl_resource_texture3d (float,float,float,float) t3
+      dcl_resource_texture3d (float,float,float,float) t3 
       dcl_resource_texture3d (float,float,float,float) t4 
       dcl_uav_typed_buffer (uint,uint,uint,uint) u0
       dcl_input vThreadID.xy
