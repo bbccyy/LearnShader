@@ -9,7 +9,7 @@ Shader "Test/DistanceFieldLightingHelper"
     #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/DistanceFieldAOShared.hlsl"
     ENDHLSL
 
-        SubShader
+    SubShader
     {
         Tags { "RenderType" = "Opaque" }
         LOD 100

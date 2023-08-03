@@ -1,5 +1,7 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel ConeTraceGlobalOcclusionCS
+#pragma kernel DebugCS
+#pragma kernel CombineConeVisibilityCS
 
 #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/DistanceFieldAOShared.hlsl"
 
@@ -9,6 +11,18 @@
 
 
 RWTexture2D<float4> _DebugTexture;
+RWTexture2D<float4> _DebugTexture3X3;
+
+void ResetBufferData(uint ConeTraceGridIndex)
+{
+    [unroll]
+    for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
+    {
+        RWScreenGridConeVisibility[
+            ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + ConeTraceGridIndex
+        ] = 0xFFFFFFFF; 
+    }
+}
 
 void HemisphereConeTraceGlobalDistanceFieldClipmap(
     uint ClipmapIndex,
@@ -123,7 +137,7 @@ void HemisphereConeTraceGlobalDistanceField(
 }
 
 
-[numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)]
+[numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)] 
 void ConeTraceGlobalOcclusionCS(
     uint3 GroupId : SV_GroupID,
     uint3 DispatchThreadId : SV_DispatchThreadID,
@@ -150,6 +164,8 @@ void ConeTraceGlobalOcclusionCS(
 
         uint ConeTracingGridIndex = DstCoordinate.y * ScreenGridConeVisibilitySize.x + DstCoordinate.x;
 
+        ResetBufferData(ConeTracingGridIndex); 
+
         HemisphereConeTraceGlobalDistanceField(
             ConeTracingGridIndex, WorldShadingPosition, SceneDepth,
             NormalWS, TangentX, TangentY);
@@ -161,10 +177,78 @@ void ConeTraceGlobalOcclusionCS(
 
 
 
+[numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)]
+void DebugCS(
+    uint3 GroupId : SV_GroupID,
+    uint3 DispatchThreadId : SV_DispatchThreadID,
+    uint3 GroupThreadId : SV_GroupThreadID)
+{
+    uint2 DstCoordinate = DispatchThreadId.xy;  //refs to dest RT's tex coordinate 
+
+    if (all(DstCoordinate < ScreenGridConeVisibilitySize))
+    {
+        uint ConeTracingGridIndex = DstCoordinate.y * ScreenGridConeVisibilitySize.x + DstCoordinate.x;
+
+        [unroll]
+        for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
+        {
+            uint raw = RWScreenGridConeVisibility[
+                ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + ConeTracingGridIndex];
+            float visibility = asfloat(raw);
+            uint row = ConeIndex % 3;
+            uint col = ConeIndex / 3;
+            uint2 coord = uint2(row, col) * ScreenGridConeVisibilitySize.xy + DstCoordinate;
+            _DebugTexture3X3[coord] = visibility.xxxx;   
+        }
+    }
+}
 
 
 
 
+[numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)]
+void CombineConeVisibilityCS(
+    uint3 GroupId : SV_GroupID,
+    uint3 DispatchThreadId : SV_DispatchThreadID,
+    uint3 GroupThreadId : SV_GroupThreadID)
+{
+    uint2 SrcCoordinate = min(DispatchThreadId.xy, ScreenGridConeVisibilitySize);
+    uint2 DstCoordinate = DispatchThreadId.xy;
+
+    if (all(DstCoordinate < ScreenGridConeVisibilitySize))
+    {
+        float2 BaseLevelScreenUV = GetBaseLevelScreenUVFromScreenGrid(SrcCoordinate);
+
+        float3 WorldNormal;
+        float SceneDepth;
+        GetNormalDepthGBuffer(BaseLevelScreenUV, WorldNormal, SceneDepth);
+
+        float3 Tangent;
+        float3 Bitangent;
+        FindTangentXY(WorldNormal, Tangent, Bitangent);
+
+        uint SrcBaseIndex = SrcCoordinate.y * ScreenGridConeVisibilitySize.x + SrcCoordinate.x;
+
+        float3 UnoccludedDirection = 0;
+
+        [unroll]
+        for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
+        {
+            float ConeVisibility = asfloat(RWScreenGridConeVisibility[
+                ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + SrcBaseIndex]);
+
+            float3 ConeDirection = AOSamples2_SampleDirections[ConeIndex].xyz;
+            float3 ConeDirectionWS = ConeDirection.x * Tangent + ConeDirection.y * Bitangent + ConeDirection.z * WorldNormal;
+
+            UnoccludedDirection += ConeVisibility * ConeDirectionWS;
+        }
+
+        float InvNumSamples = 1.0f / (float)NUM_CONE_DIRECTIONS;
+        float3 BentNormal = UnoccludedDirection * BentNormalNormalizeFactor * InvNumSamples;
+
+        RWCombinedDFBentNormal[DstCoordinate] = float4(BentNormal, SceneDepth);
+    }
+}
 
 
 

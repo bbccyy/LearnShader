@@ -167,7 +167,7 @@ ps_5_0
 
  133: mad r0.xyz, -r0.xyzx, r0.wwww, r3.xyzx                                        -> HistoryValue - NewValue 
 
- 134: mul r2.xy, r2.xyxx, r3.wwww                                                   -> ComputeHistoryWeightBasedOnPosition(...)  
+ 134: mul r2.xy, r2.xyxx, r3.wwww                                                   -> ComputeHistoryWeightBasedOnPosition(...)
  135: mul r3.xyz, r2.yyyy, cb1[119].xyzx 
  136: mad r3.xyz, r2.xxxx, cb1[118].xyzx, r3.xyzx
  137: mad r3.xyz, r3.wwww, cb1[120].xyzx, r3.xyzx
