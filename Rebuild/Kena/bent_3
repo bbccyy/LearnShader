@@ -146,7 +146,7 @@ ps_5_0
  115: mad r2.y, r4.w, cb1[30].z, cb1[31].z
  116: movc r1.w, r1.w, r2.x, r2.y                     -> float4 ThisClip = float4(UVAndScreenPos.zw, ConvertToDeviceZ(SceneDepth), 1); 
  117: mul r2.xyz, v0.wwww, cb1[123].xywx
- 118: mad r2.xyz, v0.zzzz, cb1[122].xywx, r2.xyzx
+ 118: mad r2.xyz, v0.zzzz, cb1[122].xywx, r2.xyzx 
  119: mad r2.xyz, r1.wwww, cb1[124].xywx, r2.xyzx
  120: add r2.xyz, r2.xyzx, cb1[125].xywx                                            -> float4 PrevClip = mul( ThisClip, View.ClipToPrevClip ); 
  121: div r2.xy, r2.xyxx, r2.zzzz                                                   -> float2 PrevScreen = PrevClip.xy / PrevClip.w; 

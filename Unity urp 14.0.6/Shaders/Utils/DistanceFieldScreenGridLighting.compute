@@ -64,13 +64,13 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
         if (ConeIndex == 0)
         {
             uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-            //_DebugTexture[coord] = float4(WorldStepOffset, AOGlobalMaxOcclusionDistanceAndInv.x, ConeDirectionWS.xy);
+            //_DebugTexture[coord] = float4(WorldStepOffset, AOGlobalMaxOcclusionDistanceAndInv[0], ConeDirectionWS.xy);
             //_DebugTexture[coord] = float4(InitialOffset.xxxx);
         }
         
 
         [loop]
-        for (uint StepIndex = 0; StepIndex < NUM_CONE_STEPS && WorldStepOffset < AOGlobalMaxOcclusionDistanceAndInv.x; StepIndex++)
+        for (uint StepIndex = 0; StepIndex < NUM_CONE_STEPS && WorldStepOffset < AOGlobalMaxOcclusionDistanceAndInv[0]; StepIndex++)
         {
             //Ray-marching
             float3 WorldSamplePosition = WorldShadingPosition + ConeDirectionWS * WorldStepOffset;
@@ -81,7 +81,7 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
 
             float Visibility = saturate(DistanceToOccluder * InvSphereRadius);
 
-            float OccluderDistanceFraction = (WorldStepOffset + DistanceToOccluder) * AOGlobalMaxOcclusionDistanceAndInv.y;
+            float OccluderDistanceFraction = (WorldStepOffset + DistanceToOccluder) * AOGlobalMaxOcclusionDistanceAndInv[1];
 
             Visibility = max(Visibility, saturate(OccluderDistanceFraction * OccluderDistanceFraction * 0.6f));
 
@@ -122,11 +122,11 @@ void HemisphereConeTraceGlobalDistanceField(
     float DistanceFromClipmap = ComputeDistanceFromBoxToPointInside(GlobalVolumeCenterAndExtent[0].xyz, GlobalVolumeCenterAndExtent[0].www, WorldShadingPosition);
 
     uint2 coord = GridIndexToCoordination(GridIndex);
-    //_DebugTexture[coord] = float4(WorldShadingPosition.xyz, DistanceFromClipmap);
+    //_DebugTexture[coord] = float4(WorldShadingPosition.xyz, DistanceFromClipmap); 
 
     //2 LOD vs UE's 4 LOD 
     [branch]
-    if (DistanceFromClipmap > AOGlobalMaxOcclusionDistanceAndInv.x) 
+    if (DistanceFromClipmap > AOGlobalMaxOcclusionDistanceAndInv[0])
     {
         HemisphereConeTraceGlobalDistanceFieldClipmap((uint)0, GridIndex, WorldShadingPosition, SceneDepth, WorldNormal, Tangent, Bitangent);
     }

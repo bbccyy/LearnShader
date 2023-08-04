@@ -9,6 +9,7 @@ namespace UnityEngine.Rendering.Universal
     {
         #region Fields
         const string kPreviousViewProjectionNoJitter = "_PrevViewProjMatrix";
+        const string kPreviousInvViewProjectionNoJitter = "_PrevInvViewProjMatrix";
         const string kViewProjectionNoJitter = "_NonJitteredViewProjMatrix";
 #if ENABLE_VR && ENABLE_XR_MODULE
         const string kPreviousViewProjectionNoJitterStereo = "_PrevViewProjMatrixStereo";
@@ -105,6 +106,7 @@ namespace UnityEngine.Rendering.Universal
                 {
                     // TODO: These should be part of URP main matrix set. For now, we set them here for motion vector rendering.
                     cmd.SetGlobalMatrix(kPreviousViewProjectionNoJitter, motionData.previousViewProjectionStereo[passID]);
+                    cmd.SetGlobalMatrix(kPreviousInvViewProjectionNoJitter, Matrix4x4.Inverse(motionData.previousViewProjectionStereo[passID]));
                     cmd.SetGlobalMatrix(kViewProjectionNoJitter, motionData.viewProjectionStereo[passID]);
                 }
 

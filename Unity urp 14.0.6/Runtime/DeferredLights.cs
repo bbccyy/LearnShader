@@ -155,13 +155,14 @@ namespace UnityEngine.Rendering.Universal.Internal
         internal int GBufferSliceCount { get { return 4 + (UseRenderPass ? 1 : 0) + (UseShadowMask ? 1 : 0) + (UseRenderingLayers ? 1 : 0) + (UseKenaGBufferA ? 1 : 0) + (UseKenaGBufferB ? 1 : 0); } }
 
         internal GraphicsFormat GetGBufferFormat(int index)
-        {  
+        {
             if (index == GBufferAlbedoIndex) // sRGB albedo, materialFlags
                 return GraphicsFormat.R8G8B8A8_SRGB;
             else if (index == GBufferSpecularMetallicIndex) // sRGB specular, [unused]
                 return GraphicsFormat.R8G8B8A8_UNorm;
             else if (index == GBufferNormalSmoothnessIndex)
-                return GraphicsFormat.A2R10G10B10_UNormPack32; // normal normal normal packedSmoothness
+                return GraphicsFormat.A2R10G10B10_UNormPack32; // normal normal normal packedSmoothness (Note! Encode Normal before store)
+                //return GraphicsFormat.A2R10G10B10_SIntPack32;
             else if (index == GBufferLightingIndex) // Emissive+baked: Most likely B10G11R11_UFloatPack32 or R16G16B16A16_SFloat
                 return GraphicsFormat.B10G11R11_UFloatPack32;
             else if (index == GbufferDepthIndex) // Render-pass on mobiles: reading back real depth-buffer is either inefficient (Arm Vulkan) or impossible (Metal).
@@ -173,7 +174,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             else if (index == GBufferKenaExtraAIndex) //when KenaExtraAIndex was enabled, it refs to the Depth Texture @wyx
                 return GraphicsFormat.R16_SFloat;
             else if (index == GBufferKenaExtraBIndex) //KenaExtraBIndex refs to the CustomData Texture @wyx 
-                return GraphicsFormat.R8G8B8A8_UNorm; 
+                return GraphicsFormat.R8G8B8A8_UNorm;
             else
                 return GraphicsFormat.None; 
         }
@@ -669,7 +670,6 @@ namespace UnityEngine.Rendering.Universal.Internal
                         new Vector4(0.0f, 0.0f, 0.5f, 1.0f)
                     );
                 }
-
                 screenToWorld[eyeIndex] = Matrix4x4.Inverse(toScreen * zScaleBias * gpuProj * view);
             }
 

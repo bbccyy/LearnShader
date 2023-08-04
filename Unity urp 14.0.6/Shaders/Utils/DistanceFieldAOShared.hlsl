@@ -36,15 +36,19 @@ float4 View_BufferSizeAndInvSize;		//[1708, 960, 1/1708, 1/960]
 float4 View_ScreenPositionScaleBias;	//[0.5, +-0.5, 0.5, 0.5] 
 
 uint2 ScreenGridConeVisibilitySize;		//213,120
-float2 ScreenGridBufferAndTexelSize;	//[213, 120, 1/213, 1/120]
+float4 ScreenGridBufferAndTexelSize;	//[213, 120, 1/213, 1/120]
 float2 JitterOffset;					//[0, 2]
 float2 DistanceFieldGBufferJitterOffset;//JitterOffset * BaseLevelSizeAndTexelSize.zw
 float4 BaseLevelSizeAndTexelSize;		//[854, 480, 1/854, 1/480]
 
-float4 GlobalVolumeCenterAndExtent[2];	//float array 
+float4 GlobalVolumeCenterAndExtent[2];	//Vector4 array
 float4 GlobalVolumeWorldToUVAddAndMul[2]; 
-float2 AOGlobalMaxOcclusionDistanceAndInv;
+float AOGlobalMaxOcclusionDistanceAndInv[2];
 float GlobalVolumeTexelSize;
+
+float4x4 _PrevInvViewProjMatrix;		//updated by MotionVectorRenderPass every frame
+
+#define UNITY_MATRIX_PRE_I_VP _PrevInvViewProjMatrix;
 
 float TanConeHalfAngle;
 
@@ -240,7 +244,7 @@ void GeometryAwareUpsample(float4 UVAndScreenPos, out float4 OutBentNormal)
 	DistWeights.x = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResUV, FourDepths.x);
 	DistWeights.y = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResUV + float2(ScreenGridBufferAndTexelSize.z, 0), FourDepths.y);
 	DistWeights.z = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResUV + float2(0, ScreenGridBufferAndTexelSize.w), FourDepths.z);
-	DistWeights.w = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResUV + ScreenGridBufferAndTexelSize, FourDepths.w);
+	DistWeights.w = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResUV + ScreenGridBufferAndTexelSize.zw, FourDepths.w); 
 
 	//基于四周法线与中心法线的相似度求调节权重
 	float4 NormalWeights;
@@ -263,4 +267,11 @@ void GeometryAwareUpsample(float4 UVAndScreenPos, out float4 OutBentNormal)
 	float BentNormalLength = length(OutBentNormal.rgb);
 	float3 NormalizedBentNormal = OutBentNormal.rgb / max(BentNormalLength, .0001f);  //处理极限取值的情况
 	OutBentNormal.rgb = NormalizedBentNormal * BentNormalLength;
+}
+
+float ComputeHistoryWeightBasedOnPosition()
+{
+	//float3 WorldPosition = ComputeWorldSpacePosition(UV, DeviceZ, UNITY_MATRIX_PRE_I_VP);
+
+	return 0;
 }
