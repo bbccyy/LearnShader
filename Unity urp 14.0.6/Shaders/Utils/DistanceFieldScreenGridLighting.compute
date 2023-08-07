@@ -109,7 +109,7 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
         if (ConeIndex == 0)
         {
             uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-            _DebugTexture[coord] = float4(MinVisibility.xxxx);
+            _DebugTexture[coord] = float4(MinVisibility.xxxx);   //TODO: remove
         }
     }
 }
@@ -153,28 +153,29 @@ void ConeTraceGlobalOcclusionCS(
         float DeviceZDepth;
         GetNormalDepthGBuffer(BaseLevelScreenUV, NormalWS, DeviceZDepth);
 
-        float3 TangentX;
-        float3 TangentY;
-        FindTangentXY(NormalWS, TangentX, TangentY);
-
-        float2 ScreenUV = GetFullResUVFromBufferGrid(DstCoordinate);
-
-        float3 WorldShadingPosition = ComputeWorldSpacePosition(ScreenUV, DeviceZDepth, UNITY_MATRIX_I_VP);
-        float SceneDepth = LinearEyeDepth(DeviceZDepth, _ZBufferParams); //ViewSpace.Z 
-
         uint ConeTracingGridIndex = DstCoordinate.y * ScreenGridConeVisibilitySize.x + DstCoordinate.x;
 
-        ResetBufferData(ConeTracingGridIndex); 
+        ResetBufferData(ConeTracingGridIndex);
 
-        HemisphereConeTraceGlobalDistanceField(
-            ConeTracingGridIndex, WorldShadingPosition, SceneDepth,
-            NormalWS, TangentX, TangentY);
+        if (DeviceZDepth > 0)  //TODO: use clip?
+        {
+            float3 TangentX;
+            float3 TangentY;
+            FindTangentXY(NormalWS, TangentX, TangentY);
+
+            float2 ScreenUV = GetFullResUVFromBufferGrid(DstCoordinate);
+
+            float3 WorldShadingPosition = ComputeWorldSpacePosition(ScreenUV, DeviceZDepth, UNITY_MATRIX_I_VP);
+            float SceneDepth = LinearEyeDepth(DeviceZDepth, _ZBufferParams); //ViewSpace.Z 
+
+            HemisphereConeTraceGlobalDistanceField(
+                ConeTracingGridIndex, WorldShadingPosition, SceneDepth,
+                NormalWS, TangentX, TangentY);
+        }
 
         //_DebugTexture[DstCoordinate] = float4(WorldShadingPosition.xyz, SceneDepth);
     }
 }
-
-
 
 
 [numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)]
@@ -204,8 +205,6 @@ void DebugCS(
 }
 
 
-
-
 [numthreads(CONE_TRACE_GLOBAL_DISPATCH_SIZEX, CONE_TRACE_GLOBAL_DISPATCH_SIZEX, 1)]
 void CombineConeVisibilityCS(
     uint3 GroupId : SV_GroupID,
@@ -220,33 +219,40 @@ void CombineConeVisibilityCS(
         float2 BaseLevelScreenUV = GetBaseLevelScreenUVFromScreenGrid(SrcCoordinate);
 
         float3 WorldNormal;
-        float SceneDepth;
-        GetNormalDepthGBuffer(BaseLevelScreenUV, WorldNormal, SceneDepth);
+        float DeviceZ;
+        GetNormalDepthGBuffer(BaseLevelScreenUV, WorldNormal, DeviceZ);
 
-        float3 Tangent;
-        float3 Bitangent;
-        FindTangentXY(WorldNormal, Tangent, Bitangent);
-
-        uint SrcBaseIndex = SrcCoordinate.y * ScreenGridConeVisibilitySize.x + SrcCoordinate.x;
-
-        float3 UnoccludedDirection = 0;
-
-        [unroll]
-        for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
+        if (DeviceZ > 0)
         {
-            float ConeVisibility = asfloat(RWScreenGridConeVisibility[
-                ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + SrcBaseIndex]);
+            float3 Tangent;
+            float3 Bitangent;
+            FindTangentXY(WorldNormal, Tangent, Bitangent);
 
-            float3 ConeDirection = AOSamples2_SampleDirections[ConeIndex].xyz;
-            float3 ConeDirectionWS = ConeDirection.x * Tangent + ConeDirection.y * Bitangent + ConeDirection.z * WorldNormal;
+            uint SrcBaseIndex = SrcCoordinate.y * ScreenGridConeVisibilitySize.x + SrcCoordinate.x;
 
-            UnoccludedDirection += ConeVisibility * ConeDirectionWS;
+            float3 UnoccludedDirection = 0;
+
+            [unroll]
+            for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
+            {
+                float ConeVisibility = asfloat(RWScreenGridConeVisibility[
+                    ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + SrcBaseIndex]);
+
+                float3 ConeDirection = AOSamples2_SampleDirections[ConeIndex].xyz;
+                float3 ConeDirectionWS = ConeDirection.x * Tangent + ConeDirection.y * Bitangent + ConeDirection.z * WorldNormal;
+
+                UnoccludedDirection += ConeVisibility * ConeDirectionWS;
+            }
+
+            float InvNumSamples = 1.0f / (float)NUM_CONE_DIRECTIONS;
+            float3 BentNormal = UnoccludedDirection * BentNormalNormalizeFactor * InvNumSamples;
+
+            RWCombinedDFBentNormal[DstCoordinate] = float4(BentNormal, DeviceZ);
         }
-
-        float InvNumSamples = 1.0f / (float)NUM_CONE_DIRECTIONS;
-        float3 BentNormal = UnoccludedDirection * BentNormalNormalizeFactor * InvNumSamples;
-
-        RWCombinedDFBentNormal[DstCoordinate] = float4(BentNormal, SceneDepth);
+        else
+        {
+            RWCombinedDFBentNormal[DstCoordinate] = float4(0,0,0,0);
+        }
     }
 }
 

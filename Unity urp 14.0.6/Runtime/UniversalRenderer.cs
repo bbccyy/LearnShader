@@ -113,7 +113,7 @@ namespace UnityEngine.Rendering.Universal
 #if UNITY_EDITOR
         CopyDepthPass m_FinalDepthCopyPass;
 #endif
-
+        
         internal RenderTargetBufferSystem m_ColorBufferSystem;
 
         internal RTHandle m_ActiveCameraColorAttachment;
@@ -1047,6 +1047,8 @@ namespace UnityEngine.Rendering.Universal
                 m_CopyColorPass.Setup(m_ActiveCameraColorAttachment, m_OpaqueColor, downsamplingMethod);
                 EnqueuePass(m_CopyColorPass);
             }
+
+            
 
             // Motion vectors
             if (renderPassInputs.requiresMotionVectors)

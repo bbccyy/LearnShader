@@ -56,31 +56,55 @@ Shader "Test/DistanceFieldLightingHelper"
                 float2 ScreenVelocity = 0;
 
                 float2 FullResTexel = UVAndScreenPos.xy - 0.5f * View_BufferSizeAndInvSize.zw;  //convert BaseLevelTexelSize to FullScreenTexelSize
-                float2 VelocityUV = SAMPLE_TEXTURE2D_LOD(_MotionVectorTexture, my_point_clamp_sampler, FullResTexel, 0).rg; //VelocityUV = (posNDC.xy - prevPosNDC.xy) * 0.5f
+                float2 VelocityUV = SAMPLE_TEXTURE2D_LOD(_MotionVectorTexture, my_point_clamp_sampler, FullResTexel, 0).rg * MotionVectorFactor; //VelocityUV = (posNDC.xy - prevPosNDC.xy) * 0.5f
 
                 float2 PreScreenPos = UVAndScreenPos.zw - VelocityUV * 2.0f;
                 float2 PreUV = PreScreenPos * 0.5f + 0.5f;
 
                 float EffectiveHistoryWeight = 0.85f;  //const value, but could be setted outside
                 [flatten]
-                if (any(PreUV > 0.9999) || any(PreUV < 0.0001))  //todo 
+                if (any(PreUV > 0.9999) || any(PreUV < 0.0001) || NewValue.w <= 0)  //todo 
                 {
                     EffectiveHistoryWeight = 0;
                 }
 
                 PreUV = clamp(PreUV, 0.0001, 0.9999); //do not sample an invalid place
 
-                float4 HistoryValue = SAMPLE_TEXTURE2D_LOD(_BentNormal_History, my_point_clamp_sampler, PreUV, 0);
+                float4 HistoryValue = SAMPLE_TEXTURE2D_LOD(_BentNorm_History, my_point_clamp_sampler, PreUV, 0);
+
+                float PositionWeight = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.xy, NewValue.w, PreUV, HistoryValue.w);
+                EffectiveHistoryWeight *= PositionWeight;
+
+                UpsampledBentNormal.rgb = lerp(NewValue.rgb, HistoryValue.rgb, EffectiveHistoryWeight);  //todo: FIX EffectiveHistoryWeight!
+                UpsampledBentNormal.rgb = MakeFinite(UpsampledBentNormal.rgb);
+                UpsampledBentNormal.rgb *= NewValue.w == 0 ? 0 : 1; //do not make the edge fluffy
+                UpsampledBentNormal.a = NewValue.w;
+                UpsampledBentNormal.a *= EffectiveHistoryWeight > 0 ? 1 : -1;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "FilterHistoryPS"
+            Tags {"RenderPipeline" = "UniversalPipeline"}
+            ZWrite Off ZTest Always Cull Back Blend Off
+
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment FragFilterHistory
+
+            void FragFilterHistory(
+                in Varyings IN,
+                out float4 OutBentNormal : SV_Target0
+            )
+            {
+                float2 BufferUV = IN.texcoord.xy;
+                float4 HistoryValue = SAMPLE_TEXTURE2D_LOD(_BentNorm_History, my_point_clamp_sampler, BufferUV, 0);
 
 
 
-                float CurrentSceneDepth = LinearEyeDepth(NewValue.w, _ZBufferParams);
-
-
-
-
-
-                UpsampledBentNormal = float4(NewValue.rgb, CurrentSceneDepth);
+                OutBentNormal = float4(HistoryValue.rgb, abs(HistoryValue.a));
             }
             ENDHLSL
         }

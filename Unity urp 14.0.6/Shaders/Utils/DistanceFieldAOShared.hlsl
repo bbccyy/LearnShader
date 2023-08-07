@@ -20,7 +20,7 @@ uniform Texture2D<float> _GBuffer4;				//Depth
 
 Texture2D<float4> _NormalDepth;					//the output RT of ComputeDistanceFieldNormalPS -> Half Resolution (set before use!)
 
-Texture2D<float4> _BentNormal_History;			//used for UpdateHistoryDepthRejectionPS pass <- grabbed from last frame bent normal texture output
+Texture2D<float4> _BentNorm_History;			//used for UpdateHistoryDepthRejectionPS pass <- grabbed from last frame bent normal texture output
 
 Texture3D<half> _GlobalDistanceFieldTexture0;	//SDF lod0	(readonly)	-> TODO ...
 Texture3D<half> _GlobalDistanceFieldTexture1;	//SDF lod1	(readonly)	-> TODO ...
@@ -31,6 +31,7 @@ RWTexture2D<float4> RWCombinedDFBentNormal;		//used for CombineConeVisibilityCS 
 Texture2D<float4> _CombinedDFBentNormal;		//used for UpdateHistoryDepthRejectionPS pass <- set before use
 
 Texture2D<float2> _MotionVectorTexture;			//used for UpdateHistoryDepthRejectionPS pass <- it's global
+float MotionVectorFactor;
 
 float4 View_BufferSizeAndInvSize;		//[1708, 960, 1/1708, 1/960]
 float4 View_ScreenPositionScaleBias;	//[0.5, +-0.5, 0.5, 0.5] 
@@ -48,7 +49,7 @@ float GlobalVolumeTexelSize;
 
 float4x4 _PrevInvViewProjMatrix;		//updated by MotionVectorRenderPass every frame
 
-#define UNITY_MATRIX_PRE_I_VP _PrevInvViewProjMatrix;
+//#define UNITY_MATRIX_PRE_I_VP _PrevInvViewProjMatrix;
 
 float TanConeHalfAngle;
 
@@ -69,6 +70,16 @@ float rcpFast(float x)
 	int i = asint(x);
 	i = 0x7EF311C2 - i;
 	return asfloat(i);
+}
+
+bool3 IsFinite(float3 In)
+{
+	return (asuint(In) & 0x7F800000) != 0x7F800000;
+}
+
+float3 MakeFinite(float3 In)
+{
+	return !IsFinite(In) ? 0 : In;
 }
 
 //通过传入的ConeTracingGridCoordinate（大约200x100）的分辨率，映射到用于存放最终BentNormal贴图的分辨率，大约854x480
@@ -92,13 +103,15 @@ float2 GetFullResUVFromBufferGrid(uint2 PixelCoordinate, float JitterScale = 1.0
 	return ScreenUV;
 }
 
-//Return Wolrd Normal and DeviceZ Depth 
+//Return Wolrd Normal and DeviceZ Depth
 void GetNormalDepthGBuffer(float2 UV, out float3 Norm, out float Depth)
 {
 	//float4 norm_depth =  _NormalDepth.SampleLevel(my_point_clamp_sampler, UV, 0).xyzw;
 	float4 norm_depth = SAMPLE_TEXTURE2D_LOD(_NormalDepth, my_point_clamp_sampler, UV, 0).xyzw;
 	Norm = norm_depth.xyz;
-	Depth = norm_depth.w <= 0 ? 1 : norm_depth.w;  //TODO 
+	//Depth = norm_depth.w <= 0 ? 1 : norm_depth.w;  //TODO
+	Depth = norm_depth.w;  //TODO
+
 }
 
 //Build Tangent and Bitangent to form TBN matrix 
@@ -182,7 +195,7 @@ void GetNormalWeights(float2 UV, float2 TexelSize, float3 WorldNormal, out float
 {
 	{
 		float3 SampleWorldNormal; float Temp;
-		GetNormalDepthGBuffer(UV, SampleWorldNormal, Temp);
+		GetNormalDepthGBuffer(UV, SampleWorldNormal, Temp); //对于空白区域，SampleWorldNormal返回0，从而导致该方向NormalWeights也为0 -> 符合预期
 		NormalWeights.x = dot(SampleWorldNormal, WorldNormal);
 	}
 	{
@@ -221,7 +234,7 @@ void GeometryAwareUpsample(float4 UVAndScreenPos, out float4 OutBentNormal)
 
 	float2 LowResUV = Corner00UV + 0.5f * ScreenGridBufferAndTexelSize.zw; //对齐ScreenGridTexel像素中心点后的低分辨率UV
 
-	//采样4邻域（田字）
+	//采样4邻域（田字）-> 注意，可能采样到0值 -> 对应渲染物体之外的不处理区域
 	float4 Value00 = SAMPLE_TEXTURE2D_LOD(_CombinedDFBentNormal, my_point_clamp_sampler, LowResUV, 0);
 	float4 Value10 = SAMPLE_TEXTURE2D_LOD(_CombinedDFBentNormal, my_point_clamp_sampler, LowResUV + float2(ScreenGridBufferAndTexelSize.z, 0), 0);
 	float4 Value01 = SAMPLE_TEXTURE2D_LOD(_CombinedDFBentNormal, my_point_clamp_sampler, LowResUV + float2(0, ScreenGridBufferAndTexelSize.w), 0);
@@ -265,13 +278,21 @@ void GeometryAwareUpsample(float4 UVAndScreenPos, out float4 OutBentNormal)
 	OutBentNormal = float4(AverageBentNormal, DeviceZ);
 
 	float BentNormalLength = length(OutBentNormal.rgb);
-	float3 NormalizedBentNormal = OutBentNormal.rgb / max(BentNormalLength, .0001f);  //处理极限取值的情况
+	float3 NormalizedBentNormal = OutBentNormal.rgb / max(BentNormalLength, .0001f);
 	OutBentNormal.rgb = NormalizedBentNormal * BentNormalLength;
 }
 
-float ComputeHistoryWeightBasedOnPosition()
+float ComputeHistoryWeightBasedOnPosition(float2 UV, float DeviceZ, float2 OldUV, float OldDeviceZ)
 {
-	//float3 WorldPosition = ComputeWorldSpacePosition(UV, DeviceZ, UNITY_MATRIX_PRE_I_VP);
+	float3 WorldPosition = ComputeWorldSpacePosition(UV, DeviceZ, UNITY_MATRIX_I_VP);
+	float3 OldWorldPosition = ComputeWorldSpacePosition(OldUV, OldDeviceZ, _PrevInvViewProjMatrix); 
 
-	return 0;
+	float DistanceToHistoryValue = length(OldWorldPosition - WorldPosition);
+
+	const float HistoryDistanceThreshold = 30;
+	float RelativeHistoryDistanceThreshold = HistoryDistanceThreshold / 10.0f;
+
+	float SceneDepth = LinearEyeDepth(DeviceZ, _ZBufferParams);
+
+	return DistanceToHistoryValue / SceneDepth > RelativeHistoryDistanceThreshold ? 0.0f : 1.0f;
 }
