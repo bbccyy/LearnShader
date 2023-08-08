@@ -750,8 +750,8 @@ float4 FragKenaDirectLight(Varyings IN) : SV_Target
         kena_LightData.SourceRadius = 0.00467;	//cb1[6].w=0.00467
         kena_LightData.SoftSourceRadius = 0;	//cb1[7].z=0 
         kena_LightData.bInverseSquared = true;	//todo  uint4
-        kena_LightData.SpecularScale = 0.2;		//cb1[5].w=1.0     
-        kena_LightData.Color = float4(17.99882, 18.66276, 19.00, 0.00) * 0.3;	//cb1[5].w=1.0  
+        kena_LightData.SpecularScale = 1;		//cb1[5].w=1.0     
+        kena_LightData.Color = float4(17.99882, 18.66276, 19.00, 0.00) * 1;	//cb1[5].w=1.0  
     #else
         kena_LightData.ShadowedBits = 3;		  //cb1[2].x=3 -> 需用uint4查看 
         kena_LightData.ContactShadowLength = 0.2; //cb1[1].z=0.2 

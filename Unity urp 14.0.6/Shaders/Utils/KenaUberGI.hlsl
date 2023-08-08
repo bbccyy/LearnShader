@@ -519,7 +519,7 @@ half4 FragKenaGI (Varyings IN) : SV_Target
 
     //float4 texA = SAMPLE_TEXTURE2D(_GNorm, sampler_GNorm, IN.screenUV.xy).rgba;
 
-    test.xyz = (OutColor.rgb) * 0.5;  //TODO: 解决输入纹理精度问题后再进行调整 
+    test.xyz = (OutColor.rgb) * 1;  //TODO: 解决输入纹理精度问题后再进行调整 
     //test.xyz = texA.a / 30000; //用于输出 ReflectionEnvironment 
 
     return test;

@@ -102,7 +102,7 @@ Shader "Test/DistanceFieldLightingHelper"
                 float2 BufferUV = IN.texcoord.xy;
                 float4 HistoryValue = SAMPLE_TEXTURE2D_LOD(_BentNorm_History, my_point_clamp_sampler, BufferUV, 0);
 
-
+                //todo
 
                 OutBentNormal = float4(HistoryValue.rgb, abs(HistoryValue.a));
             }
