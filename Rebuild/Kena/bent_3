@@ -151,7 +151,7 @@ ps_5_0
  120: add r2.xyz, r2.xyzx, cb1[125].xywx                                            -> float4 PrevClip = mul( ThisClip, View.ClipToPrevClip ); 
  121: div r2.xy, r2.xyxx, r2.zzzz                                                   -> float2 PrevScreen = PrevClip.xy / PrevClip.w; 
  122: add r2.xy, -r2.xyxx, v0.zwzz
- 123: mad r2.zw, -cb1[131].zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), v0.xxxy
+ 123: mad r2.zw, -cb1[131].zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), v0.xxxy 
  124: sample_l(texture2d)(float,float,float,float) r2.zw, r2.zwzz, t3.zwxy, s3, l(0)      -> float2 VelocityN = 
                                                                                                 Texture2DSampleLevel(VelocityTexture, VelocityTextureSampler, FullResTexel, 0).xy; 
  125: lt r1.w, l(0), r2.z
