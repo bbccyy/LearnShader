@@ -10,7 +10,7 @@
 #endif
 
 
-RWTexture2D<float4> _DebugTexture;
+//RWTexture2D<float4> _DebugTexture;
 RWTexture2D<float4> _DebugTexture3X3;
 
 void ResetBufferData(uint ConeTraceGridIndex)
@@ -48,9 +48,6 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
     }
 #endif
 
-    //uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-    //_DebugTexture[coord] = float4(WorldShadingPosition.xyz, MinStepSize);
-
     [unroll]
     for (uint ConeIndex = 0; ConeIndex < NUM_CONE_DIRECTIONS; ConeIndex++)
     {
@@ -60,15 +57,7 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
 
         float MinVisibility = 1.0f;
         float WorldStepOffset = InitialOffset;
-
-        if (ConeIndex == 0)
-        {
-            uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-            //_DebugTexture[coord] = float4(WorldStepOffset, AOGlobalMaxOcclusionDistanceAndInv[0], ConeDirectionWS.xy);
-            //_DebugTexture[coord] = float4(InitialOffset.xxxx);
-        }
         
-
         [loop]
         for (uint StepIndex = 0; StepIndex < NUM_CONE_STEPS && WorldStepOffset < AOGlobalMaxOcclusionDistanceAndInv[0]; StepIndex++)
         {
@@ -87,13 +76,6 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
 
             MinVisibility = min(MinVisibility, Visibility);
 
-            if (StepIndex == 0 && ConeIndex == 0)
-            {
-                uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-                //_DebugTexture[coord] = float4(StepVolumeUV.xyz, ClipmapIndex);
-                //_DebugTexture[coord] = float4(1,1,1,1);
-            }
-
             WorldStepOffset += max(DistanceToOccluder, MinStepSize); //accelerate computation of simple case by applying DistanceToOccluder here 
         }
 
@@ -106,11 +88,11 @@ void HemisphereConeTraceGlobalDistanceFieldClipmap(
             asuint(MinVisibility) 
                     );
 
-        if (ConeIndex == 0)
-        {
-            uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
-            _DebugTexture[coord] = float4(MinVisibility.xxxx);   //TODO: remove
-        }
+        //if (ConeIndex == 0)
+        //{
+        //    uint2 coord = GridIndexToCoordination(ConeTraceGridIndex);
+        //    _DebugTexture[coord] = float4(MinVisibility.xxxx);   //TODO: remove
+        //}
     }
 }
 
@@ -120,9 +102,6 @@ void HemisphereConeTraceGlobalDistanceField(
     float3 WorldNormal, float3 Tangent, float3 Bitangent)
 {
     float DistanceFromClipmap = ComputeDistanceFromBoxToPointInside(GlobalVolumeCenterAndExtent[0].xyz, GlobalVolumeCenterAndExtent[0].www, WorldShadingPosition);
-
-    uint2 coord = GridIndexToCoordination(GridIndex);
-    //_DebugTexture[coord] = float4(WorldShadingPosition.xyz, DistanceFromClipmap); 
 
     //2 LOD vs UE's 4 LOD 
     [branch]
@@ -172,8 +151,6 @@ void ConeTraceGlobalOcclusionCS(
                 ConeTracingGridIndex, WorldShadingPosition, SceneDepth,
                 NormalWS, TangentX, TangentY);
         }
-
-        //_DebugTexture[DstCoordinate] = float4(WorldShadingPosition.xyz, SceneDepth);
     }
 }
 
@@ -199,7 +176,7 @@ void DebugCS(
             uint row = ConeIndex % 3;
             uint col = ConeIndex / 3;
             uint2 coord = uint2(row, col) * ScreenGridConeVisibilitySize.xy + DstCoordinate;
-            _DebugTexture3X3[coord] = visibility.xxxx;   
+            _DebugTexture3X3[coord] = visibility.xxxx;
         }
     }
 }

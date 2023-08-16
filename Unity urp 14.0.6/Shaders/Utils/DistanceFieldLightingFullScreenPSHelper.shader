@@ -56,12 +56,12 @@ Shader "Test/DistanceFieldLightingHelper"
                 float2 ScreenVelocity = 0;
 
                 float2 FullResTexel = UVAndScreenPos.xy - 0.5f * View_BufferSizeAndInvSize.zw;  //convert BaseLevelTexelSize to FullScreenTexelSize
-                float2 VelocityUV = SAMPLE_TEXTURE2D_LOD(_MotionVectorTexture, my_point_clamp_sampler, FullResTexel, 0).rg * MotionVectorFactor; //VelocityUV = (posNDC.xy - prevPosNDC.xy) * 0.5f
+                float2 VelocityUV = SAMPLE_TEXTURE2D_LOD(_BentNormalMotionVectorTexture, my_point_clamp_sampler, FullResTexel, 0).rg; //VelocityUV = (posNDC.xy - prevPosNDC.xy) * 0.5f
 
                 float2 PreScreenPos = UVAndScreenPos.zw - VelocityUV * 2.0f;
                 float2 PreUV = PreScreenPos * 0.5f + 0.5f;
 
-                float EffectiveHistoryWeight = 0.85f;  //const value, but could be setted outside
+                float EffectiveHistoryWeight = HistoryWeight;  //const value, but could be setted outside
                 [flatten]
                 if (any(PreUV > 0.9999) || any(PreUV < 0.0001) || NewValue.w <= 0)  //todo 
                 {
@@ -94,17 +94,53 @@ Shader "Test/DistanceFieldLightingHelper"
             #pragma vertex Vert
             #pragma fragment FragFilterHistory
 
+            #define HALF_HISTORY_FILL_KERNEL_SIZE 2
+
             void FragFilterHistory(
                 in Varyings IN,
                 out float4 OutBentNormal : SV_Target0
             )
             {
                 float2 BufferUV = IN.texcoord.xy;
-                float4 HistoryValue = SAMPLE_TEXTURE2D_LOD(_BentNorm_History, my_point_clamp_sampler, BufferUV, 0);
+                float4 CurrentValue = SAMPLE_TEXTURE2D_LOD(_BentNorm, my_point_clamp_sampler, BufferUV, 0);
 
-                //todo
+                if (CurrentValue.w < 0)
+                {
+                    float4 HistoryValue = CurrentValue;  //Find out History value that had been rejected by previous pass
+                    float  DeviceZ = abs(HistoryValue.w);
+                    float4 Accumulation = 0;
+                    
+                    for (float y = -HALF_HISTORY_FILL_KERNEL_SIZE; y <= HALF_HISTORY_FILL_KERNEL_SIZE; y++)
+                    {
+                        for (float x = -HALF_HISTORY_FILL_KERNEL_SIZE; x <= HALF_HISTORY_FILL_KERNEL_SIZE; x++)
+                        {
+                            float2 SampleBufferUV = BufferUV + BaseLevelSizeAndTexelSize.zw * float2(x, y);
 
-                OutBentNormal = float4(HistoryValue.rgb, abs(HistoryValue.a));
+                            float4 TextureValue = SAMPLE_TEXTURE2D_LOD(_BentNorm, my_point_clamp_sampler, SampleBufferUV, 0);
+                            float ValidMask = TextureValue.w > 0;
+
+                            float SampleDeviceZ = abs(TextureValue.w);
+
+                            float DepthWeight = exp2(-1000 * abs(SampleDeviceZ - DeviceZ) / DeviceZ); //TODO: how about using scene depth?
+                            float2 SSWeight = exp2(-abs(float2(x, y) * 10.0f / HALF_HISTORY_FILL_KERNEL_SIZE));
+                            float ScreenSpaceSpatialWeight = max(SSWeight.x, SSWeight.y);
+
+                            
+                            float Weight = ValidMask * ScreenSpaceSpatialWeight * DepthWeight;
+
+                            Accumulation.rgb += TextureValue.rgb * Weight;
+                            Accumulation.a += Weight;
+                        }
+                    }
+
+                    if (Accumulation.a > 0)
+                    {
+                        float InvWeight = 1.0f / Accumulation.a;
+                        CurrentValue.xyz = lerp(HistoryValue.xyz, Accumulation.xyz * InvWeight, HistoryWeight);
+                    }
+                }
+
+                OutBentNormal = float4(CurrentValue.rgb, abs(CurrentValue.a));
             }
             ENDHLSL
         }

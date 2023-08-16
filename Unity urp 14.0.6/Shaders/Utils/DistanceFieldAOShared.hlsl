@@ -21,6 +21,7 @@ uniform Texture2D<float> _GBuffer4;				//Depth
 Texture2D<float4> _NormalDepth;					//the output RT of ComputeDistanceFieldNormalPS -> Half Resolution (set before use!)
 
 Texture2D<float4> _BentNorm_History;			//used for UpdateHistoryDepthRejectionPS pass <- grabbed from last frame bent normal texture output
+Texture2D<float4> _BentNorm;
 
 Texture3D<half> _GlobalDistanceFieldTexture0;	//SDF lod0	(readonly)	-> TODO ... 
 Texture3D<half> _GlobalDistanceFieldTexture1;	//SDF lod1	(readonly)	-> TODO ...
@@ -29,9 +30,8 @@ RWBuffer<uint> RWScreenGridConeVisibility;		//used for CombineConeVisibilityCS p
 
 RWTexture2D<float4> RWCombinedDFBentNormal;		//used for CombineConeVisibilityCS pass
 Texture2D<float4> _CombinedDFBentNormal;		//used for UpdateHistoryDepthRejectionPS pass <- set before use
-
-Texture2D<float2> _MotionVectorTexture;			//used for UpdateHistoryDepthRejectionPS pass <- it's global
-float MotionVectorFactor;
+		
+Texture2D<float2> _BentNormalMotionVectorTexture;//used for UpdateHistoryDepthRejectionPS pass <- it's global
 
 float4 View_BufferSizeAndInvSize;		//[1708, 960, 1/1708, 1/960]
 float4 View_ScreenPositionScaleBias;	//[0.5, +-0.5, 0.5, 0.5] 
@@ -46,6 +46,8 @@ float4 GlobalVolumeCenterAndExtent[2];	//Vector4 array
 float4 GlobalVolumeWorldToUVAddAndMul[2]; 
 float AOGlobalMaxOcclusionDistanceAndInv[2];
 float GlobalVolumeTexelSize;
+
+float HistoryWeight;	//0.85
 
 float4x4 _PrevInvViewProjMatrix;		//updated by MotionVectorRenderPass every frame
 
