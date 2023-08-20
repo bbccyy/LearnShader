@@ -1,0 +1,586 @@
+fileFormatVersion: 2
+guid: 6c042c2c0e140524e8ae611672927b5b
+ModelImporter:
+  serializedVersion: 21300
+  internalIDToNameTable: []
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams
+    second: {fileID: 2100000, guid: 408471c861fa9f446bf266e0f9a70d91, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Bent
+    second: {fileID: 2100000, guid: fadf806aae1ddbe4f8534395588339e7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Bent_Dark
+    second: {fileID: 2100000, guid: 04c002878d1cd594eb27e12be4d6a719, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Bent_Light
+    second: {fileID: 2100000, guid: da1278a5a1b7f2949a7d3ebe437053f1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Broken_01
+    second: {fileID: 2100000, guid: 3c8752b5a7986f64b9dccafc3a7cbb5b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Broken_02
+    second: {fileID: 2100000, guid: 6352d9d730634144595cab8d0e23ae97, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_CameraDither
+    second: {fileID: 2100000, guid: 0f54b8a4cda19be44afa8922ff16d935, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Dark
+    second: {fileID: 2100000, guid: b378d3cdd0ee8624dac1dc88872cc94d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_Interior
+    second: {fileID: 2100000, guid: d2be9cf85624f2c4ab0b0845c1007131, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_RoundLrg
+    second: {fileID: 2100000, guid: e2321b6329aa26941a8ffe59952eea7d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Beams_RoundSml
+    second: {fileID: 2100000, guid: a15dbe48318b80b42b61576a70ecb96a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Bow_DrawBridge_closed_Rope
+    second: {fileID: 2100000, guid: 94198a1802dbc47419c9811ffb2b5d11, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Bow_DrawBridge_closed_Wood1
+    second: {fileID: 2100000, guid: 8d15c1f4461121547910cacf2a0b4008, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Large01
+    second: {fileID: 2100000, guid: de0b557edd9c636418e30def4f53366f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Large02
+    second: {fileID: 2100000, guid: d51e812e4971b344ab371601a54f9ec0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Med01
+    second: {fileID: 2100000, guid: eb24806e637c37146b674bf7ea5a7125, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Med02
+    second: {fileID: 2100000, guid: 11ee9bec57fab6e4b9becb17e81bd96b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Small01
+    second: {fileID: 2100000, guid: b6ecc14223ef39244b4f57c4b96a23a3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Small02
+    second: {fileID: 2100000, guid: babb41b51f85dba47b9240668594d59e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Small03
+    second: {fileID: 2100000, guid: a0142f9807a84a14a9a03cadf86acfa4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_CliffWall_Small05
+    second: {fileID: 2100000, guid: 05ec9b1aa8338534b97db87126b6991d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Cliff_Rock_05
+    second: {fileID: 2100000, guid: 152b895c803e1d14ab200615046ec88b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Cliff_Sheer_v2
+    second: {fileID: 2100000, guid: 5b76ce67eb457ff44bcace8a3ee1ba46, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Crates
+    second: {fileID: 2100000, guid: 333d25c1d369c424bb7544765121876c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_DZ_Blend_DirtSlope_Grass
+    second: {fileID: 2100000, guid: 1102c37b8e0575e41ae8261cd257919c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_DeadzoneDecay_SmallDeadTree
+    second: {fileID: 2100000, guid: 65c4081f39eab394bb86f047729dcc97, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Dirt_Tile03
+    second: {fileID: 2100000, guid: 5ef8098669876b44b8845176e49c9d72, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_FieldLamps
+    second: {fileID: 2100000, guid: 26646394214164349bfcee75c548d8dc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Firewood
+    second: {fileID: 2100000, guid: ed9f4925fd18d7d4a9a63d35d30874e8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_GodTree_Main_01_Base
+    second: {fileID: 2100000, guid: 3569d6c8e089403489e3f8dbbb538116, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_GodTree_Main_02_Base
+    second: {fileID: 2100000, guid: d66994e0aa840d84ba2bc5116583ed57, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_HangingLanternLeaves
+    second: {fileID: 2100000, guid: 4965debbf4194974ab1685af35929f53, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_HangingLantern_Wind
+    second: {fileID: 2100000, guid: 14a98ff84035f5c44b6db40f593f6900, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_House_Foundation
+    second: {fileID: 2100000, guid: 9d1ad254e1dbcf34cb6a002d67a8bcf7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_House_Planks
+    second: {fileID: 2100000, guid: 18dbb5eb7b7de65488397d742055c38c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_House_Planks_Painted
+    second: {fileID: 2100000, guid: 339e2a3896ae9bf4b9d479f0fd2ea668, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_LightHouse_BigRoot_Clean
+    second: {fileID: 2100000, guid: cd3785097a6e245428e1d3b7abb2e656, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_MerchantStall_Cloth
+    second: {fileID: 2100000, guid: 25bc712bcb8e86e45a50749bfa194c16, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_MerchantStall_Cloth_Wind
+    second: {fileID: 2100000, guid: 540a53067ac167c4d9637166742ff16f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_MerchantStall_Wood
+    second: {fileID: 2100000, guid: ed38b67eb418bef42aa05eddea5019d4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_MerchantStall_WoodPlain
+    second: {fileID: 2100000, guid: 2b4f6a70fc586a340a160c7b856ef27c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_MerchantStall_WoodPlank
+    second: {fileID: 2100000, guid: 7de8f39ee1e106446a963184049a4a91, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_PathLanterns
+    second: {fileID: 2100000, guid: c5da04163e4b13f4c8cf948d7387b515, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Planks
+    second: {fileID: 2100000, guid: 28ac1ba82dcabcb4abf403be11bd47ce, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_PlanksTileable
+    second: {fileID: 2100000, guid: 6c35e90967fa2e445b29cab37ed8f041, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Rock_Medium
+    second: {fileID: 2100000, guid: c09a4a89a7183e240b6bc6d1607f1777, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Rock_Small_05
+    second: {fileID: 2100000, guid: 1752070a7e9cde24c9097b8856f7ffc4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Rocks_Pond_01
+    second: {fileID: 2100000, guid: 2d173fc89b5dbb144b89e14709651ba0, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Rotpot_NoRipple
+    second: {fileID: 2100000, guid: 9b3cebe8edf15e240bd33aca63898659, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_RusuHut_Foundation_WoodTile
+    second: {fileID: 2100000, guid: 95804d0100289d94ab2f97312c98aa43, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Shell_Thatch
+    second: {fileID: 2100000, guid: 2d7f3a049b0fa8e4ea4be44de6e07bfb, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_SmallDeadTree
+    second: {fileID: 2100000, guid: 3d92db1672af1cb448bb60a531d72818, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_SpirtiMailBox
+    second: {fileID: 2100000, guid: 0bf8d5596cf0dd8439f1f05b9b8336e1, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_StoneWall_01
+    second: {fileID: 2100000, guid: a5cc06fe1c8ce9a49abc5593cc685fd2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_StructureBeam_Long_House
+    second: {fileID: 2100000, guid: 0d1e153a318a0694bbaba2a512b851be, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_StructureBeams_Short
+    second: {fileID: 2100000, guid: fd811c68420b6be40b3092fda91e3c36, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_Structure_Rope
+    second: {fileID: 2100000, guid: 193f984939452ae4f9f33d4df896cf97, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_ToolStair
+    second: {fileID: 2100000, guid: bcb577cc050dc5b43b984f47ec705202, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeLog
+    second: {fileID: 2100000, guid: 37df4a8c995073846b92bfff72045c02, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeLog_Hollow
+    second: {fileID: 2100000, guid: c1b1062a00788bd4ba89706d9a4a3f55, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Gong
+    second: {fileID: 2100000, guid: cc767ead80e2cbc4ea9e4b7041e1048c, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Inside
+    second: {fileID: 2100000, guid: 2daa32b3760583949ac5c55e9973184b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_MSWood
+    second: {fileID: 2100000, guid: 73c8f0e49c9cebc4d811b2705f96c2de, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_MSWoodPlank
+    second: {fileID: 2100000, guid: 92246b5d2de67f1439ea3f1ca38c053d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Outside
+    second: {fileID: 2100000, guid: 24f11c2466749e4429498e3471fb04c7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Rope
+    second: {fileID: 2100000, guid: 12a942ab41e860f4087847dcdd9d5ab7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Shell_Rope
+    second: {fileID: 2100000, guid: b9bb399cb2457a74a95c95c76883eff9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_Shell_Thatch
+    second: {fileID: 2100000, guid: c613435139768ca45adea6b799f4f4e9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_ThatchAlpha
+    second: {fileID: 2100000, guid: bd935544531de5741abb45d7b3cf937e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_WLSideThatch
+    second: {fileID: 2100000, guid: ad7aa952ad51ccc48b585160e57596a7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_WLThatch
+    second: {fileID: 2100000, guid: ddfa23aa87b76324281f07bb020c69f9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_TreeStructure_WLWood02
+    second: {fileID: 2100000, guid: ed793b01608516846810df9d1c2dac9f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageCart_Barrel
+    second: {fileID: 2100000, guid: 6fc72e41c7b3d1844ad2e4fb4c9127fc, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageCart_Bowls
+    second: {fileID: 2100000, guid: cf1be85fe7d1c834288be8c091546d5e, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageCart_Pots
+    second: {fileID: 2100000, guid: 4ea178518e993ae4ca28a3bcf5523d7d, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageCart_Pots_Blue
+    second: {fileID: 2100000, guid: 9654fe765bcbabd45af03db8b879c908, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHeartExitStructureMerchantStall
+    second: {fileID: 2100000, guid: 225620cbd15650048bcee117df538837, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitThatch
+    second: {fileID: 2100000, guid: 3bc40ccb4815e114f8df377c38f3693f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitThatchAlpha
+    second: {fileID: 2100000, guid: fd0a4dcc44f11d248b4a37d03ae197a8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitThatchAlpha2
+    second: {fileID: 2100000, guid: f722bfea5c892d34994511ef3430611a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitThatchSide
+    second: {fileID: 2100000, guid: 1002cf4d95e5c844e807387417a93f2f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitWallDecal_V2
+    second: {fileID: 2100000, guid: 8ca0110079bdf7745b844c5ab52f4ca2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitWall_V2
+    second: {fileID: 2100000, guid: 225b15ccb26cfd24ab1851a57c0af827, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_VillageHouseKitWoodTiling
+    second: {fileID: 2100000, guid: 94ecf62c0e33d044d871fca4b1faafd5, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WSArena_Beam_Long
+    second: {fileID: 2100000, guid: bcfb01e133114e243b3074b4de582873, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WSArena_Beams_Short
+    second: {fileID: 2100000, guid: c78ec1c7777d97d4088da45c4b88e1b2, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WSArena_Planks
+    second: {fileID: 2100000, guid: dde013c61cf0af54d9c1ab7c22b24ef4, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WoodFences
+    second: {fileID: 2100000, guid: 8a7becc1a6d56a04482834f1a7547ace, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WoodFences_Darker_Dither
+    second: {fileID: 2100000, guid: c52173817d9feae4dbfdff9a095a6af3, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: MI_WoodTiledInteriors
+    second: {fileID: 2100000, guid: 48040179f0ca8704a821c47e297f3049, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: M_Decal_dirt
+    second: {fileID: 2100000, guid: eca014b1b79bd0e41bd3d6d769e755ca, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: M_HangingStreetLamp
+    second: {fileID: 2100000, guid: 6d58597ed04fd1a4cae9c12c3b6c648b, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: SmallRocks_01_INST
+    second: {fileID: 2100000, guid: 5c91d4fdf34082c4daef82ce22b12a8a, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: StoneSteps_INST3
+    second: {fileID: 2100000, guid: 1fef1dc75b8bcd54aacec57cb957b12f, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: T_Dirt_Tile_Mat_Inst3
+    second: {fileID: 2100000, guid: f08c1e5cbc0d657428e83c21543e3396, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: TileableTextures_Rope_INST
+    second: {fileID: 2100000, guid: 2ba6f7f2a2ab94e4988f67d57ef53f1a, type: 2}
+  materials:
+    materialImportMode: 2
+    materialName: 0
+    materialSearch: 2
+    materialLocation: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleCurves: 1
+    optimizeGameObjects: 0
+    removeConstantScaleCurves: 1
+    motionNodeName: 
+    rigImportErrors: 
+    rigImportWarnings: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    importAnimatedCustomProperties: 0
+    importConstraints: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    extraUserProperties: []
+    clipAnimations: []
+    isReadable: 0
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 1
+    meshCompression: 0
+    addColliders: 0
+    useSRGBMaterialColor: 1
+    sortHierarchyByName: 1
+    importVisibility: 1
+    importBlendShapes: 1
+    importCameras: 1
+    importLights: 1
+    nodeNameCollisionStrategy: 1
+    fileIdsGeneration: 2
+    swapUVChannels: 0
+    generateSecondaryUV: 1
+    useFileUnits: 1
+    keepQuads: 0
+    weldVertices: 1
+    bakeAxisConversion: 0
+    preserveHierarchy: 0
+    skinWeightsMode: 0
+    maxBonesPerVertex: 4
+    minBoneWeight: 0.001
+    optimizeBones: 1
+    meshOptimizationFlags: -1
+    indexFormat: 0
+    secondaryUVAngleDistortion: 15
+    secondaryUVAreaDistortion: 28
+    secondaryUVHardAngle: 88
+    secondaryUVMarginMethod: 0
+    secondaryUVMinLightmapResolution: 5
+    secondaryUVMinObjectScale: 1
+    secondaryUVPackMargin: 1
+    useFileScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+    normalCalculationMode: 4
+    legacyComputeAllNormalsFromSmoothingGroupsWhenMeshHasBlendShapes: 0
+    blendShapeNormalImportMode: 1
+    normalSmoothingSource: 0
+  referencedClips: []
+  importAnimation: 1
+  humanDescription:
+    serializedVersion: 3
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    globalScale: 1
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+    hasExtraRoot: 0
+    skeletonHasParents: 1
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  autoGenerateAvatarMappingIfUnspecified: 1
+  animationType: 2
+  humanoidOversampling: 1
+  avatarSetup: 0
+  addHumanoidExtraRootOnlyWhenUsingAvatar: 1
+  remapMaterialsIfMaterialImportModeIsNone: 0
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
