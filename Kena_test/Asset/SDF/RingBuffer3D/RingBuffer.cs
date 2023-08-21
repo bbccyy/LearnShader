@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
+using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace Rendering.RuntimeTools.RingBuffer
 {
@@ -29,10 +30,14 @@ namespace Rendering.RuntimeTools.RingBuffer
 
     public class RingBufferBase
     {
-        //private Transform m_followee;       //期望的buffer中心点坐标
-        private Vector3 mRingBufferAABBExtension;       //Buffer对应立方体的三维长宽高
+        public static readonly int MinimumPixelGroupSize = 8;
 
-        private Vector3 mRingBufferTextureSize;         //in pixel
+        //private Transform m_followee;       //期望的buffer中心点坐标
+        private Vector3 mRingBufferAABBExtension;       //Buffer对应立方体的三维长宽高的一半
+
+        private Vector3 mRingBufferAABBSize;            //Buffer对应立方体的三维长宽高
+
+        private Vector3 mRingBufferTextureSize;         //Texture3D pixel resolution
 
         private Vector3 mRingBufferAABBCenterPosition;  //Buffer立方体中心点坐标(世界空间)
 
@@ -40,13 +45,15 @@ namespace Rendering.RuntimeTools.RingBuffer
         
         private Vector3 mOnWorkingBufferAABBCenterPosition;     //正在处理中的位置
 
-        private ERINB_BUFFER_EXEC_STATE State;
+        private ERING_BUFFER_EXEC_STATE State;
 
         private ISourceProvider mSourceProvider;
 
         private ITileManager mTileMgr;
 
-        private Vector3Int mMinimumDeltaUnitSizeInPixel;  //最小搬运尺寸,位移小于这个像素值不会触发Buffer更新
+        private Vector3Int mMinimumCopyDeltaMultiply;  //最小搬运尺寸,位移小于这个像素值不会触发Buffer更新
+
+        private Vector3 mMinimumCopyDeltaSize;
 
         private int AsyncLoadingCounter = 0;
 
@@ -60,7 +67,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             this.mTileMgr = aTileMgr;
             dummy = new Texture3D(1,1,1, TextureFormat.RFloat, false);
             dummy.SetPixel(0, 0, 0, Color.white);
-            State = ERINB_BUFFER_EXEC_STATE.InValid;
+            State = ERING_BUFFER_EXEC_STATE.InValid;
         }
 
         /// <summary>
@@ -68,9 +75,9 @@ namespace Rendering.RuntimeTools.RingBuffer
         /// </summary>
         /// <param name="aExtention">在世界空间中由Buffer数据填充的AABB包围盒的半边长</param>
         /// <param name="aCenterPos">包围盒中心位置</param>
-        /// <param name="aMinDeltaSize">支持拷贝和搬运的最小像素尺寸，当差距小于该尺寸时不触发Buffer的更新</param>
+        /// <param name="aMinCopyDeltaMultiply">支持拷贝和搬运的最小像素尺寸，当差距小于该尺寸时不触发Buffer的更新</param>
         /// <param name="aBufferTexSize">Buffer对应Texture3D的width，height和depth</param>
-        public void Init(Vector3 aExtention, Vector3 aCenterPos, Vector3Int aMinDeltaSize, Vector3 aBufferTexSize)
+        public void Init(Vector3 aExtention, Vector3 aCenterPos, Vector3Int aMinCopyDeltaMultiply, Vector3 aBufferTexSize)
         {
             mRingBufferAABBCenterPosition.Set(
                 Mathf.Floor(aCenterPos.x),
@@ -78,8 +85,9 @@ namespace Rendering.RuntimeTools.RingBuffer
                 Mathf.Floor(aCenterPos.z)
                 );
             mRingBufferAABBExtension = aExtention;
+            mRingBufferAABBSize = mRingBufferAABBExtension * 2;
             mRingBufferTextureSize = aBufferTexSize;
-            mMinimumDeltaUnitSizeInPixel = aMinDeltaSize;
+            mMinimumCopyDeltaMultiply = aMinCopyDeltaMultiply;
 
             Epsilon = aExtention;
             Epsilon.Set(
@@ -87,48 +95,171 @@ namespace Rendering.RuntimeTools.RingBuffer
                 Epsilon.y / aBufferTexSize.y,
                 Epsilon.z / aBufferTexSize.z);
 
+            mMinimumCopyDeltaSize = mMinimumCopyDeltaMultiply * MinimumPixelGroupSize;
+            mMinimumCopyDeltaSize.x *= (Epsilon.x * 2);
+            mMinimumCopyDeltaSize.y *= (Epsilon.y * 2);
+            mMinimumCopyDeltaSize.z *= (Epsilon.z * 2);
 
             mPool = new ObjectPool<Work3D>(null, Work3D.OnReturnWork);
 
-            State = ERINB_BUFFER_EXEC_STATE.Init;
+            State = ERING_BUFFER_EXEC_STATE.Init;
         }
 
         public void Setup(Vector3 aDesiredTargetCenter)
         {
             mDesiredBufferAABBCenterPosition = aDesiredTargetCenter;
-            State |= ERINB_BUFFER_EXEC_STATE.IsDirty;
+            State |= ERING_BUFFER_EXEC_STATE.IsDirty;
         }
 
         public void Execute(CommandBuffer cmd = null)
         {
-            if (State == ERINB_BUFFER_EXEC_STATE.InValid || 
-                State == ERINB_BUFFER_EXEC_STATE.WAIT) 
+            if (State == ERING_BUFFER_EXEC_STATE.InValid || 
+                State == ERING_BUFFER_EXEC_STATE.Normal)
                 return;
+
+            EBUILD_STRATEGY strategy = EBUILD_STRATEGY.INVALID;
 
             switch (State)
             {
-                case ERINB_BUFFER_EXEC_STATE.Init:
+                case ERING_BUFFER_EXEC_STATE.Init:
+                    strategy = EBUILD_STRATEGY.PREPARE_FROM_GROUND;
                     break;
-                case ERINB_BUFFER_EXEC_STATE.IsDirty:
+                case ERING_BUFFER_EXEC_STATE.IsDirty:
+                    strategy = ConsideOnDistanceChange(ref mRingBufferAABBCenterPosition, ref mDesiredBufferAABBCenterPosition);
+                    if (strategy == EBUILD_STRATEGY.DO_NOT_BUILD)
+                    {
+                        SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);  //当前的Dirty不予执行
+                    }
                     break;
-                case ERINB_BUFFER_EXEC_STATE.Init | ERINB_BUFFER_EXEC_STATE.IsDirty:
+                case ERING_BUFFER_EXEC_STATE.Init | ERING_BUFFER_EXEC_STATE.IsDirty:
+                    strategy = EBUILD_STRATEGY.PREPARE_FROM_GROUND;
+                    break;
+                case ERING_BUFFER_EXEC_STATE.Loading:
+                    strategy = EBUILD_STRATEGY.DO_NOT_BUILD;
+                    if (AsyncLoadingCounter == 0)
+                    {
+                        State = ERING_BUFFER_EXEC_STATE.Process;
+                        strategy = EBUILD_STRATEGY.DO_BUILD;
+                    }
+                    break;
+                case ERING_BUFFER_EXEC_STATE.Loading | ERING_BUFFER_EXEC_STATE.IsDirty:
+                    strategy = EBUILD_STRATEGY.DO_NOT_BUILD;
+                    if (AsyncLoadingCounter == 0)
+                    {
+                        SubtractState(ERING_BUFFER_EXEC_STATE.Loading);
+                        strategy = ConsideOnDistanceChange(ref mRingBufferAABBCenterPosition, ref mDesiredBufferAABBCenterPosition);
+                        if (strategy == EBUILD_STRATEGY.DO_NOT_BUILD)
+                        {
+                            SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);
+                            DumpWork3D();
+                        }
+                        else
+                        {
+                            strategy = ConsideOnDistanceChange(ref mOnWorkingBufferAABBCenterPosition, ref mDesiredBufferAABBCenterPosition);
+                            if (strategy == EBUILD_STRATEGY.DO_NOT_BUILD)
+                            {
+                                SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty); //当前的Dirty不予执行，继续上一次PrepareWork3D的后续逻辑
+                                strategy = EBUILD_STRATEGY.DO_BUILD;
+                            }
+                            else
+                            {
+                                DumpWork3D(); //放弃上一次PrepareWork3D的进度，直接开启下一轮Prepare
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    strategy = EBUILD_STRATEGY.INVALID;
+                    break;
+            }
+
+            if (strategy == EBUILD_STRATEGY.INVALID)
+            {
+                Debug.LogWarning("Get Invalid Build Type");
+                return;
+            }
+
+            switch(strategy)
+            {
+                case EBUILD_STRATEGY.PREPARE_ON_DELTA:
+                case EBUILD_STRATEGY.PREPARE_FROM_GROUND:
+                    PrepareWork3D(strategy);
+                    break;
+                case EBUILD_STRATEGY.DO_BUILD:
+                    TryProcessWork3D();
+                    break;
+                case EBUILD_STRATEGY.DO_NOT_BUILD:
                     break;
                 default:
                     break;
             }
+
         }
 
-        private void BuildBufferFronGround()
+        //因为初始化需要或者位移满足条件 -> 必须(重新)准备Work3D
+        private void PrepareWork3D(EBUILD_STRATEGY aStrategy)
+        {
+            mOnWorkingBufferAABBCenterPosition = mDesiredBufferAABBCenterPosition;
+            SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);
+
+        }
+
+        //每次完成PrepareWork3D后执行一次
+        private void PostWork3D()
         {
 
         }
 
-        private enum ERINB_BUFFER_EXEC_STATE
+        //Load完成后，且Work3D没有过期 -> 执行本方法
+        private void TryProcessWork3D()
         {
-            WAIT    = 0,
+
+        }
+
+        //当Work3D过期，或者执行完毕后执行本方法
+        private void DumpWork3D()
+        {
+            
+        }
+
+        private void SubtractState(ERING_BUFFER_EXEC_STATE aState)
+        {
+            State &= (~aState);
+        }
+
+        private EBUILD_STRATEGY ConsideOnDistanceChange(ref Vector3 aOrigPos, ref Vector3 aTargetPos)
+        {
+            var Delta = aOrigPos - aTargetPos;
+            Delta.Set(Mathf.Abs(Delta.x), Mathf.Abs(Delta.y), Mathf.Abs(Delta.z));
+            if (Delta.x < mMinimumCopyDeltaSize.x && Delta.y < mMinimumCopyDeltaSize.y && Delta.z < mMinimumCopyDeltaSize.z)
+            {
+                return EBUILD_STRATEGY.DO_NOT_BUILD;
+            }
+            if (Delta.x >= mRingBufferAABBSize.x || Delta.y >= mRingBufferAABBSize.y || Delta.z >= mRingBufferAABBSize.z)
+            {
+                return EBUILD_STRATEGY.PREPARE_FROM_GROUND;
+            }
+            return EBUILD_STRATEGY.PREPARE_ON_DELTA;
+        }
+
+
+        private enum EBUILD_STRATEGY
+        {
+            INVALID = 0,
+            PREPARE_FROM_GROUND = 1,
+            PREPARE_ON_DELTA = 2,
+            DO_BUILD = 3,
+            DO_NOT_BUILD = 4,
+        }
+
+        private enum ERING_BUFFER_EXEC_STATE
+        {
+            Normal  = 0,
             Init    = 1 << 1,
             IsDirty = 1 << 2,
-            InValid = 1 << 3,
+            Loading = 1 << 3,
+            Process = 1 << 4,
+            InValid = 1 << 5,
         }
 
         protected enum ECORNER_PRIMITIVE
@@ -612,20 +743,23 @@ namespace Rendering.RuntimeTools.RingBuffer
             }
         }
 
-        protected void ExtractWork3DFrom(ref Box aShrinkedBox, in List<Work3D> aOutput)
+        protected List<Work3D> ExtractWork3DFrom(ref Box aShrinkedBox)
         {
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_LEFT_UP, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_RIGHT_UP, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_LEFT_UP, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_RIGHT_UP, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_LEFT_DOWN, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_RIGHT_DOWN, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_LEFT_DOWN, aOutput);
-            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_RIGHT_DOWN, aOutput);
+            List<Work3D> output = new List<Work3D>();
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_LEFT_UP, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_RIGHT_UP, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_LEFT_UP, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_RIGHT_UP, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_LEFT_DOWN, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.FRONT_RIGHT_DOWN, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_LEFT_DOWN, output);
+            CreateWork3D(ref aShrinkedBox, ECORNER_TYPE.BACK_RIGHT_DOWN, output);
+
+            return output;
         }
 
         /// <summary>
-        /// 创建一个Work3D实例，里面存放有一个Buffer边界顶点和相关信息以供后续计算使用
+        /// 创建一个Work3D实例，里面存放有Buffer边界顶点和相关信息以供后续计算使用
         /// </summary>
         /// <param name="aShrinkedBox">很重要的一点，用于获取TileIndex的Box，必须经过有值的Epsilon修正</param>
         /// <param name="aCorner">Buffer的边界顶点类型</param>
