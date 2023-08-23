@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
 
 namespace Rendering.RuntimeTools.RingBuffer
@@ -64,6 +65,10 @@ namespace Rendering.RuntimeTools.RingBuffer
 
         private List<Work3D> works;
 
+        public RTHandle SDFVolumeBuffer;
+
+        private int BufferId;
+
         public RingBufferBase(ISourceProvider aSourceProvider, ITileManager aTileMgr)
         {
             this.mSourceProvider = aSourceProvider;
@@ -116,7 +121,29 @@ namespace Rendering.RuntimeTools.RingBuffer
 
             mPool = new ObjectPool<Work3D>(null, Work3D.OnReturnWork);
 
+            var desc = new RenderTextureDescriptor((int)mRingBufferTextureSize.x, (int)mRingBufferTextureSize.y, RenderTextureFormat.R16, 0, 1);
+            desc.enableRandomWrite = true;
+            desc.volumeDepth = (int)mRingBufferTextureSize.z;
+            desc.stencilFormat = UnityEngine.Experimental.Rendering.GraphicsFormat.None;
+            desc.msaaSamples = 1;
+
+            RenderingUtils.ReAllocateIfNeeded(ref SDFVolumeBuffer, desc, FilterMode.Point, TextureWrapMode.Repeat, false, name: "SDF");
+            BufferId = Shader.PropertyToID("_SDFVolumeBuffer");
+
             State = ERING_BUFFER_EXEC_STATE.Init;
+        }
+
+        public void OnDestroy()
+        {
+            SDFVolumeBuffer?.Release();
+            SDFVolumeBuffer = null;
+
+            mSourceProvider = null;
+            mTileMgr = null;
+
+            GameObject.Destroy(dummy);
+
+            DumpWork3D();
         }
 
         /// <summary>
@@ -265,6 +292,8 @@ namespace Rendering.RuntimeTools.RingBuffer
         private void TryProcessWork3D()
         {
             State = ERING_BUFFER_EXEC_STATE.Process;
+
+
 
 
         }
