@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using static TMPro.SpriteAssetUtilities.TexturePacker_JsonArray;
+using static Unity.Burst.Intrinsics.X86.Avx;
 
 namespace Rendering.RuntimeTools.RingBuffer
 {
@@ -39,6 +40,8 @@ namespace Rendering.RuntimeTools.RingBuffer
 
         private Vector3 mRingBufferTextureSize;         //Texture3D pixel resolution
 
+        private Vector3 mRingBufferTextureInvSize;      //1 over resolution
+
         private Vector3 mRingBufferAABBCenterPosition;  //Buffer立方体中心点坐标(世界空间)
 
         private Vector3 mRingBufferBaselineCenterPosition;      //烘焙时确定的基准中心点
@@ -61,21 +64,42 @@ namespace Rendering.RuntimeTools.RingBuffer
 
         private Texture3D dummy;
 
-        private Vector3 Epsilon;                          //代表0.5个pixel在世界空间中的尺度
+        private Vector3 HalfTexelSize;                  //代表0.5个pixel在世界空间中的尺度
+
+        private Vector3 FullTexelSize;                  //代表1个pixel在世界空间中的尺度
 
         private List<Work3D> works;
 
         public RTHandle SDFVolumeBuffer;
 
-        private int BufferId;
+        private int TargetRWTexture3D_PropertyId = Shader.PropertyToID("_SDFVolumeBuffer");
 
-        public RingBufferBase(ISourceProvider aSourceProvider, ITileManager aTileMgr)
+        private int SrcTexture3D_PropertyId = Shader.PropertyToID("_SrcSDFVolumeTex");
+
+        private int AreaOfIntresetingSize_PropertyId = Shader.PropertyToID("_AreaOfIntresetingSize");
+
+        private int SrcSDFVolumeTex_InvTexelSize_PropertyId = Shader.PropertyToID("_SrcSDFVolumeTex_InvTexelSize");
+
+        private int SrcSDFVolumeTex_MinTexelOffset_PropertyId = Shader.PropertyToID("_SrcSDFVolumeTex_MinTexelOffset");
+
+        private int SDFVolumeBufferSize_PropertyId = Shader.PropertyToID("_SDFVolumeBufferSize");
+
+        private int MovementTexelDelta_PropertyId = Shader.PropertyToID("_MovementTexelDelta");
+
+        private int TarSDFVolumeBuffer_MinTexelOffset_PropertyId = Shader.PropertyToID("_TarSDFVolumeBuffer_MinTexelOffset");
+
+        private ComputeShader Tex3DBlitterCS;
+
+        public RingBufferBase(ISourceProvider aSourceProvider, ITileManager aTileMgr, ComputeShader computeShader)
         {
             this.mSourceProvider = aSourceProvider;
             this.mTileMgr = aTileMgr;
-            dummy = new Texture3D(1,1,1, TextureFormat.RFloat, false);
+            this.Tex3DBlitterCS = computeShader;
+
+            dummy = new Texture3D(1, 1, 1, TextureFormat.RFloat, false);
             dummy.SetPixel(0, 0, 0, Color.white);
             works = new List<Work3D>();
+
             State = ERING_BUFFER_EXEC_STATE.InValid;
         }
 
@@ -93,30 +117,34 @@ namespace Rendering.RuntimeTools.RingBuffer
             mRingBufferAABBSize = aBaseBounding.extents * 2;
 
             mRingBufferTextureSize = aBufferTexResolution;
+            mRingBufferTextureInvSize = new Vector3(
+                1.0f / mRingBufferTextureSize.x,
+                1.0f / mRingBufferTextureSize.y,
+                1.0f / mRingBufferTextureSize.z);
             mMinimumCopyDeltaMultiply = aMinCopyDeltaMultiply;
 
-            Epsilon = aBaseBounding.extents;   //Half Pixel Size
-            Epsilon.Set(
-                Epsilon.x / aBufferTexResolution.x,
-                Epsilon.y / aBufferTexResolution.y,
-                Epsilon.z / aBufferTexResolution.z);
+            HalfTexelSize = aBaseBounding.extents;   //Half Pixel Size
+            HalfTexelSize.Set(
+                HalfTexelSize.x / aBufferTexResolution.x,
+                HalfTexelSize.y / aBufferTexResolution.y,
+                HalfTexelSize.z / aBufferTexResolution.z);
 
             mMinimumCopyDeltaSize = mMinimumCopyDeltaMultiply * MinimumPixelGroupSizeBase;
-            var OnePixelSize = Epsilon * 2;
-            mMinimumCopyDeltaSize.x *= OnePixelSize.x;
-            mMinimumCopyDeltaSize.y *= OnePixelSize.y;
-            mMinimumCopyDeltaSize.z *= OnePixelSize.z;
+            FullTexelSize = HalfTexelSize * 2;
+            mMinimumCopyDeltaSize.x *= FullTexelSize.x;
+            mMinimumCopyDeltaSize.y *= FullTexelSize.y;
+            mMinimumCopyDeltaSize.z *= FullTexelSize.z;
 
             var checkOddEven = new Vector3Int((int)aBufferTexResolution.x % 2, (int)aBufferTexResolution.y % 2, (int)aBufferTexResolution.z % 2);
             if (checkOddEven.x + checkOddEven.y + checkOddEven.z > 0)
             {
                 Debug.LogWarning("Not recomand Odd number resolution");
-                mRingBufferBaselineCenterPosition.x += checkOddEven.x > 0 ? Epsilon.x : 0;
-                mRingBufferBaselineCenterPosition.y += checkOddEven.y > 0 ? Epsilon.y : 0;
-                mRingBufferBaselineCenterPosition.z += checkOddEven.z > 0 ? Epsilon.z : 0; //让中心点始终对齐像素的某个角
+                mRingBufferBaselineCenterPosition.x += checkOddEven.x > 0 ? HalfTexelSize.x : 0;
+                mRingBufferBaselineCenterPosition.y += checkOddEven.y > 0 ? HalfTexelSize.y : 0;
+                mRingBufferBaselineCenterPosition.z += checkOddEven.z > 0 ? HalfTexelSize.z : 0; //让中心点始终对齐像素的某个角
             }
 
-            mRingBufferAABBCenterPosition = Quantize(mRingBufferBaselineCenterPosition, aDesiredCenterPos);
+            mRingBufferAABBCenterPosition = QuantizeWithMinCopyDelta(mRingBufferBaselineCenterPosition, aDesiredCenterPos);
             mDesiredBufferAABBCenterPosition = mRingBufferAABBCenterPosition;
 
             mPool = new ObjectPool<Work3D>(null, Work3D.OnReturnWork);
@@ -128,7 +156,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             desc.msaaSamples = 1;
 
             RenderingUtils.ReAllocateIfNeeded(ref SDFVolumeBuffer, desc, FilterMode.Point, TextureWrapMode.Repeat, false, name: "SDF");
-            BufferId = Shader.PropertyToID("_SDFVolumeBuffer");
+            
 
             State = ERING_BUFFER_EXEC_STATE.Init;
         }
@@ -231,10 +259,10 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 case EBUILD_STRATEGY.PREPARE_ON_DELTA:
                 case EBUILD_STRATEGY.PREPARE_FROM_GROUND:
-                    PrepareWork3D(strategy);
+                    PrepareWork3D(strategy, cmd);
                     break;
                 case EBUILD_STRATEGY.DO_BUILD:
-                    TryProcessWork3D();
+                    TryProcessWork3D(cmd);
                     break;
                 case EBUILD_STRATEGY.DO_NOT_BUILD:
                     break;
@@ -245,9 +273,9 @@ namespace Rendering.RuntimeTools.RingBuffer
         }
 
         //因为初始化需要或者位移满足条件 -> 必须(重新)准备Work3D
-        private void PrepareWork3D(EBUILD_STRATEGY aStrategy)
+        private void PrepareWork3D(EBUILD_STRATEGY aStrategy, CommandBuffer cmd)
         {
-            mDesiredBufferAABBCenterPosition = Quantize(mRingBufferAABBCenterPosition, mDesiredBufferAABBCenterPosition);
+            mDesiredBufferAABBCenterPosition = QuantizeWithMinCopyDelta(mRingBufferAABBCenterPosition, mDesiredBufferAABBCenterPosition);
             mOnWorkingBufferAABBCenterPosition = mDesiredBufferAABBCenterPosition;
             SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);
 
@@ -255,7 +283,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 case EBUILD_STRATEGY.PREPARE_FROM_GROUND:
                     {
-                        Box shrinkedTargetBox = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, Epsilon);
+                        Box shrinkedTargetBox = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, HalfTexelSize);
                         var listOfWorks = ExtractWork3DFrom(ref shrinkedTargetBox);
                         works.AddRange(listOfWorks);
                     }
@@ -271,15 +299,15 @@ namespace Rendering.RuntimeTools.RingBuffer
                     break;
             }
 
-            PostPrepareWork3D();
+            PostPrepareWork3D(cmd);
         }
 
         //每次完成PrepareWork3D后执行一次
-        private void PostPrepareWork3D()
+        private void PostPrepareWork3D(CommandBuffer cmd)
         {
             if (AsyncLoadingCounter == 0) //所有资源当即就准备完毕了
             {
-                TryProcessWork3D();
+                TryProcessWork3D(cmd);
             }
             else
             {
@@ -289,12 +317,51 @@ namespace Rendering.RuntimeTools.RingBuffer
         }
 
         //Load完成后，且Work3D没有过期 -> 执行本方法
-        private void TryProcessWork3D()
+        private void TryProcessWork3D(CommandBuffer cmd)
         {
             State = ERING_BUFFER_EXEC_STATE.Process;
 
+            var MovementTexelDelta = QuantizeWithFullTexelSize(mOnWorkingBufferAABBCenterPosition - mRingBufferAABBCenterPosition, HalfTexelSize);
+            var OnWorkingBox = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, Vector3.zero);
 
+            if (cmd != null)
+                cmd.SetComputeTextureParam(Tex3DBlitterCS, 0, TargetRWTexture3D_PropertyId, SDFVolumeBuffer);
+            else
+                Tex3DBlitterCS.SetTexture(0, TargetRWTexture3D_PropertyId, SDFVolumeBuffer);
 
+            foreach (var work in works)
+            {
+                var SrcSDFVolumeTex_MinTexelOffset = QuantizeWithFullTexelSize(
+                    work.AreaOfIntreseting.Min - work.SrcBoxWorldSpace.Min, Vector3.zero);
+                var TarSDFVolumeBuffer_MinTexelOffset = QuantizeWithFullTexelSize(
+                    work.AreaOfIntreseting.Min - OnWorkingBox.Min, Vector3.zero);
+                var AreaOfIntresetingSize = QuantizeWithFullTexelSize(work.AreaOfIntreseting.Max + FullTexelSize - work.AreaOfIntreseting.Min, HalfTexelSize);
+
+                if (cmd != null)
+                {
+                    cmd.SetComputeTextureParam(Tex3DBlitterCS, 0, SrcTexture3D_PropertyId, work.SrcTexture3D);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, AreaOfIntresetingSize_PropertyId, AreaOfIntresetingSize);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, SrcSDFVolumeTex_InvTexelSize_PropertyId, mRingBufferTextureInvSize);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, SrcSDFVolumeTex_MinTexelOffset_PropertyId, SrcSDFVolumeTex_MinTexelOffset);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, SDFVolumeBufferSize_PropertyId, mRingBufferTextureSize);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, MovementTexelDelta_PropertyId, MovementTexelDelta);
+                    cmd.SetComputeVectorParam(Tex3DBlitterCS, TarSDFVolumeBuffer_MinTexelOffset_PropertyId, TarSDFVolumeBuffer_MinTexelOffset);
+                    DispatchCompute(Tex3DBlitterCS, cmd, 0, 
+                        (int)AreaOfIntresetingSize.x, (int)AreaOfIntresetingSize.y, (int)AreaOfIntresetingSize.z);
+                }
+                else
+                {
+                    Tex3DBlitterCS.SetTexture(0, SrcTexture3D_PropertyId, work.SrcTexture3D);
+                    Tex3DBlitterCS.SetVector(AreaOfIntresetingSize_PropertyId, AreaOfIntresetingSize);
+                    Tex3DBlitterCS.SetVector(SrcSDFVolumeTex_InvTexelSize_PropertyId, mRingBufferTextureInvSize);
+                    Tex3DBlitterCS.SetVector(SrcSDFVolumeTex_MinTexelOffset_PropertyId, SrcSDFVolumeTex_MinTexelOffset);
+                    Tex3DBlitterCS.SetVector(SDFVolumeBufferSize_PropertyId, mRingBufferTextureSize);
+                    Tex3DBlitterCS.SetVector(MovementTexelDelta_PropertyId, MovementTexelDelta);
+                    Tex3DBlitterCS.SetVector(TarSDFVolumeBuffer_MinTexelOffset_PropertyId, TarSDFVolumeBuffer_MinTexelOffset);
+                    DispatchCompute(Tex3DBlitterCS, null, 0,
+                        (int)AreaOfIntresetingSize.x, (int)AreaOfIntresetingSize.y, (int)AreaOfIntresetingSize.z);
+                }
+            }
 
         }
 
@@ -309,13 +376,43 @@ namespace Rendering.RuntimeTools.RingBuffer
             State &= (~aState);
         }
 
-        private Vector3 Quantize(Vector3 aBase, Vector3 aDesired)
+        private Vector3 QuantizeWithFullTexelSize(Vector3 aVector, Vector3 Epsilon)
+        {
+            var result = aVector;
+            result.Set(
+                Mathf.Floor((result.x + Epsilon.x) / FullTexelSize.x),
+                Mathf.Floor((result.y + Epsilon.y) / FullTexelSize.y),
+                Mathf.Floor((result.z + Epsilon.z) / FullTexelSize.z));
+            return result;
+        }
+
+        private Vector3 QuantizeWithMinCopyDelta(Vector3 aBase, Vector3 aDesired)
         {
             var cur2desiredDelta = aDesired - aBase;
-            cur2desiredDelta.x = Mathf.Floor((cur2desiredDelta.x + Epsilon.x) / mMinimumCopyDeltaSize.x) * mMinimumCopyDeltaSize.x;
-            cur2desiredDelta.y = Mathf.Floor((cur2desiredDelta.y + Epsilon.y) / mMinimumCopyDeltaSize.y) * mMinimumCopyDeltaSize.y;
-            cur2desiredDelta.z = Mathf.Floor((cur2desiredDelta.z + Epsilon.z) / mMinimumCopyDeltaSize.z) * mMinimumCopyDeltaSize.z;
+            cur2desiredDelta.x = Mathf.Floor((cur2desiredDelta.x + HalfTexelSize.x) / mMinimumCopyDeltaSize.x) * mMinimumCopyDeltaSize.x;
+            cur2desiredDelta.y = Mathf.Floor((cur2desiredDelta.y + HalfTexelSize.y) / mMinimumCopyDeltaSize.y) * mMinimumCopyDeltaSize.y;
+            cur2desiredDelta.z = Mathf.Floor((cur2desiredDelta.z + HalfTexelSize.z) / mMinimumCopyDeltaSize.z) * mMinimumCopyDeltaSize.z;
             return cur2desiredDelta + aBase;
+        }
+
+        static void DispatchCompute(ComputeShader targetCS, CommandBuffer cmd, int kernel, int width, int height, int depth = 1)
+        {
+            // If any issue occur on mac / intel GPU devices regarding the probe subdivision, it's likely to be
+            // the GetKernelThreadGroupSizes returning wrong values.
+            targetCS.GetKernelThreadGroupSizes(kernel, out uint x, out uint y, out uint z);
+            if (cmd != null)
+                cmd.DispatchCompute(
+                    targetCS,
+                    kernel,
+                    Mathf.Max(1, Mathf.CeilToInt(width / (float)x)),
+                    Mathf.Max(1, Mathf.CeilToInt(height / (float)y)),
+                    Mathf.Max(1, Mathf.CeilToInt(depth / (float)z)));
+            else
+                targetCS.Dispatch(
+                    kernel, 
+                    Mathf.Max(1, Mathf.CeilToInt(width / (float)x)),
+                    Mathf.Max(1, Mathf.CeilToInt(height / (float)y)),
+                    Mathf.Max(1, Mathf.CeilToInt(depth / (float)z)));
         }
 
         private EBUILD_STRATEGY ConsideOnDistanceChange(ref Vector3 aOrigPos, ref Vector3 aTargetPos)
@@ -861,7 +958,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 var _Min = DynamicBox.Min;
                 var _Max = new Vector3(CurrentBox.Min.x, DynamicBox.Max.y, DynamicBox.Max.z);
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 DynamicBox.Min.x = CurrentBox.Min.x;  //shrink the box accordingly
@@ -871,7 +968,7 @@ namespace Rendering.RuntimeTools.RingBuffer
                 
                 var _Min = new Vector3(CurrentBox.Max.x, DynamicBox.Min.y, DynamicBox.Min.z);
                 var _Max = DynamicBox.Max;
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 DynamicBox.Max.x = CurrentBox.Max.x;  //shrink the box accordingly
@@ -882,7 +979,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 var _Min = DynamicBox.Min;
                 var _Max = new Vector3(DynamicBox.Max.x, DynamicBox.Max.y, CurrentBox.Min.z);
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 DynamicBox.Min.z = CurrentBox.Min.z;
@@ -891,7 +988,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 var _Min = new Vector3(DynamicBox.Min.x, DynamicBox.Min.y, CurrentBox.Max.z);
                 var _Max = DynamicBox.Max;
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 DynamicBox.Max.z = CurrentBox.Max.z;
@@ -902,7 +999,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 var _Min = DynamicBox.Min;
                 var _Max = new Vector3(DynamicBox.Max.x, CurrentBox.Min.y, DynamicBox.Max.z);
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 //DynamicBox.Min.y = CurrentBox.Min.y;
@@ -911,7 +1008,7 @@ namespace Rendering.RuntimeTools.RingBuffer
             {
                 var _Min = new Vector3(DynamicBox.Min.x, CurrentBox.Max.y, DynamicBox.Min.z);
                 var _Max = DynamicBox.Max;
-                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, Epsilon);
+                Box ShrinkedSearchingBox = Box.CreateBox(_Min, _Max, HalfTexelSize);
                 var _works = ExtractWork3DFrom(ref ShrinkedSearchingBox);
                 output.AddRange(_works);
                 //DynamicBox.Max.y = CurrentBox.Max.y;
@@ -996,7 +1093,7 @@ namespace Rendering.RuntimeTools.RingBuffer
         protected void CreateWork3D(ref Box aShrinkedBox, EDIR_TYPE aCorner, in List<Work3D> aOutput)
         {
             var _work = mPool.Get();
-            _work.Epsilon = this.Epsilon;
+            _work.Epsilon = this.HalfTexelSize;
             _work.RingBufferBoxDirType = aCorner;
             _work.MoveDir = aShrinkedBox.MoveDir;
             _work.TarBoxWorldSpace = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, Vector3.zero);

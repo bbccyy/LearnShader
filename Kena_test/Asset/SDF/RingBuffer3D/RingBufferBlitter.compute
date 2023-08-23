@@ -9,6 +9,8 @@ RWTexture3D<half> _SDFVolumeBuffer;
 
 SamplerState my_bilinear_clamp_sampler;
 
+uint3 _AreaOfIntresetingSize;
+
 float3 _SrcSDFVolumeTex_InvTexelSize;
 float3 _SrcSDFVolumeTex_MinTexelOffset;  //pixel offset from AOI(AreaOfIntreseting) Min position to SrcSDFVolume Min position 
 
@@ -22,14 +24,17 @@ void RingBuffer3DBlitCS(
     uint3 DispatchThreadId : SV_DispatchThreadID,
     uint3 GroupThreadId : SV_GroupThreadID)
 {
-    float3 SrcCoordinate = float3(DispatchThreadId.xyz) + _SrcSDFVolumeTex_MinTexelOffset + 0.5; 
-    SrcCoordinate = SrcCoordinate * _SrcSDFVolumeTex_InvTexelSize;  //to UVW
-    float raw = SAMPLE_TEXTURECUBE_LOD(_SrcSDFVolumeTex, my_bilinear_clamp_sampler, SrcCoordinate, 0).r;
+    if (all(DispatchThreadId < _AreaOfIntresetingSize))
+    {
+        float3 SrcCoordinate = float3(DispatchThreadId.xyz) + _SrcSDFVolumeTex_MinTexelOffset + 0.5;
+        SrcCoordinate = SrcCoordinate * _SrcSDFVolumeTex_InvTexelSize;  //to UVW
+        float raw = SAMPLE_TEXTURECUBE_LOD(_SrcSDFVolumeTex, my_bilinear_clamp_sampler, SrcCoordinate, 0).r;
 
-    int3 TarCoordinate = (int)(DispatchThreadId.xyz + _TarSDFVolumeBuffer_MinTexelOffset) + _MovementTexelDelta;
-    half3 needShift1 = TarCoordinate < 0;
-    half3 needShift2 = TarCoordinate >= _SDFVolumeBufferSize;
-    TarCoordinate = TarCoordinate + _SDFVolumeBufferSize * needShift - _SDFVolumeBufferSize * needShift2;
+        int3 TarCoordinate = (int)(DispatchThreadId.xyz + _TarSDFVolumeBuffer_MinTexelOffset) + _MovementTexelDelta;
+        half3 needShift1 = TarCoordinate < 0;
+        half3 needShift2 = TarCoordinate >= _SDFVolumeBufferSize;
+        TarCoordinate = TarCoordinate + _SDFVolumeBufferSize * needShift - _SDFVolumeBufferSize * needShift2;
 
-    _SDFVolumeBuffer[TarCoordinate] = raw;
+        _SDFVolumeBuffer[TarCoordinate] = raw;
+    }
 }
