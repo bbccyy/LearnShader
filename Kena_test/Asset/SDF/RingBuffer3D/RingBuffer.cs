@@ -12,11 +12,11 @@ namespace Rendering.RuntimeTools.RingBuffer
 {
     public interface ISourceProvider
     {
-        public Texture3D SyncLoad(int aTileIndex);
+        public UnityEngine.Object SyncLoad(string aPath);
 
         //public Texture3D SyncLoad(Vector3 aPosWS);
 
-        public void AyncLoad(Action<Texture3D, bool> aCallback, int aTileIndex);
+        public void AyncLoad(Action<UnityEngine.Object, bool> aCallback, string aPath);
 
         //public void AyncLoad(Action<Texture3D, bool> aCallback, Vector3 aPosWS);
 
@@ -27,6 +27,8 @@ namespace Rendering.RuntimeTools.RingBuffer
         public int GetTileIndexFromOnePointInWorldSpace(Vector3 aPosWS);
 
         public Bounds GetBoundingBoxOfGivenTileIndex(int aTileIndex);
+
+        public string GetAssetPathFromTileIndex(int aTileIndex);
     }
     
 
@@ -379,19 +381,23 @@ namespace Rendering.RuntimeTools.RingBuffer
         private Vector3 QuantizeWithFullTexelSize(Vector3 aVector, Vector3 Epsilon)
         {
             var result = aVector;
+            result.Set(Mathf.Abs(result.x), Mathf.Abs(result.y), Mathf.Abs(result.z));
             result.Set(
-                Mathf.Floor((result.x + Epsilon.x) / FullTexelSize.x),
-                Mathf.Floor((result.y + Epsilon.y) / FullTexelSize.y),
-                Mathf.Floor((result.z + Epsilon.z) / FullTexelSize.z));
+                Mathf.Floor((result.x + Epsilon.x) / FullTexelSize.x) * (aVector.x >= 0 ? 1 : -1),
+                Mathf.Floor((result.y + Epsilon.y) / FullTexelSize.y) * (aVector.y >= 0 ? 1 : -1),
+                Mathf.Floor((result.z + Epsilon.z) / FullTexelSize.z) * (aVector.z >= 0 ? 1 : -1));
             return result;
         }
 
         private Vector3 QuantizeWithMinCopyDelta(Vector3 aBase, Vector3 aDesired)
         {
             var cur2desiredDelta = aDesired - aBase;
-            cur2desiredDelta.x = Mathf.Floor((cur2desiredDelta.x + HalfTexelSize.x) / mMinimumCopyDeltaSize.x) * mMinimumCopyDeltaSize.x;
-            cur2desiredDelta.y = Mathf.Floor((cur2desiredDelta.y + HalfTexelSize.y) / mMinimumCopyDeltaSize.y) * mMinimumCopyDeltaSize.y;
-            cur2desiredDelta.z = Mathf.Floor((cur2desiredDelta.z + HalfTexelSize.z) / mMinimumCopyDeltaSize.z) * mMinimumCopyDeltaSize.z;
+            cur2desiredDelta.x = Mathf.Floor((Mathf.Abs(cur2desiredDelta.x) + HalfTexelSize.x) / mMinimumCopyDeltaSize.x)
+                * mMinimumCopyDeltaSize.x * (cur2desiredDelta.x >= 0 ? 1 : -1);
+            cur2desiredDelta.y = Mathf.Floor((Mathf.Abs(cur2desiredDelta.y) + HalfTexelSize.y) / mMinimumCopyDeltaSize.y)
+                * mMinimumCopyDeltaSize.y * (cur2desiredDelta.y >= 0 ? 1 : -1);
+            cur2desiredDelta.z = Mathf.Floor((Mathf.Abs(cur2desiredDelta.z) + HalfTexelSize.z) / mMinimumCopyDeltaSize.z)
+                * mMinimumCopyDeltaSize.z * (cur2desiredDelta.z >= 0 ? 1 : -1);
             return cur2desiredDelta + aBase;
         }
 
@@ -1102,8 +1108,10 @@ namespace Rendering.RuntimeTools.RingBuffer
             var bounding = mTileMgr.GetBoundingBoxOfGivenTileIndex(_work.TileIndex);
             _work.SrcBoxWorldSpace = Box.Convert2Box(bounding, Vector3.zero); //clean box(not shrinked)
 
+            string assetPath = mTileMgr.GetAssetPathFromTileIndex(_work.TileIndex);
+
             AsyncLoadingCounter++;
-            mSourceProvider.AyncLoad((tex, suc) =>
+            mSourceProvider.AyncLoad((texGo, suc) =>
             {
                 AsyncLoadingCounter--;
                 if (_work.RingBufferBoxDirType == EDIR_TYPE._INVALID)
@@ -1116,9 +1124,17 @@ namespace Rendering.RuntimeTools.RingBuffer
                 }
                 else
                 {
-                    _work.SrcTexture3D = tex;
+                    if (texGo is Texture3D)
+                    {
+                        _work.SrcTexture3D = texGo as Texture3D;
+                        Debug.Log($"SrcTexture3D.isReadable = {_work.SrcTexture3D.isReadable}");  //做个测试，我需要它是 unreadable
+                    }
+                    else
+                    {
+                        _work.SrcTexture3D = dummy;
+                    }
                 }
-            }, _work.TileIndex);
+            }, assetPath);
 
             aOutput.Add(_work);
         }
@@ -1159,7 +1175,6 @@ namespace Rendering.RuntimeTools.RingBuffer
 
             return ret;
         }
-
 
     }
 

@@ -33,7 +33,7 @@ void RingBuffer3DBlitCS(
         int3 TarCoordinate = (int)(DispatchThreadId.xyz + _TarSDFVolumeBuffer_MinTexelOffset) + _MovementTexelDelta;
         half3 needShift1 = TarCoordinate < 0;
         half3 needShift2 = TarCoordinate >= _SDFVolumeBufferSize;
-        TarCoordinate = TarCoordinate + _SDFVolumeBufferSize * needShift - _SDFVolumeBufferSize * needShift2;
+        TarCoordinate = TarCoordinate + _SDFVolumeBufferSize * needShift1 - _SDFVolumeBufferSize * needShift2;
 
         _SDFVolumeBuffer[TarCoordinate] = raw;
     }
