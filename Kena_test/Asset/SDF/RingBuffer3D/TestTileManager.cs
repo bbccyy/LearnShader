@@ -40,7 +40,7 @@ public class TestTileManager : ITileManager
         center.y = aIndexXYZ.y * AABBSize.y + BaseBound.extents.y;
         center.z = aIndexXYZ.z * AABBSize.z + BaseBound.extents.z;
 
-        return string.Format($"{(int)center.x}_{(int)center.y}_{(int)center.z}");
+        return string.Format($"{(int)center.x}_{(int)center.y}_{(int)center.z}_{(int)AABBSize.x}");
     }
 
     public Vector3Int ConvertPosWS2IndexXYZ(Vector3 aPosWS)
@@ -52,7 +52,7 @@ public class TestTileManager : ITileManager
         idx3.Set(
             Mathf.FloorToInt(localPos.x / AABBSize.x),
             Mathf.FloorToInt(localPos.y / AABBSize.y),
-            Mathf.FloorToInt(localPos.z / AABBSize.z));
+            Mathf.FloorToInt(localPos.z / AABBSize.z));  //无需转换为向0取整，保持向下取整是正确的
 
         return idx3;
     }

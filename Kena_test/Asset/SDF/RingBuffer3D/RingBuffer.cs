@@ -52,6 +52,8 @@ namespace Rendering.RuntimeTools.RingBuffer
         
         private Vector3 mOnWorkingBufferAABBCenterPosition;     //正在处理中的位置
 
+        private Vector3 mShiftBaseAABBCenterPosition;   //用于计算AABB偏移的基准,与Init Buffer绑定
+
         private ERING_BUFFER_EXEC_STATE State;
 
         private ISourceProvider mSourceProvider;
@@ -182,6 +184,10 @@ namespace Rendering.RuntimeTools.RingBuffer
         /// <param name="aDesiredTargetCenterWS">期望的Buffer中心点世界坐标</param>
         public void Setup(Vector3 aDesiredTargetCenterWS)
         {
+            if (ContainsState(ERING_BUFFER_EXEC_STATE.Init))
+            {
+                return;
+            }
             mDesiredBufferAABBCenterPosition = aDesiredTargetCenterWS;
             State |= ERING_BUFFER_EXEC_STATE.IsDirty;
         }
@@ -192,14 +198,16 @@ namespace Rendering.RuntimeTools.RingBuffer
         /// <param name="cmd"></param>
         public void Execute(CommandBuffer cmd = null)
         {
-            if (State == ERING_BUFFER_EXEC_STATE.InValid || 
-                State == ERING_BUFFER_EXEC_STATE.Normal)
+            if (State == ERING_BUFFER_EXEC_STATE.InValid)
                 return;
 
             EBUILD_STRATEGY strategy = EBUILD_STRATEGY.INVALID;
 
             switch (State)
             {
+                case ERING_BUFFER_EXEC_STATE.Normal:
+                    strategy = EBUILD_STRATEGY.DO_NOT_BUILD;
+                    break;
                 case ERING_BUFFER_EXEC_STATE.Init:
                     strategy = EBUILD_STRATEGY.PREPARE_FROM_GROUND;
                     break;
@@ -210,13 +218,12 @@ namespace Rendering.RuntimeTools.RingBuffer
                         SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);  //当前的Dirty不予执行
                     }
                     break;
-                case ERING_BUFFER_EXEC_STATE.Init | ERING_BUFFER_EXEC_STATE.IsDirty:
-                    strategy = EBUILD_STRATEGY.PREPARE_FROM_GROUND;
-                    break;
                 case ERING_BUFFER_EXEC_STATE.Loading:
+                case ERING_BUFFER_EXEC_STATE.Init | ERING_BUFFER_EXEC_STATE.Loading:
                     strategy = EBUILD_STRATEGY.DO_NOT_BUILD;
                     if (AsyncLoadingCounter == 0)
                     {
+                        SubtractState(ERING_BUFFER_EXEC_STATE.Loading);
                         strategy = EBUILD_STRATEGY.DO_BUILD;
                     }
                     break;
@@ -279,13 +286,16 @@ namespace Rendering.RuntimeTools.RingBuffer
         {
             mDesiredBufferAABBCenterPosition = QuantizeWithMinCopyDelta(mRingBufferAABBCenterPosition, mDesiredBufferAABBCenterPosition);
             mOnWorkingBufferAABBCenterPosition = mDesiredBufferAABBCenterPosition;
-            SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty);
+            
+            SubtractState(ERING_BUFFER_EXEC_STATE.IsDirty); //Clean up Dirty flag once starts to prepare work3D
 
             switch(aStrategy)
             {
                 case EBUILD_STRATEGY.PREPARE_FROM_GROUND:
                     {
+                        State |= ERING_BUFFER_EXEC_STATE.Init;
                         Box shrinkedTargetBox = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, HalfTexelSize);
+                        shrinkedTargetBox.MoveDir = Vector3.zero;
                         var listOfWorks = ExtractWork3DFrom(ref shrinkedTargetBox);
                         works.AddRange(listOfWorks);
                     }
@@ -313,17 +323,26 @@ namespace Rendering.RuntimeTools.RingBuffer
             }
             else
             {
-                Debug.Log($"Before loading, current ERING_BUFFER_EXEC_STATE is {State}");
-                State = ERING_BUFFER_EXEC_STATE.Loading;
+                //Debug.Log($"Before loading, current ERING_BUFFER_EXEC_STATE is {State}");
+                State |= ERING_BUFFER_EXEC_STATE.Loading;
             }
         }
 
         //Load完成后，且Work3D没有过期 -> 执行本方法
         private void TryProcessWork3D(CommandBuffer cmd)
         {
+            if (ContainsState(ERING_BUFFER_EXEC_STATE.Init))
+            {
+                mShiftBaseAABBCenterPosition = mOnWorkingBufferAABBCenterPosition;
+            }
+            
             State = ERING_BUFFER_EXEC_STATE.Process;
 
-            var MovementTexelDelta = QuantizeWithFullTexelSize(mOnWorkingBufferAABBCenterPosition - mRingBufferAABBCenterPosition, HalfTexelSize);
+            var MovementTexelDelta = QuantizeWithFullTexelSize(mOnWorkingBufferAABBCenterPosition - mShiftBaseAABBCenterPosition, HalfTexelSize);
+            MovementTexelDelta.Set(
+                (int)MovementTexelDelta.x % (int)mRingBufferTextureSize.x,
+                (int)MovementTexelDelta.y % (int)mRingBufferTextureSize.y,
+                (int)MovementTexelDelta.z % (int)mRingBufferTextureSize.z);
             var OnWorkingBox = Box.Convert2Box(mOnWorkingBufferAABBCenterPosition, mRingBufferAABBExtension, Vector3.zero);
 
             if (cmd != null)
@@ -365,12 +384,24 @@ namespace Rendering.RuntimeTools.RingBuffer
                 }
             }
 
+            PostProcess();
+        }
+
+        private void PostProcess()
+        {
+            State = ERING_BUFFER_EXEC_STATE.Normal;
+            mRingBufferAABBCenterPosition = mOnWorkingBufferAABBCenterPosition;
         }
 
         //当Work3D过期，或者执行完毕后执行本方法
         private void DumpWork3D()
         {
             works.ForEach((a) => { mPool.Release(a);});
+        }
+
+        private bool ContainsState(ERING_BUFFER_EXEC_STATE aState)
+        {
+            return (State & aState) == aState;
         }
 
         private void SubtractState(ERING_BUFFER_EXEC_STATE aState)
