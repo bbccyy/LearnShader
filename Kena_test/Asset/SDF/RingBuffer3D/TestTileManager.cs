@@ -14,7 +14,7 @@ public class TestTileManager : ITileManager
 
     private Dictionary<int, Vector3Int> TileTable = new Dictionary<int, Vector3Int>();
 
-    public TestTileManager(Bounds aBaseBound, string aBasePath)
+    public TestTileManager(Bounds aBaseBound, string aBasePath = null)
     {
         BaseBound = aBaseBound;
         if (!string.IsNullOrEmpty(aBasePath))
@@ -36,9 +36,9 @@ public class TestTileManager : ITileManager
     public string ConvertIndexXYZ2AssetName(Vector3Int aIndexXYZ)
     {
         Vector3 center = new Vector3();
-        center.x = aIndexXYZ.x * AABBSize.x + BaseBound.extents.x;
-        center.y = aIndexXYZ.y * AABBSize.y + BaseBound.extents.y;
-        center.z = aIndexXYZ.z * AABBSize.z + BaseBound.extents.z;
+        center.x = BaseBound.min.x + aIndexXYZ.x * AABBSize.x + BaseBound.extents.x;
+        center.y = BaseBound.min.y + aIndexXYZ.y * AABBSize.y + BaseBound.extents.y;
+        center.z = BaseBound.min.z + aIndexXYZ.z * AABBSize.z + BaseBound.extents.z;
 
         return string.Format($"{(int)center.x}_{(int)center.y}_{(int)center.z}_{(int)AABBSize.x}");
     }
@@ -86,9 +86,9 @@ public class TestTileManager : ITileManager
         {
             var IndexXYZ = TileTable[aTileIndex];
             Vector3 center = new Vector3();
-            center.x = IndexXYZ.x * AABBSize.x + BaseBound.extents.x;
-            center.y = IndexXYZ.y * AABBSize.y + BaseBound.extents.y;
-            center.z = IndexXYZ.z * AABBSize.z + BaseBound.extents.z;
+            center.x = BaseBound.min.x + IndexXYZ.x * AABBSize.x + BaseBound.extents.x;
+            center.y = BaseBound.min.y + IndexXYZ.y * AABBSize.y + BaseBound.extents.y;
+            center.z = BaseBound.min.z + IndexXYZ.z * AABBSize.z + BaseBound.extents.z;
             return new Bounds(center, AABBSize); ;
         }
         else

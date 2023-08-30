@@ -28,6 +28,12 @@ public class TestSourceProvider : ISourceProvider
             }
             obj = null;
         }
+
+        public void Dump()
+        {
+            action = null;
+            GameObject.DestroyImmediate(obj);
+        }
     }
 
     public Dictionary<string, MockLoadingUnit> map;
@@ -41,10 +47,18 @@ public class TestSourceProvider : ISourceProvider
     }
 
 
+    public void OnDestroy()
+    {
+        foreach(var pair in map)
+        {
+            pair.Value.Dump();
+        }
+        map.Clear();
+    }
+
+
     public void UpdateMockDelay()
     {
-        toBeDump.Clear();
-
         foreach (var pair in map)
         {
             if (pair.Value.Due())
@@ -58,6 +72,8 @@ public class TestSourceProvider : ISourceProvider
         {
             map.Remove(key);
         }
+
+        toBeDump.Clear();
     }
 
     public void AyncLoad(Action<UnityEngine.Object, bool> aCallback, string aPath)

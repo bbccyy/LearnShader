@@ -4,19 +4,23 @@
 #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 #define BLIT_UNIT_SIZEX 8
 
-Texture3D<half> _SrcSDFVolumeTex;
-RWTexture3D<half> _SDFVolumeBuffer;
+Texture3D<half> _SrcVolumeTex;
+#if defined(SHADER_API_GLES) || defined(SHADER_API_GLES30)
+RWTexture2DArray<half> _RingBuffer; //TODO
+#else
+RWTexture3D<half> _RingBuffer;
+#endif
 
 SamplerState my_bilinear_clamp_sampler;
 
-uint3 _AreaOfIntresetingSize;
+float3 _AreaOfIntresetingSize;
 
-float3 _SrcSDFVolumeTex_InvTexelSize;
-float3 _SrcSDFVolumeTex_MinTexelOffset;  //pixel offset from AOI(AreaOfIntreseting) Min position to SrcSDFVolume Min position 
+float3 _SrcVolumeTex_InvTexelSize;
+float3 _SrcVolumeTex_MinTexelOffset;  //pixel offset from AOI(AreaOfIntreseting) Min position to SrcSDFVolume Min position 
 
-uint3 _SDFVolumeBufferSize;
-int3 _MovementTexelDelta;
-uint3 _TarSDFVolumeBuffer_MinTexelOffset;
+float3 _RingBufferSize;
+float3 _MovementTexelDelta;
+float3 _RingBuffer_MinTexelOffset;
 
 [numthreads(BLIT_UNIT_SIZEX, BLIT_UNIT_SIZEX, BLIT_UNIT_SIZEX)]
 void RingBuffer3DBlitCS(
@@ -24,17 +28,17 @@ void RingBuffer3DBlitCS(
     uint3 DispatchThreadId : SV_DispatchThreadID,
     uint3 GroupThreadId : SV_GroupThreadID)
 {
-    if (all(DispatchThreadId < _AreaOfIntresetingSize))
+    if (all(DispatchThreadId < (uint3)_AreaOfIntresetingSize))
     {
-        float3 SrcCoordinate = float3(DispatchThreadId.xyz) + _SrcSDFVolumeTex_MinTexelOffset + 0.5;
-        SrcCoordinate = SrcCoordinate * _SrcSDFVolumeTex_InvTexelSize;  //to UVW
-        float raw = SAMPLE_TEXTURECUBE_LOD(_SrcSDFVolumeTex, my_bilinear_clamp_sampler, SrcCoordinate, 0).r;
+        float3 SrcCoordinate = float3(DispatchThreadId.xyz) + _SrcVolumeTex_MinTexelOffset + 0.5;
+        SrcCoordinate = SrcCoordinate * _SrcVolumeTex_InvTexelSize;  //to UVW
+        float raw = SAMPLE_TEXTURECUBE_LOD(_SrcVolumeTex, my_bilinear_clamp_sampler, SrcCoordinate, 0).r;
 
-        int3 TarCoordinate = (int)(DispatchThreadId.xyz + _TarSDFVolumeBuffer_MinTexelOffset) + _MovementTexelDelta;
-        half3 needShift1 = TarCoordinate < 0;
-        half3 needShift2 = TarCoordinate >= _SDFVolumeBufferSize;
-        TarCoordinate = TarCoordinate + _SDFVolumeBufferSize * needShift1 - _SDFVolumeBufferSize * needShift2;
+        int3 TarCoordinate = DispatchThreadId.xyz + (int3)_RingBuffer_MinTexelOffset + (int3)_MovementTexelDelta;
+        uint3 needShift1 = TarCoordinate < 0;
+        uint3 needShift2 = TarCoordinate >= (int3)_RingBufferSize;
+        TarCoordinate = TarCoordinate + (int3)_RingBufferSize * needShift1 - (int3)_RingBufferSize * needShift2;
 
-        _SDFVolumeBuffer[TarCoordinate] = raw;
+        _RingBuffer[TarCoordinate] = raw;
     }
 }
