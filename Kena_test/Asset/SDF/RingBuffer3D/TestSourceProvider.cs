@@ -93,7 +93,7 @@ public class TestSourceProvider : ISourceProvider
         var mock = new MockLoadingUnit();
         mock.action = aCallback;
         mock.obj = go;
-        mock.restTime = Random.Range(0, 6); //0 ~ 5 frames delay
+        mock.restTime = Random.Range(0, 3); //0 ~ 3 frames delay
         map[aPath] = mock;
     }
 
