@@ -20,7 +20,7 @@ void ResetBufferData(uint ConeTraceGridIndex)
     {
         RWScreenGridConeVisibility[
             ConeIndex * ScreenGridConeVisibilitySize.x * ScreenGridConeVisibilitySize.y + ConeTraceGridIndex
-        ] = 0xFFFFFFFF; 
+        ] = 0xFFFFFFFF;     //refers to 1.0 in fact
     }
 }
 

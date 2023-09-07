@@ -14,7 +14,7 @@ half4 FragKenaAmbientCube(Varyings IN) : SV_Target
 {
 	float4 test = float4(0,0,0,1);
 
-	float2 BufferUV = SvPositionToBufferUV(IN.positionCS) ; 
+	float2 BufferUV = SvPositionToBufferUV(IN.positionCS); 
 
 	float2 ScreenSpacePos = SvPositionToScreenPosition(IN.positionCS).xy;
 	int2 PixelPos = int2(IN.positionCS.xy);
@@ -27,11 +27,11 @@ half4 FragKenaAmbientCube(Varyings IN) : SV_Target
 
 	float3 N = GBuffer.WorldNormal;
 	float3 V = -ScreenVector;
-	float3 R0 = 2 * dot(V, N) * N - V;
+	float3 R0 = 2 * dot(V, N) * N - V; //Reflection Dir
 	float NoV = saturate(dot(N, V));
 
 	float a = Pow2(GBuffer.Roughness);
-	float3 R = lerp(N, R0, (1 - a) * (sqrt(1 - a) + a));
+	float3 R = lerp(N, R0, (1 - a) * (sqrt(1 - a) + a));  //Blurred Reflection Dir based on roughness
 
 	uint2 Random = Rand3DPCG16(uint3(PixelPos, View_StateFrameIndexMod8)).xy;
 
@@ -109,7 +109,7 @@ half4 FragKenaAmbientCube(Varyings IN) : SV_Target
 	finalCol.rgb = (NonSpecularContribution + SpecularContribution) * AmbientCubemapColor.rgb;
 
 	UNITY_BRANCH
-	if (bCheckerboardSubsurfaceProfileRendering == 0 && bNeedsSeparateSubsurfaceLightAccumulation) 
+	if (bCheckerboardSubsurfaceProfileRendering == 0 && bNeedsSeparateSubsurfaceLightAccumulation)
 	{
 		finalCol.a = LuminanceUE(NonSpecularContribution * AmbientCubemapColor.rgb);
 	}

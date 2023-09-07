@@ -131,7 +131,7 @@ float3 SkyLightDiffuse(FGBufferData GBuffer, float AmbientOcclusion, float2 Buff
     float3 Lighting = 0;
 
     // Always USE_DIRECTIONAL_OCCLUSION_ON_SKY_DIFFUSE 
-    float SkyVisibility = length(BentNormal);;
+    float SkyVisibility = length(BentNormal);
     float3 NormalizedBentNormal = BentNormal / (max(SkyVisibility, .00001f));
     float BentNormalWeightFactor = SkyVisibility;// Use more bent normal in corners
     float3 SkyLightingNormal = lerp(NormalizedBentNormal, GBuffer.WorldNormal, BentNormalWeightFactor);

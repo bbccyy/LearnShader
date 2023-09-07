@@ -157,12 +157,12 @@ float SampleGlobalDistanceField(int ClipmapIndex, float3 UV)
 	if (ClipmapIndex == 0)
 	{
 		//rawDist = _GlobalDistanceFieldTexture0.SampleLevel(my_bilinear_clamp_sampler, UV, 0).r;
-		rawDist = SAMPLE_TEXTURE2D_LOD(_GlobalDistanceFieldTexture0, my_bilinear_clamp_sampler, UV, 0).r;
+		rawDist = SAMPLE_TEXTURECUBE_LOD(_GlobalDistanceFieldTexture0, my_bilinear_clamp_sampler, UV, 0).r;
 	}
 	else  
 	{
 		//rawDist = _GlobalDistanceFieldTexture1.SampleLevel(my_bilinear_clamp_sampler, UV, 0).r;
-		rawDist = SAMPLE_TEXTURE2D_LOD(_GlobalDistanceFieldTexture1, my_bilinear_clamp_sampler, UV, 0).r;
+		rawDist = SAMPLE_TEXTURECUBE_LOD(_GlobalDistanceFieldTexture1, my_bilinear_clamp_sampler, UV, 0).r;
 	}
 
 	return ConvertSampleSDFToRealDistance(rawDist, ClipmapIndex).x;
