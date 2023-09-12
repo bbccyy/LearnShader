@@ -1,0 +1,70 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+/*=============================================================================
+	SkyLightingShared.usf
+=============================================================================*/
+
+float ApproximateConeConeIntersection(float ArcLength0, float ArcLength1, float AngleBetweenCones)
+{
+	float AngleDifference = abs(ArcLength0 - ArcLength1);
+
+	float Intersection = smoothstep(
+		0,
+		1.0,
+		1.0 - saturate((AngleBetweenCones - AngleDifference) / (ArcLength0 + ArcLength1 - AngleDifference)));
+
+	return Intersection;
+}
+
+float ApplyBentNormalAO;
+float InvSkySpecularOcclusionStrength;
+float4 OcclusionTintAndMinOcclusion;
+
+void GetDistanceFieldAOSpecularOcclusion(float3 BentNormalAO, float3 ReflectionVector, float Roughness, bool bTwoSidedFoliage, 
+	out float IndirectSpecularOcclusion, out float IndirectDiffuseOcclusion, out float3 ExtraIndirectSpecular)
+{
+	IndirectSpecularOcclusion = 1;	//间接光高光遮蔽因子
+	IndirectDiffuseOcclusion = 1;	//间接光漫反射遮蔽因子
+	ExtraIndirectSpecular = 0;		//额外的间接光高光
+
+	BRANCH
+	if (ApplyBentNormalAO > 0)
+	{
+		float BentNormalLength = length(BentNormalAO);
+
+		BRANCH
+		if (View.DistanceFieldAOSpecularOcclusionMode == 0)
+		{
+			IndirectSpecularOcclusion = BentNormalLength;
+		}
+		else
+		{
+			BRANCH
+			if (bTwoSidedFoliage)
+			{
+				IndirectSpecularOcclusion = BentNormalLength;
+			}
+			else
+			{
+				float ReflectionConeAngle = max(Roughness, .1f) * PI; //定义反射方向的视锥大小
+				float UnoccludedAngle = BentNormalLength * PI * InvSkySpecularOcclusionStrength; //定义'非'遮蔽区域（既BentNormal指向的开阔区域）的视锥
+				float AngleBetween = acos(dot(BentNormalAO, ReflectionVector) / max(BentNormalLength, .001f)); //反射方向与BentNormal方向的夹角
+				IndirectSpecularOcclusion = ApproximateConeConeIntersection(ReflectionConeAngle, UnoccludedAngle, AngleBetween); //完全重合返回1，完全不相交返回0
+
+				// Can't rely on the direction of the bent normal when close to fully occluded, lerp to shadowed
+				IndirectSpecularOcclusion = lerp(0, IndirectSpecularOcclusion, saturate((UnoccludedAngle - .1f) / .2f)); //[0 ~ 1]
+			}
+		}
+
+		IndirectSpecularOcclusion = lerp(IndirectSpecularOcclusion, 1, OcclusionTintAndMinOcclusion.w);  	//OcclusionTintAndMinOcclusion.w用于控制AO强度，越大，AO越强
+		ExtraIndirectSpecular = (1 - IndirectSpecularOcclusion) * OcclusionTintAndMinOcclusion.xyz;			//不受到AO影响的部分高光颜色+强度
+		IndirectDiffuseOcclusion = lerp(BentNormalLength, 1, OcclusionTintAndMinOcclusion.w);				//间接光漫反射遮蔽直接和BentNormal的遮蔽强度正相关
+	}
+}
+
+float GetDynamicSkyIndirectIrradiance(float3 BentNormal, float3 WorldNormal)
+{
+	float SkyVisibility = length(BentNormal);
+	float3 DiffuseLookup = GetSkySHDiffuse(WorldNormal) * View.SkyLightColor.rgb;
+	return Luminance(DiffuseLookup) * SkyVisibility;
+}

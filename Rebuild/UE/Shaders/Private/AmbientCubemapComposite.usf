@@ -1,0 +1,485 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+/*=============================================================================
+	PostprocessAmbient.usf: To apply a ambient cubemap as a postprocess
+=============================================================================*/
+
+#include "Common.ush"
+#include "PostProcessCommon.ush"
+#include "DeferredShadingCommon.ush"
+#include "CubemapCommon.ush"
+#include "Random.ush"
+#include "BRDF.ush"
+#include "MonteCarlo.ush"
+#include "ShadingModels.ush"
+#include "SceneTextureParameters.ush"
+
+#define IMPORTANCE_SAMPLE		0
+
+Texture2D AmbientOcclusionTexture;
+SamplerState AmbientOcclusionSampler;
+
+
+float3 DiffuseIBL( uint2 Random, float3 DiffuseColor, float Roughness, float3 N, float3 V )
+{
+	N = normalize( N );
+	V = normalize( V );
+
+	float3 DiffuseLighting = 0;
+	
+	float NoV = saturate( dot( N, V ) );
+
+	const uint NumSamples = 32;
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+		float3 L = TangentToWorld( CosineSampleHemisphere( E ).xyz, N );
+		float3 H = normalize(V + L);
+
+		float NoL = saturate( dot( N, L ) );
+		float NoH = saturate( dot( N, H ) );
+		float VoH = saturate( dot( V, H ) );
+
+		if( NoL > 0 )
+		{
+			float3 SampleColor = AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb;
+
+			float FD90 = ( 0.5 + 2 * VoH * VoH ) * Roughness;
+			//float FD90 = 0.5 + 2 * VoH * VoH * Roughness;
+			float FdV = 1 + (FD90 - 1) * pow( 1 - NoV, 5 );
+			float FdL = 1 + (FD90 - 1) * pow( 1 - NoL, 5 );
+
+#if 1
+			// lambert = DiffuseColor * NoL / PI
+			// pdf = NoL / PI
+			DiffuseLighting += SampleColor * DiffuseColor * FdV * FdL * ( 1 - 0.3333 * Roughness );
+#else
+			DiffuseLighting += SampleColor * DiffuseColor;
+#endif
+		}
+	}
+
+	return DiffuseLighting / NumSamples;
+}
+
+float3 SpecularIBL( uint2 Random, float3 SpecularColor, float Roughness, float3 N, float3 V )
+{
+	float3 SpecularLighting = 0;
+
+	const uint NumSamples = 32;
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+		float3 H = TangentToWorld( ImportanceSampleGGX( E, Pow4(Roughness) ).xyz, N );
+		float3 L = 2 * dot( V, H ) * H - V;
+
+		float NoV = saturate( dot( N, V ) );
+		float NoL = saturate( dot( N, L ) );
+		float NoH = saturate( dot( N, H ) );
+		float VoH = saturate( dot( V, H ) );
+		
+		if( NoL > 0 )
+		{
+			float3 SampleColor = AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb;
+
+			float Vis = Vis_SmithJointApprox( Pow4(Roughness), NoV, NoL );
+			float Fc = pow( 1 - VoH, 5 );
+			float3 F = (1 - Fc) * SpecularColor + Fc;
+
+			// Incident light = SampleColor * NoL
+			// Microfacet specular = D*G*F / (4*NoL*NoV) = D*Vis*F
+			// pdf = D * NoH / (4 * VoH)
+			SpecularLighting += SampleColor * F * ( NoL * Vis * (4 * VoH / NoH) );
+		}
+	}
+
+	return SpecularLighting / NumSamples;
+}
+
+
+float3 ImageBasedLightingMIS( FGBufferData GBuffer, float3 V, float3 N, uint2 Random )
+{
+	float3 Lighting = 0;
+
+	float Roughness1 = GBuffer.Roughness;
+	float Roughness2 = 0.1;
+	
+	uint NumSamples[] =
+	{
+		16,
+		16,
+		0,
+	};
+
+	UNROLL
+	for( uint Set = 0; Set < 3; Set++ )
+	{
+		LOOP
+		for( uint i = 0; i < NumSamples[ Set ]; i++ )
+		{
+			float2 E = Hammersley( i, NumSamples[ Set ], Random );
+			
+			float3 L, H;
+			if( Set == 0 )
+			{
+				L = TangentToWorld( CosineSampleHemisphere( E ).xyz, N );
+				H = normalize(V + L);
+			}
+			else if( Set == 1 )
+			{
+				H = TangentToWorld( ImportanceSampleGGX( E, Pow4(Roughness1) ).xyz, N );
+				L = 2 * dot( V, H ) * H - V;
+			}
+			else
+			{
+				H = TangentToWorld( ImportanceSampleGGX( E, Pow4(Roughness2) ).xyz, N );
+				L = 2 * dot( V, H ) * H - V;
+			}
+
+			float NoL = saturate( dot(N, L) );
+			float NoH = saturate( dot(N, H) );
+			float VoH = saturate( dot(V, H) );
+		
+			if( NoL > 0 && VoH > 0 )
+			{
+				float3 SampleColor = AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb;
+
+				float PDF[] =
+				{
+					NoL / PI,
+					D_GGX( Pow4(Roughness1), NoH ) * NoH / (4 * VoH),
+					D_GGX( Pow4(Roughness2), NoH ) * NoH / (4 * VoH),
+				};
+
+				// MIS balance heuristic
+				float InvWeight = 0;
+				UNROLL for( uint j = 0; j < 3; j++ )
+				{
+					InvWeight += PDF[j] * NumSamples[j];
+				}
+				float Weight = rcp( InvWeight );
+
+				FShadowTerms Shadow = { 1, 1, 1, InitHairTransmittanceData() };
+				FDirectLighting LightingSample = EvaluateBxDF( GBuffer, N, V, L, NoL, Shadow );
+
+				Lighting += SampleColor * Weight * ( LightingSample.Diffuse + LightingSample.Specular + LightingSample.Transmission );
+			}
+		}
+	}
+
+	return Lighting;
+}
+
+float3 FilterEnvMap( uint2 Random, float Roughness, float3 N, float3 V )
+{
+	float3 FilteredColor = 0;
+	float Weight = 0;
+
+	const uint NumSamples = 64;
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+		float3 H = TangentToWorld( ImportanceSampleGGX( E, Pow4(Roughness) ).xyz, N );
+		float3 L = 2 * dot( V, H ) * H - V;
+
+		float NoL = saturate( dot( N, L ) );
+		if( NoL > 0 )
+		{
+			FilteredColor += AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb * NoL;
+			Weight += NoL;
+		}
+	}
+
+	return FilteredColor / max( Weight, 0.001 );
+}
+
+float3 PrefilterEnvMap( uint2 Random, float Roughness, float3 R )
+{
+	float3 FilteredColor = 0;
+	float Weight = 0;
+		
+	const uint NumSamples = 64;
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+		float3 H = TangentToWorld( ImportanceSampleGGX( E, Pow4(Roughness) ).xyz, R );
+		float3 L = 2 * dot( R, H ) * H - R;
+
+		float NoL = saturate( dot( R, L ) );
+		if( NoL > 0 )
+		{
+			FilteredColor += AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb * NoL;
+			Weight += NoL;
+		}
+	}
+
+	return FilteredColor / max( Weight, 0.001 );
+}
+
+float3 IntegrateBRDF( uint2 Random, float Roughness, float NoV )
+{
+	float3 V;
+	V.x = sqrt( 1.0f - NoV * NoV );	// sin
+	V.y = 0;
+	V.z = NoV;						// cos
+
+	float A = 0;
+	float B = 0;
+	float C = 0;
+
+	const uint NumSamples = 64;
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+
+		{
+			float3 H = ImportanceSampleGGX( E, Pow4(Roughness) ).xyz;
+			float3 L = 2 * dot( V, H ) * H - V;
+
+			float NoL = saturate( L.z );
+			float NoH = saturate( H.z );
+			float VoH = saturate( dot( V, H ) );
+
+			if( NoL > 0 )
+			{
+				float a = Square( Roughness );
+				float a2 = a*a;
+				float Vis = Vis_SmithJointApprox( a2, NoV, NoL );
+				float Vis_SmithV = NoL * sqrt( NoV * (NoV - NoV * a2) + a2 );
+				float Vis_SmithL = NoV * sqrt( NoL * (NoL - NoL * a2) + a2 );
+				//float Vis = 0.5 * rcp( Vis_SmithV + Vis_SmithL );
+
+				// Incident light = NoL
+				// pdf = D * NoH / (4 * VoH)
+				// NoL * Vis / pdf
+				float NoL_Vis_PDF = NoL * Vis * (4 * VoH / NoH);
+
+				float Fc = pow( 1 - VoH, 5 );
+				A += (1 - Fc) * NoL_Vis_PDF;
+				B += Fc * NoL_Vis_PDF;
+			}
+		}
+
+		{
+			float3 L = CosineSampleHemisphere( E ).xyz;
+			float3 H = normalize(V + L);
+
+			float NoL = saturate( L.z );
+			float NoH = saturate( H.z );
+			float VoH = saturate( dot( V, H ) );
+
+			float FD90 = ( 0.5 + 2 * VoH * VoH ) * Roughness;
+			float FdV = 1 + (FD90 - 1) * pow( 1 - NoV, 5 );
+			float FdL = 1 + (FD90 - 1) * pow( 1 - NoL, 5 );
+			C += FdV * FdL * ( 1 - 0.3333 * Roughness );
+		}
+	}
+
+	return float3( A, B, C ) / NumSamples;
+}
+
+float3 ApproximateSpecularIBL( uint2 Random, float3 SpecularColor, float Roughness, float3 N, float3 V )
+{
+	// Function replaced with prefiltered environment map sample
+	float3 R = 2 * dot( V, N ) * N - V;
+	float3 PrefilteredColor = PrefilterEnvMap( Random, Roughness, R );
+	//float3 PrefilteredColor = FilterEnvMap( Random, Roughness, N, V );
+
+	// Function replaced with 2D texture sample
+	float NoV = saturate( dot( N, V ) );
+	float2 AB = IntegrateBRDF( Random, Roughness, NoV ).xy;
+
+	return PrefilteredColor * ( SpecularColor * AB.x + AB.y );
+}
+
+
+float3 ImageBasedLightingHair( FGBufferData GBuffer, float3 V, float3 N, uint2 Random )
+{
+	float3 Lighting = 0;
+
+	uint NumSamples = 32;
+	
+	FHairTransmittanceData HairTransmittance = InitHairTransmittanceData();
+
+	LOOP
+	for( uint i = 0; i < NumSamples; i++ )
+	{
+		float2 E = Hammersley( i, NumSamples, Random );
+		float3 L = UniformSampleSphere( E ).xyz;
+		
+		{
+			float3 SampleColor = AmbientCubemap.SampleLevel( AmbientCubemapSampler, L, 0 ).rgb;
+
+			float PDF = 1.0 / (4 * PI);
+
+			float InvWeight = PDF * NumSamples;
+			float Weight = rcp( InvWeight );
+
+			float3 Shading = 0;
+			bool bEvalMultiScatter = true;
+			Shading = HairShading( GBuffer, L, V, N, 1, HairTransmittance, 0, 0, Random, bEvalMultiScatter );
+			
+			Lighting += SampleColor * Shading * Weight;
+		}
+	}
+
+	return Lighting;
+}
+
+void MainPS(in noperspective float4 UVAndScreenPos : TEXCOORD0, float4 SvPosition : SV_POSITION, out float4 OutColor : SV_Target0)
+{
+	float2 BufferUV = UVAndScreenPos.xy;
+	float2 ScreenSpacePos = UVAndScreenPos.zw;
+	int2 PixelPos = int2(SvPosition.xy);
+
+	FGBufferData GBuffer = GetGBufferDataFromSceneTextures(BufferUV);
+
+	float AbsoluteDiffuseMip = AmbientCubemapMipAdjust.z;
+
+	//世界空间下，从相机引出，朝向屏幕像素的射线（注意，起点是摄像机位置）
+	float3 ScreenVector = normalize(mul(float4(ScreenSpacePos, 1, 0), View.ScreenToWorld).xyz);
+
+	float3 N = GBuffer.WorldNormal;
+	float3 V = -ScreenVector; //视方向 -> 需要指向摄像机方向
+	float3 R0 = 2 * dot( V, N ) * N - V;  //标准视方向的反射方向 -> Reflection Dir
+
+	//float NoV = max( dot(N, V), 1e-5 );
+	float NoV = saturate( dot(N, V) );
+
+	// Point lobe in off-specular peak direction
+	float a = Square( GBuffer.Roughness );
+	float3 R = lerp( N, R0, (1 - a) * ( sqrt(1 - a) + a ) );
+	
+	uint2 Random = Rand3DPCG16( uint3( PixelPos, View.StateFrameIndexMod8) ).xy;
+
+	float3 NonSpecularContribution = 0;  //非高光项
+	float3 SpecularContribution = 0;	//高光项
+	
+	BRANCH if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT && CLEAR_COAT_BOTTOM_NORMAL)
+	{
+		const float2 oct1 = ((float2(GBuffer.CustomData.a, GBuffer.CustomData.z) * 2) - (256.0/255.0)) + UnitVectorToOctahedron(GBuffer.WorldNormal);
+		N = OctahedronToUnitVector(oct1);
+	}
+	float3 DiffuseLookup =  TextureCubeSampleLevel(AmbientCubemap, AmbientCubemapSampler, N, AbsoluteDiffuseMip).rgb; //Diffuse 的入射光照强度来自使用物体表面法线采样的Cubemap
+	NonSpecularContribution += GBuffer.DiffuseColor * DiffuseLookup; //基础Diffuse，带有染色 
+
+	// Diffuse
+	{
+		// we want to access the mip with the preconvolved diffuse lighting (coneangle=90 degree)
+		//NonSpecularContribution += GBuffer.DiffuseColor * DiffuseLookup;
+	}
+
+	// Specular
+	{
+
+		BRANCH if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT )
+		{
+			float ClearCoat			  = GBuffer.CustomData.x;
+
+			#if CLEAR_COAT_BOTTOM_NORMAL
+				//const float3 ClearCoatUnderNormal = OctahedronToUnitVector((float2(GBuffer.CustomData.a, GBuffer.CustomData.z) * 2) - (256.0/255.0));
+				const float2 oct1 = ((float2(GBuffer.CustomData.a, GBuffer.CustomData.z) * 2) - (256.0/255.0)) + UnitVectorToOctahedron(GBuffer.WorldNormal);
+ 				const float3 ClearCoatUnderNormal = OctahedronToUnitVector(oct1);
+				float3 R2 = 2 * dot( V, ClearCoatUnderNormal ) * ClearCoatUnderNormal - V;
+			
+				float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+				float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R2, Mip ).rgb;
+			
+				float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
+				SpecularContribution += SampleColor * ( GBuffer.SpecularColor * AB.x + AB.y * (1 - ClearCoat) );
+			#else
+				float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+				float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;	//采样获取预积分的环境光入射光强 Lc，注意使用R采样
+				//采样预积分到LUT图上的scale和bias分量，它们转化子对BRDF方程在半球空域按照立体角积分的结果，需要使用 F0 * scale + bias来复原
+				float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
+				SpecularContribution += SampleColor * ( GBuffer.SpecularColor * AB.x + AB.y * (1 - ClearCoat) ); //Lc * (F0 * scale + bias) = 环境光镜面反射在视方向的辐射率 
+			#endif
+		}
+		else
+		{
+			float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+			float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb; //采样获取预积分的环境光入射光强 Lc 
+
+			SpecularContribution += SampleColor * EnvBRDF( GBuffer.SpecularColor, GBuffer.Roughness, NoV ); //从预积分中解出当前视方向的环境光镜面反射
+			//SpecularContribution += ApproximateSpecularIBL( Random, GBuffer.SpecularColor, GBuffer.Roughness, GBuffer.WorldNormal, -ScreenVector );
+		}
+	}
+
+	BRANCH if( GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT )
+	{
+		const float ClearCoat			= GBuffer.CustomData.x;
+		const float ClearCoatRoughness	= GBuffer.CustomData.y;
+
+		float Mip = ComputeCubemapMipFromRoughness( ClearCoatRoughness, AmbientCubemapMipAdjust.w );
+		float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R0, Mip ).rgb; //注意使用R0采样，这是标准反射角度，没有经过粗糙度处理
+
+		// F_Schlick
+		float F0 = 0.04;
+		float Fc = pow( 1 - NoV, 5 );
+		float F = Fc + (1 - Fc) * F0; 	//标准的 F_Schlick -> F0 + （1 - F0)(1 - (v dot h))^5 -> 好处:除了pow部分，其余部分一个mad + 一个add搞定
+		F *= ClearCoat;
+
+		float LayerAttenuation = (1 - F); //清漆层衰减系数 -> 和Fresnel取反
+
+		NonSpecularContribution *= LayerAttenuation;
+		SpecularContribution *= LayerAttenuation;	//非高光和高光项都受到清漆层衰减影响，不是掠射角度大概率看不到 
+		SpecularContribution += SampleColor * F;	// + 清漆层高光本体
+	}
+	
+	BRANCH if( GBuffer.ShadingModelID == SHADINGMODELID_HAIR ) 
+	{
+		FHairTransmittanceData HairTransmittance = InitHairTransmittanceData(); //初始化计算需要用到的参数，作为上下文传递
+		float3 FakeNormal = normalize( V - N * dot(V,N) );
+		FakeNormal = normalize( FakeNormal + 0 * float3(0,0,1) ); 	//FakeNormal是视方向在法线确定的平面上的投影向量，结果经过了归一化
+																	//这样做的好处？推测是让头发拥有比较统一和稳定的入射光强（发根到发梢的指向性是比较一致的）
+		SpecularContribution = TextureCubeSampleLevel(AmbientCubemap, AmbientCubemapSampler, FakeNormal, AbsoluteDiffuseMip).rgb; //如果是头发，高光项会被重置
+		bool bEvalMultiScatter = true;
+		//标准 Marschner 算法，拆分为 R, TT 和 TRT共3个部分计算，比较费一些
+		SpecularContribution *= PI * HairShading( GBuffer, FakeNormal, V, N, 1, HairTransmittance, 0, 0.2, Random, bEvalMultiScatter);
+		NonSpecularContribution = 0;
+	}
+
+#if IMPORTANCE_SAMPLE //kena没有这项 
+	if( GBuffer.ShadingModelID > 0 && BufferUV.x > 0.5 )
+	{
+		NonSpecularContribution = 0;
+
+		BRANCH if( GBuffer.ShadingModelID == SHADINGMODELID_HAIR )
+		{
+			SpecularContribution = ImageBasedLightingHair( GBuffer, -ScreenVector, GBuffer.WorldNormal, Random );
+		}
+		else
+		{
+			SpecularContribution = ImageBasedLightingMIS( GBuffer, -ScreenVector, GBuffer.WorldNormal, Random );
+		}
+	}
+#endif
+
+	// apply darkening from ambient occlusion (does not use PostprocessInput1 to set white texture if SSAO is off)
+	float AmbientOcclusion = GBuffer.GBufferAO * AmbientOcclusionTexture.SampleLevel(AmbientOcclusionSampler, BufferUV, 0).r; //GBufferAO(来自贴图) * SSAO -> 获取屏幕空间遮蔽
+
+	// Subsurface
+	BRANCH if(GBuffer.ShadingModelID == SHADINGMODELID_SUBSURFACE || GBuffer.ShadingModelID == SHADINGMODELID_PREINTEGRATED_SKIN)
+	{
+		// some view dependent and some non view dependent (hard coded)
+		float DependentSplit = 0.5f;
+
+		float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer); //Square(BufferData.CustomData.rgb)
+
+		// view independent (shared lookup for diffuse for better performance
+		NonSpecularContribution += DiffuseLookup * SubsurfaceColor * (DependentSplit); //与视方向无关的部分，算作非高光项，DiffuseLookup来自法线作为采样方向的AmbientCubemap值
+		// view dependent (blurriness is hard coded)
+		// 使用屏幕射线作为采样方向 -> 为何不用反射方向？推测为模拟透射效果,且相对反射方向，屏幕射线方向采样返回值比较统一均匀，此外高光部分本质上受到了2次AO压制
+		SpecularContribution += TextureCubeSampleLevel(AmbientCubemap, AmbientCubemapSampler, ScreenVector, AbsoluteDiffuseMip - 2.5f).rgb * SubsurfaceColor * (AmbientOcclusion * (1.0f - DependentSplit));
+	}
+
+	FLightAccumulator LightAccumulator = (FLightAccumulator)0;
+
+	const bool bNeedsSeparateSubsurfaceLightAccumulation = UseSubsurfaceProfile(GBuffer.ShadingModelID);
+
+	LightAccumulator_Add(LightAccumulator, NonSpecularContribution + SpecularContribution, NonSpecularContribution, AmbientCubemapColor.rgb, bNeedsSeparateSubsurfaceLightAccumulation);
+
+	OutColor = LightAccumulator_GetResult(LightAccumulator);
+
+	OutColor *= AmbientOcclusion; //AO作为总控，它的影响被放在了最后一步
+}

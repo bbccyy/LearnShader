@@ -1,0 +1,407 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+/*=============================================================================
+	DistanceFieldLightingPost.usf
+=============================================================================*/
+
+#include "Common.ush"
+#include "DeferredShadingCommon.ush"
+#include "DistanceFieldLightingShared.ush"
+#include "DistanceFieldAOShared.ush"
+
+Texture2D BentNormalHistoryTexture;
+SamplerState BentNormalHistorySampler;
+Texture2D IrradianceHistoryTexture;
+SamplerState IrradianceHistorySampler;
+float HistoryWeight; 						// 0.85 
+float HistoryDistanceThreshold; 			// 30 
+float UseHistoryFilter; 					// 1 
+
+float4 HistoryScreenPositionScaleBias;
+float4 HistoryUVMinMax;
+
+Texture2D VelocityTexture;
+SamplerState VelocityTextureSampler;
+
+//新旧位置距离越远或者位置深度越小，函数越可能返回0；反之越可能返回1 
+float ComputeHistoryWeightBasedOnPosition(float2 ScreenPosition, float SceneDepth, float2 OldScreenPosition, float HistoryCameraDepth)
+{
+	//当前像素点对应的世界坐标
+	float3 WorldPosition = mul(float4(ScreenPosition * SceneDepth, SceneDepth, 1), View.ScreenToWorld).xyz;
+
+	//同样的像素点在上一帧对应的世界坐标 
+	float3 PrevPositionTranslatedWorld = mul(float4(OldScreenPosition * HistoryCameraDepth, HistoryCameraDepth, 1), View.PrevScreenToTranslatedWorld).xyz;
+	float3 PrevWorldPosition = PrevPositionTranslatedWorld - View.PrevPreViewTranslation;
+
+	float DistanceToHistoryValue = length(PrevWorldPosition - WorldPosition);
+	float RelativeHistoryDistanceThreshold = HistoryDistanceThreshold / 1000.0f;
+
+	return DistanceToHistoryValue / SceneDepth > RelativeHistoryDistanceThreshold ? 0.0f : 1.0f;
+}
+
+float2 DistanceFieldGBufferTexelSize; 		//[0.00117, 0.00208] 
+float2 DistanceFieldGBufferJitterOffset; 	//[0, 0.00417] -> 对应 [0, 2] * [0.00117, 0.00208] -> 长度为2个DFGBufferTexelSz，朝向为UV中的V 
+float4 BentNormalBufferAndTexelSize; 		//[213.00, 120.00, 0.00469, 0.00833] 
+float MinDownsampleFactorToBaseLevel; 
+
+float4 GetNormalWeights(float2 Corner00UV, float2 LowResTexelSize, float3 WorldNormal)
+{
+	float4 NormalWeights;
+
+	{
+		float3 SampleWorldNormal;
+		float Unused;
+		GetDownsampledGBuffer(Corner00UV, SampleWorldNormal, Unused);
+		NormalWeights.x = dot(SampleWorldNormal, WorldNormal); //原始点标注Normal 与 采样点Normal的相似度 
+	}
+
+	{
+		float3 SampleWorldNormal;
+		float Unused;
+		GetDownsampledGBuffer(Corner00UV + float2(LowResTexelSize.x, 0), SampleWorldNormal, Unused);
+		NormalWeights.y = dot(SampleWorldNormal, WorldNormal);
+	}
+
+	{
+		float3 SampleWorldNormal;
+		float Unused;
+		GetDownsampledGBuffer(Corner00UV + float2(0, LowResTexelSize.y), SampleWorldNormal, Unused);
+		NormalWeights.z = dot(SampleWorldNormal, WorldNormal);
+	}
+
+	{
+		float3 SampleWorldNormal;
+		float Unused;
+		GetDownsampledGBuffer(Corner00UV + LowResTexelSize, SampleWorldNormal, Unused);
+		NormalWeights.w = dot(SampleWorldNormal, WorldNormal);
+	}
+
+	return max(NormalWeights, .0001f);
+}
+
+//ReferencePlane -> ?
+//SampleScreenUV -> LowResUV 
+//https://sites.math.washington.edu/~king/coursedir/m445w04/notes/vector/normals-planes.html 
+float ComputeSampleWeightBasedOnPosition(float4 ReferencePlane, float2 SampleScreenUV, float SampleDepth) 
+{
+	//UV转ScreenPos -> 转换后将处在[-1， 1]区间 
+	float2 SampleScreenPosition = (SampleScreenUV.xy - View.ScreenPositionScaleBias.wz) / View.ScreenPositionScaleBias.xy;
+	//低分辨率像素中心点 -> 世界坐标 
+	float3 SampleWorldPosition = mul(float4(SampleScreenPosition * SampleDepth, SampleDepth, 1), View.ScreenToWorld).xyz;
+	//float4 ReferencePlane = float4(WorldNormal, -dot(WorldPosition, WorldNormal));  其中WorldPosition基于半分辨率像素的ScreenPos 
+	//PlaneDist = dot(WorldNormal, SampleWorldPos) - dot(WorldNormal, WorldPosition) 
+	//PlaneDist -> 定义了低分辨率采样点位置的世界坐标点，距离半分辨率处世界坐标所在的平面（由那一点对应法线 + 那一点本身所定义）有多远 
+	//PlaneDist -> 值越小，说明SampleWorldPos和WorldPosition同处于一个平面，反之则表面2点不在同一平面上，且距离正比于abs(PlaneDist) 
+	float PlaneDistance = dot(ReferencePlane, float4(SampleWorldPosition, 1));
+
+	float Epsilon = .0001f;
+	float RelativeDistance = 1000 * abs(PlaneDistance) / SampleDepth;
+	return min(10.0f / (RelativeDistance + Epsilon), 1);
+}
+
+void GeometryAwareUpsample(float4 UVAndScreenPos, out float4 OutBentNormal) 
+{
+	float3 WorldNormal;
+	float SceneDepth;
+	GetDownsampledGBuffer(UVAndScreenPos.xy, WorldNormal, SceneDepth); //AODownSampleFacotr = 2 -> 所有这里是半分辨率Buffer和对应UV 
+
+	float3 WorldPosition = mul(float4(UVAndScreenPos.zw * SceneDepth, SceneDepth, 1), View.ScreenToWorld).xyz;
+
+	 //我悟了，这里-dot()求解的是平面方程的第四个系数d，法线的三个维度分别是平面方程的系数a,b,c
+	 //平面方程的一般形式：ax + by + cz + d = 0
+	float4 ReferencePlane = float4(WorldNormal, -dot(WorldPosition, WorldNormal));
+
+	float2 LowResBufferSize = BentNormalBufferAndTexelSize.xy; 	//[213， 120] 
+	float2 LowResTexelSize = BentNormalBufferAndTexelSize.zw;	//[1/213, 1/120] 
+	// Corner00UV -> 对应 Cone Tracing 分辨率(213,120)下的UV，且没有像素中心点对齐，而是像素左下角对齐 
+	float2 Corner00UV = floor((UVAndScreenPos.xy - DistanceFieldGBufferJitterOffset) * LowResBufferSize) * LowResTexelSize;
+	// 下式括号内产生一个向量，含义是：在UV空间内，从Corner00UV所代表的点，指向经过Jitter后的半分辨率UV(UVAndScreenPos.xy)所对应的点 
+	// 这个向量必然不足一个 LowResTexelSize -> 不到1个低分辨率像素的UV跨度 
+	// 向量 * LowResBufferSize -> 获得1个处于[0, 1]区间内的向量 
+	float2 BilinearWeights = (UVAndScreenPos.xy - Corner00UV - DistanceFieldGBufferJitterOffset) * LowResBufferSize;
+	float2 LowResCorner00UV = Corner00UV + .5f * LowResTexelSize; //转换到低分辨率，但是像素中心点对齐的UV坐标值 
+
+	//对包含了UVAndScreenPos.xy的低分辨率田字格进行采样 
+	float4 TextureValues00 = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, LowResCorner00UV, 0);
+	float4 TextureValues10 = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, LowResCorner00UV + float2(LowResTexelSize.x, 0), 0);
+	float4 TextureValues01 = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, LowResCorner00UV + float2(0, LowResTexelSize.y), 0);
+	float4 TextureValues11 = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, LowResCorner00UV + LowResTexelSize, 0);
+
+	//基于简单几何距离(uv方向)的权重，控制田字格的4个采样返回值各自的贡献度
+	//CornerWeights可以看做是最简单的在UV空间上的采样点差异，后面还会计算基于几何(Geometry)的其他差异，共同求取权重 
+	float4 CornerWeights = float4(
+		(1 - BilinearWeights.y) * (1 - BilinearWeights.x), 	//当BilinearWeights.xy都很小时(jitter后的点非常接近corner00UV)，增加田字格左下角权重 
+		(1 - BilinearWeights.y) * BilinearWeights.x,		//当jitter后的uv点在V方向靠近corner00UV，但是U方向远离时，增加田字格右下角权重 
+		BilinearWeights.y * (1 - BilinearWeights.x), 		//类推，不赘述 
+		BilinearWeights.y * BilinearWeights.x); 			//类推 
+
+	float4 CornerDepths = float4(TextureValues00.w, TextureValues10.w, TextureValues01.w, TextureValues11.w);
+
+	float4 PositionWeights;
+	//四周采样点若和处在由原始点和原始点法线构成的平面上，则返回1，否则返回<1的值，采样点距离平面越远，返回的权重值越小 
+	//PositionWeights反应了2点之间在法线朝向和深度上的综合差异，虽然可以用2点各自的法线和深度来计算，但是低分辨率采样出来的是BentNorm，
+	//BentNorm并不能反应真实物体的表面法线分布，它反应的是可见性朝向的概率分布 
+	PositionWeights.x = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResCorner00UV, CornerDepths.x);
+	PositionWeights.y = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResCorner00UV + float2(LowResTexelSize.x, 0), CornerDepths.y);
+	PositionWeights.z = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResCorner00UV + float2(0, LowResTexelSize.y), CornerDepths.z);
+	PositionWeights.w = ComputeSampleWeightBasedOnPosition(ReferencePlane, LowResCorner00UV + LowResTexelSize, CornerDepths.w);
+
+	//float4 DepthWeights = max(exp2(-abs(CornerDepths - SceneDepth.xxxx) * .01f), .001f);
+	float Epsilon = .0001f;
+	//float4 DepthWeights = min(10.0f / (abs(CornerDepths - SceneDepth.xxxx) + Epsilon), 1);
+
+	// 由下式可知，DistanceFieldGBufferJitterOffset必然为整数倍的DistanceFieldGBufferTexelSize长度 
+	// 这是一个可以用来采样 DistanceFieldGBuffer的UV，相对原先的Corner00UV，它不光对齐了像素中心，还朝向原始点移动了JitterOffset距离 
+	float2 FullResCorner00UV = Corner00UV + DistanceFieldGBufferJitterOffset + 0.5f * DistanceFieldGBufferTexelSize;
+	// 获取原始点四周（田字格）的采样法线与目标法线的相似度（通过点乘）
+	float4 NormalWeights = GetNormalWeights(FullResCorner00UV, LowResTexelSize, WorldNormal);
+
+	float4 FinalWeights = CornerWeights * PositionWeights * NormalWeights;
+
+	float InvSafeWeight = 1.0f / max(dot(FinalWeights, 1), .00001f);
+
+	float3 AverageBentNormal =
+		(FinalWeights.x * TextureValues00.xyz
+			+ FinalWeights.y * TextureValues10.xyz
+			+ FinalWeights.z * TextureValues01.xyz
+			+ FinalWeights.w * TextureValues11.xyz)
+		* InvSafeWeight;
+
+	OutBentNormal = float4(AverageBentNormal, SceneDepth);
+
+	float BentNormalLength = length(OutBentNormal.rgb);
+	float3 NormalizedBentNormal = OutBentNormal.rgb / max(BentNormalLength, .0001f);
+	OutBentNormal.rgb = NormalizedBentNormal * BentNormalLength;
+	//OutBentNormal = float4(WorldNormal, SceneDepth);
+}
+
+void GeometryAwareUpsamplePS(
+	in float4 UVAndScreenPos : TEXCOORD0
+	, out float4 OutBentNormal : SV_Target0
+	)
+{
+	GeometryAwareUpsample(UVAndScreenPos, OutBentNormal);
+}
+
+/** Reproject the occlusion history. */
+void UpdateHistoryDepthRejectionPS(
+	in float4 UVAndScreenPos : TEXCOORD0   // UV取值[0,1]， ScreenPos取值[-1，+1]
+	,out float4 OutBentNormal : SV_Target0
+	)
+{
+	float4 NewValue;
+	GeometryAwareUpsample(UVAndScreenPos, NewValue);  //上采样后的BentNormal + 正常Depth
+
+	float SceneDepth = NewValue.w;
+
+	float4 ThisClip = float4( UVAndScreenPos.zw, ConvertToDeviceZ(SceneDepth), 1 );
+	float4 PrevClip = mul( ThisClip, View.ClipToPrevClip );
+	float2 PrevScreen = PrevClip.xy / PrevClip.w;   //取值[-1,+1]
+	float2 Screenvelocity = UVAndScreenPos.zw - PrevScreen;
+		
+	float2 FullResTexel = UVAndScreenPos.xy - .5f * View.BufferSizeAndInvSize.zw;
+	float2 VelocityN = Texture2DSampleLevel(VelocityTexture, VelocityTextureSampler, FullResTexel, 0).xy;
+		
+	if (VelocityN.x > 0.0)
+	{
+		Screenvelocity = DecodeVelocityFromTexture(VelocityN);  //疑惑，为何不直接用VelocityTexture返回值？莫非是同时启用了MSAA，导致存在同一像素不同方向的Velocity从而导致了数据失真？
+	}
+		
+	float PixelSpeed = 0.5 * length(Screenvelocity);  //这货后续没有使用
+
+	float2 OldScreenPosition = (UVAndScreenPos.zw - Screenvelocity);
+	float2 OldDistanceFieldUVs = OldScreenPosition * HistoryScreenPositionScaleBias.xy + HistoryScreenPositionScaleBias.wz;  //现在是UV，[0,1]
+
+	float EffectiveHistoryWeight = HistoryWeight; //HistoryWeight = 0.85 是个常量
+
+	FLATTEN
+	if (any(OldDistanceFieldUVs > HistoryUVMinMax.zw) || any(OldDistanceFieldUVs < HistoryUVMinMax.xy))
+	{
+		EffectiveHistoryWeight = 0; //很显然，如果上一帧的当前空间位置处于屏幕之外，历史权重下调为0
+	}
+
+	// It's not enough just to set EffectiveHistoryWeight to 0, as sampling from invalid history region may result in a NaN
+	OldDistanceFieldUVs = clamp(OldDistanceFieldUVs, HistoryUVMinMax.xy, HistoryUVMinMax.zw);
+
+// Manual resample disabled as it doesn't affect the artifacts that cause most ghosting
+#define MANUAL_HISTORY_RESAMPLE 0
+#if MANUAL_HISTORY_RESAMPLE
+
+		float2 HistoryBufferSize = floor(View.BufferSizeAndInvSize.xy / DOWNSAMPLE_FACTOR);
+		float2 HistoryTexelSize = View.BufferSizeAndInvSize.zw * DOWNSAMPLE_FACTOR;
+		float2 OldDistanceFieldUVsCorner00 = HistoryTexelSize * (floor(OldDistanceFieldUVs * HistoryBufferSize - .5f) + .5f);
+		float2 OldDistanceFieldUVsCorner01 = OldDistanceFieldUVsCorner00 + float2(0, HistoryTexelSize.y);
+		float2 OldDistanceFieldUVsCorner11 = OldDistanceFieldUVsCorner00 + HistoryTexelSize;
+		float2 OldDistanceFieldUVsCorner10 = OldDistanceFieldUVsCorner00 + float2(HistoryTexelSize.x, 0);
+		float2 LerpWeights = (OldDistanceFieldUVs - OldDistanceFieldUVsCorner00) * HistoryBufferSize;
+
+		float4 Corner00Value = Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVsCorner00, 0);
+		float4 Corner01Value = Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVsCorner01, 0);
+		float4 Corner11Value = Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVsCorner11, 0);
+		float4 Corner10Value = Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVsCorner10, 0);
+
+	#define COMPUTE_SEPARATE_POSITION_WEIGHTS 1
+	#if COMPUTE_SEPARATE_POSITION_WEIGHTS
+		float PositionWeight00 = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, Corner00Value.w);
+		float PositionWeight01 = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, Corner01Value.w);
+		float PositionWeight11 = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, Corner11Value.w);
+		float PositionWeight10 = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, Corner10Value.w);
+
+		float BilinearWeight00 = (1 - LerpWeights.y) * (1 - LerpWeights.x);
+		float BilinearWeight01 = (LerpWeights.y) * (1 - LerpWeights.x);
+		float BilinearWeight11 = (LerpWeights.y) * (LerpWeights.x);
+		float BilinearWeight10 = (1 - LerpWeights.y) * (LerpWeights.x);
+
+		float3 HistoryValue = (BilinearWeight00 * lerp(NewValue.xyz, Corner00Value.xyz, PositionWeight00)
+			+ BilinearWeight01 * lerp(NewValue.xyz, Corner01Value.xyz, PositionWeight01)
+			+ BilinearWeight11 * lerp(NewValue.xyz, Corner11Value.xyz, PositionWeight11)
+			+ BilinearWeight10 * lerp(NewValue.xyz, Corner10Value.xyz, PositionWeight10));
+
+		OutBentNormal.rgb = lerp(NewValue.rgb, HistoryValue.rgb, EffectiveHistoryWeight);
+
+		EffectiveHistoryWeight *= (PositionWeight00 > 0 || PositionWeight01 > 0 || PositionWeight11 > 0 || PositionWeight10 > 0) ? 1.0f : 0.0f;
+		
+#define BENT_NORMAL_LENGTH_FIXUP 0
+#if BENT_NORMAL_LENGTH_FIXUP
+
+		float BentNormalLength = length(HistoryValue.xyz);
+
+		float LengthVerticalLerp0 = lerp(length(Corner00Value.xyz), length(Corner01Value.xyz), LerpWeights.y);
+		float LengthVerticalLerp1 = lerp(length(Corner10Value.xyz), length(Corner11Value.xyz), LerpWeights.y);
+		float AverageLength = lerp(LengthVerticalLerp0, LengthVerticalLerp1, LerpWeights.x);
+
+		if (BentNormalLength < AverageLength && BentNormalLength > 0)
+		{
+			// Fixup normal shortening due to weighted average of vectors
+			HistoryValue.xyz = HistoryValue.xyz / BentNormalLength * AverageLength;
+		}
+
+#endif
+
+	#else
+		// Manually implement bilinear filtering with a single position weight, for testing
+		float4 VerticalLerp0 = lerp(Corner00Value, Corner01Value, LerpWeights.y);
+		float4 VerticalLerp1 = lerp(Corner10Value, Corner11Value, LerpWeights.y);
+		float4 HistoryValue = lerp(VerticalLerp0, VerticalLerp1, LerpWeights.x);
+
+		float PositionWeight = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, HistoryValue.w);
+		EffectiveHistoryWeight *= PositionWeight;
+
+		OutBentNormal.rgb = lerp(NewValue.rgb, HistoryValue.rgb, EffectiveHistoryWeight);
+	#endif
+
+#else
+	// Fast path that uses hardware interpolation
+	// This fails to reject based on depth consistently because the depth has been filtered
+	float4 HistoryValue = Texture2DSampleLevel(BentNormalHistoryTexture, BentNormalHistorySampler, OldDistanceFieldUVs, 0);
+	//新旧位置距离越远或者位置深度越小，函数越可能返回0；反之越可能返回1 
+	float PositionWeight = ComputeHistoryWeightBasedOnPosition(UVAndScreenPos.zw, SceneDepth, OldScreenPosition, HistoryValue.w);
+
+	EffectiveHistoryWeight *= PositionWeight;
+
+	OutBentNormal.rgb = lerp(NewValue.rgb, HistoryValue.rgb, EffectiveHistoryWeight);
+#endif
+
+	OutBentNormal.rgb = MakeFinite(OutBentNormal.rgb); //TODO:里面怎么搞的
+
+	OutBentNormal.a = SceneDepth;
+
+	FLATTEN
+	if (UseHistoryFilter > 0)
+	{
+		// Sign bit of alpha stores whether the history was rejected or not, to be read by the history filter pass
+		OutBentNormal.a *= EffectiveHistoryWeight > 0 ? 1 : -1;
+	}
+}
+
+#define HALF_HISTORY_FILL_KERNEL_SIZE 2
+float2 BentNormalAOTexelSize; 		// [0.00117, 0.00208] -> [1/854, 1/480] 
+float2 MaxSampleBufferUV; 			// [0.9959, 0.99479] 
+
+/** Seeds newly rejected history values (which are sources of temporal instability) with the results of a spatial search from stable history values */
+void FilterHistoryPS(
+	in float4 UVAndScreenPos : TEXCOORD0
+	,out float4 OutBentNormal : SV_Target0
+	)
+{
+	float2 BufferUV = UVAndScreenPos.xy;
+
+	#if MANUALLY_CLAMP_UV
+		BufferUV = min(BufferUV, MaxSampleBufferUV);
+	#endif
+
+	float4 HistoryValue = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, BufferUV, 0);
+
+	// Only do the spatial search for pixels who discarded their history value
+	if (HistoryValue.w < 0)
+	{
+		float SceneDepth = abs(HistoryValue.w);  //半分辨率的Depth 
+
+		float4 Accumulation = 0;
+		float3 IrradianceAccumulation = 0;
+
+		for (float y = -HALF_HISTORY_FILL_KERNEL_SIZE; y <= HALF_HISTORY_FILL_KERNEL_SIZE; y++)
+		{
+			for (float x = -HALF_HISTORY_FILL_KERNEL_SIZE; x <= HALF_HISTORY_FILL_KERNEL_SIZE; x++)
+			{
+				float2 SampleBufferUV = UVAndScreenPos.xy + BentNormalAOTexelSize * float2(x, y);
+
+				#if MANUALLY_CLAMP_UV
+					// Distance field AO was computed at 0,0 regardless of viewrect min.
+					SampleBufferUV = min(SampleBufferUV, MaxSampleBufferUV);
+				#endif
+
+				float4 TextureValue = Texture2DSampleLevel(BentNormalAOTexture, BentNormalAOSampler, SampleBufferUV, 0);
+
+				float SampleSceneDepth = abs(TextureValue.w);
+				float ValidMask = TextureValue.w > 0;  //前后两帧差异小的话Valid=1，反之Invalid=0 
+
+				// Weight by depth to avoid pulling in values of a foreground object
+				// This is a careful tradeoff between ghosting behind panning foreground objects and successful spatial searches to reduce flickering
+				float DepthWeight = exp2(-1000 * abs(SceneDepth - SampleSceneDepth) / SceneDepth);
+
+				float2 Weight2D = exp2(-abs(float2(x, y) * 10.0f / HALF_HISTORY_FILL_KERNEL_SIZE));
+				float ScreenSpaceSpatialWeight = max(Weight2D.x, Weight2D.y);
+
+				float Weight = ValidMask * ScreenSpaceSpatialWeight * DepthWeight;
+
+				Accumulation.rgb += TextureValue.rgb * Weight;
+				Accumulation.a += Weight;
+			}
+		}
+
+		// Only change the history value if the spatial search turned up something applicable
+		if (Accumulation.a > 0)
+		{
+			float InvWeight = 1.0f / Accumulation.a;
+			// Construct the history value as if the spatial search result was the previous history, 
+			// And the AO we just computed this frame was the new value
+			HistoryValue.xyz = lerp(HistoryValue.xyz, Accumulation.xyz * InvWeight, HistoryWeight);
+		}
+	}
+
+	OutBentNormal = HistoryValue;
+	// Remove sign bit so future reprojection interpolation isn't affected
+	OutBentNormal.w = abs(OutBentNormal.w);
+}
+
+float MinIndirectDiffuseOcclusion;
+
+/** Upsamples the AO results to full resolution using a bilateral filter. */
+void AOUpsamplePS(
+	in float4 UVAndScreenPos : TEXCOORD0
+	,out float4 OutSceneColor : SV_Target0
+	)
+{
+	FGBufferData GBuffer = GetGBufferData(UVAndScreenPos.xy);
+
+	float3 BentNormal = UpsampleDFAO(UVAndScreenPos.xy, GBuffer.Depth, GBuffer.WorldNormal);
+
+#if MODULATE_SCENE_COLOR
+	float Visibility = lerp(length(BentNormal), 1.0f, MinIndirectDiffuseOcclusion);
+	OutSceneColor = Visibility;
+#else
+	OutSceneColor = float4(length(BentNormal).xxx, 1.0f);
+
+#endif
+}
