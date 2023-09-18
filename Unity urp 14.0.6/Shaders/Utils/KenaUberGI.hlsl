@@ -77,8 +77,8 @@ void RemapClearCoatDiffuseAndSpecularColor(FGBufferData GBuffer, float2 ScreenPo
     if (GBuffer.ShadingModelID == SHADINGMODELID_CLEAR_COAT)
     {
         // Attenuate base color and recompute diffuse color
-        //float3 WorldPosition = mul(float4(ScreenPosition * GBuffer.Depth, GBuffer.Depth, 1), View.ScreenToWorld).xyz;
         float3 WorldPosition = mul(Matrix_Inv_VP, float4(ScreenPosition * GBuffer.Depth, GBuffer.Depth, 1)).xyz;
+        //float3 WorldPosition = ComputeWorldSpacePosition(BufferUV.xy, GBuffer.Depth, UNITY_MATRIX_I_VP);  //应该使用这个方法获取世界空间坐标
 
         float3 CameraToPixel = normalize(WorldPosition - CameraPosWS);
         float3 V = -CameraToPixel;
@@ -247,7 +247,8 @@ void GetAffectedReflectionCapturesAndNextJumpIndex(FGBufferData GBuffer, float4 
     DataStartIndex = 0; //同糊弄用，这个索引用于查找下一张映射表，毕竟我们最终是需要得到IBL的具体位置，目前还差2次跳转哩 
 }
 
-void GetDistanceFieldAOSpecularOcclusion(float3 BentNormalAO, float3 ReflectionVector, float Roughness, bool bTwoSidedFoliage, out float IndirectSpecularOcclusion, out float IndirectDiffuseOcclusion, out float3 ExtraIndirectSpecular)
+void GetDistanceFieldAOSpecularOcclusion(float3 BentNormalAO, float3 ReflectionVector, float Roughness, 
+    bool bTwoSidedFoliage, out float IndirectSpecularOcclusion, out float IndirectDiffuseOcclusion, out float3 ExtraIndirectSpecular)
 {
     IndirectSpecularOcclusion = 1;
     IndirectDiffuseOcclusion = 1;
@@ -318,7 +319,7 @@ float3 CompositeReflectionCapturesAndSkylight(
         uint CaptureIndex = 0;
         //我有理由相信这里的CaptureIndex是属于世界空间（而不是基于屏幕空间）中的预计算得到的数据结构所属的Index 
         //而以ForwardLightData开头的数据结构，存储的是动态数据，由CPU/GPU针对当前帧计算和覆写，记录的是屏幕空间信息 
-        //具体而言ForwardLightData.CulledLightDataGrid存放了一张映射表，从屏幕空间中划分的cell blocks 映射到 时间空间中的cell blocks索引 
+        //具体而言ForwardLightData.CulledLightDataGrid存放了一张映射表，从屏幕空间中划分的cell blocks 映射到 世界空间中的cell blocks索引
         //CaptureIndex = ForwardLightData.CulledLightDataGrid[CaptureDataStartIndex + TileCaptureIndex];
         CaptureIndex = 0; //这里糊弄过去，不想在Unity里重建UE才有的CulledLightDataGrid数据结构 
 
@@ -400,7 +401,7 @@ float3 GatherRadiance(float CompositeAlpha, float3 WorldPosition, float3 RayDire
 
     float IndirectDiffuseOcclusion = 0;
     GetDistanceFieldAOSpecularOcclusion(BentNormal, RayDirection, Roughness, 
-        ShadingModelID == SHADINGMODELID_TWOSIDED_FOLIAGE, IndirectSpecularOcclusion, 
+        ShadingModelID == SHADINGMODELID_TWOSIDED_FOLIAGE, IndirectSpecularOcclusion,  
         IndirectDiffuseOcclusion, ExtraIndirectSpecular);
     // Apply DFAO to IndirectIrradiance before mixing with indirect specular
     IndirectIrradiance *= IndirectDiffuseOcclusion;
@@ -425,7 +426,8 @@ float3 ReflectionEnvironment(FGBufferData GBuffer, float AmbientOcclusion, float
     const float PreExposure = 1.f;  //开放系数 
 
     float4 Color = float4(0, 0, 0, 1);
-    float3 WorldPosition = mul(Matrix_Inv_VP, float4(ScreenPosition * GBuffer.Depth, GBuffer.Depth, 1)).xyz;
+    //float3 WorldPosition = mul(Matrix_Inv_VP, float4(ScreenPosition * GBuffer.Depth, GBuffer.Depth, 1)).xyz;
+    float3 WorldPosition = ComputeWorldSpacePosition(BufferUV.xy, GBuffer.Depth, UNITY_MATRIX_I_VP);
     float3 CameraToPixel = normalize(WorldPosition - CameraPosWS);
     float IndirectIrradiance = GBuffer.IndirectIrradiance;  //总是1 
 
@@ -491,6 +493,7 @@ half4 FragKenaGI (Varyings IN) : SV_Target
     float3 DiffuseColor = GBuffer.DiffuseColor;
     float3 SpecularColor = GBuffer.SpecularColor;
 
+    //以下方法在源码中存在问题 
     //RemapClearCoatDiffuseAndSpecularColor(GBuffer, ScreenPosition, DiffuseColor, SpecularColor);
     float AmbientOcclusion = SAMPLE_TEXTURE2D(_SSAO, sampler_SSAO, IN.screenUV.xy).r;
 
