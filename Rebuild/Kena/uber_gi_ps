@@ -1,4 +1,4 @@
-ReflectionEnvironmentSkyLighting in UE4.25 
+ReflectionEnvironmentSkyLighting in UE4.25  //通用GI pass，处理间接光照部分，主要有SSR，SceneIBL，SkyIBL组成
 
 Shader hash aaf2c2ab-ed877ec0-380d2878-c5689711
 
