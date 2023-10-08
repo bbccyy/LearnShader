@@ -7,7 +7,7 @@ using UnityEngine.Rendering.Universal;
 
 namespace Rendering.RuntimeTools.RingBuffer
 {
-    public interface ISourceProvider //todo 
+    public interface ISourceProvider
     {
         public UnityEngine.Object SyncLoad(string aPath);
 
@@ -276,7 +276,7 @@ namespace Rendering.RuntimeTools.RingBuffer
                     }
                     break;
                 default:
-                    strategy = EBUILD_STRATEGY.INVALID;
+                    strategy = EBUILD_STRATEGY.INVALID;  
                     break;
             }
 
@@ -649,10 +649,10 @@ namespace Rendering.RuntimeTools.RingBuffer
                 RingBufferBoxDirType = EDIR_TYPE._MERGED;
             }
 
-            //4个点在Box中，对应6中不同情况
+            //4个点在Box中，对应6种不同情况
             public void Merge(Work3D aA, Work3D aB, Work3D aC)
             {
-                uint aFlag = (uint)RingBufferBoxDirType & 
+                uint aFlag = (uint)RingBufferBoxDirType &
                     (uint)aA.RingBufferBoxDirType &
                     (uint)aB.RingBufferBoxDirType &
                     (uint)aC.RingBufferBoxDirType;
