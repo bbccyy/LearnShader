@@ -23,3 +23,20 @@ print((0x1FBD1DF5))
 print(2^(16))
 print(s)
 print("DONE")
+
+local saturate = function(a)
+	if a > 1 then
+		return 1
+	end
+	if a <= 0 then
+		return 0
+	end
+	return a
+end
+
+local R = 6.6
+local d = 3.1
+local d1 = 1.12
+local D = d + d1
+local OF = saturate(R/D - 1)
+print(OF)
