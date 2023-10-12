@@ -91,7 +91,7 @@ namespace Unity.MergeInstancingSystem.SpaceManager
             return m_childTreeNodes.Count > 0;
         }
         /// <summary>
-        /// 后续遍历四叉树，然后转成List
+        /// 后续遍历四叉树，然后转成List 
         /// </summary>
         /// <param name="nodeList"></param>
         

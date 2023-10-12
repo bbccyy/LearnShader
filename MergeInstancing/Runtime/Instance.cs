@@ -5,7 +5,7 @@ using Object = UnityEngine.Object;
 using Unity.MergeInstancingSystem.Controller;
 namespace Unity.MergeInstancingSystem
 {
-    public class Instance:MonoBehaviour, ISerializationCallbackReceiver,IGeneratedResourceManager
+    public class Instance : MonoBehaviour, ISerializationCallbackReceiver, IGeneratedResourceManager
     {
         public const string InstanceLayerStr = "MegreInstance";
         // ---------------- Build Setting ----------------------------------

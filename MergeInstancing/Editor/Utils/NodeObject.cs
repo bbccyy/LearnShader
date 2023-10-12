@@ -5,6 +5,8 @@ using UnityEngine.Rendering;
 
 namespace Unity.MergeInstancingSystem.Utils
 {
+    //对GameObject内所有MeshRenderer的每一个材质mat生成一个NodeObject。
+    //比方说有3个MeshRenderer，每个Renderer里有2个Mat，那么就会创建出3 * 2 = 6个不同的NodeObject
     public static class GameObjectExtension
     {
         public static List<NodeObject> ToNodeObject(this GameObject obj)
