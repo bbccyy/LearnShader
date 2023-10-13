@@ -113,7 +113,7 @@ namespace Unity.MergeInstancingSystem.SpaceManager
         {
             foreach (var objcet in m_objcets)
             {
-                //拿到的是所有Lod0级别的MeshRender
+                //拿到的是所有Lod0级别的MeshRender + 单独的MeshRenderer（不含有LodGroup组件前提下）
                 var Lod0Obj = GetMeshRenderer.GetMeshRenderers(objcet,0.01f);
                 //将Lod0级别的Meshrender转换成NodeObject
                 List<NodeObject> cos = new List<NodeObject>();

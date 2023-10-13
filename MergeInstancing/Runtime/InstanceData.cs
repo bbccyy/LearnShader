@@ -7,7 +7,7 @@ using UnityEngine.Rendering.Universal;
 namespace Unity.MergeInstancingSystem
 {
     [Serializable]
-    public class InstanceData :ScriptableObject, ISerializationCallbackReceiver
+    public class InstanceData :ScriptableObject, ISerializationCallbackReceiver 
     {
         [Serializable]
         public struct MaterialPropertyData
