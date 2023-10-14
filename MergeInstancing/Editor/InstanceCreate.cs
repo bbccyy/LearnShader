@@ -262,7 +262,7 @@ namespace Unity.MergeInstancingSystem
                     
                 }
 
-                foreach (var gameObject in instanceTargets)
+                foreach (var gameObject in instanceTargets)  //遍历所有渲染实例OBJ
                 {
                     var meshRenders = gameObject.GetComponentsInChildren<MeshRenderer>();
                     foreach (var meshRender in meshRenders)
