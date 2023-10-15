@@ -46,12 +46,12 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
             Action<float> onProgress)
         {
             dynamic options = m_streamingOptions;
-            string path = options.OutputDirectory;
+            string path = options.OutputDirectory;   //动态类型，option本身来自Editor模式下交互截面产生的用户输入参数集合
 
-            //存按照某种遍历方式展成List的四叉树的容器
+            //按照某种遍历方式展成List的四叉树的容器
             InstanceTreeNodeContainer container = new InstanceTreeNodeContainer();
-
-            InstanceTreeNode convertedRootNode = ConvertNode(container, rootNode);
+            //遍历root节点，展平到List<InstanceTreeNode>中，同时构建以ITN为节点的四叉树 
+            InstanceTreeNode convertedRootNode = ConvertNode(container, rootNode); 
             BatchTreeNode(rootNode,infos,instanceData);
             if (onProgress != null)
                 onProgress(0.0f);
