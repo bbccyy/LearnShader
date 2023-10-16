@@ -33,13 +33,13 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
         /// </summary>
         /// <param name="rootNode">场景根节点</param>
         /// <param name="infos">场景中的Low Obj</param>
-        /// <param name="instanceData"></param>
-        /// <param name="root"></param>
-        /// <param name="cullDistance"></param>
-        /// <param name="lodDistance"></param>
-        /// <param name="writeNoPrefab"></param>
-        /// <param name="extractMaterial"></param>
-        /// <param name="onProgress"></param>
+        /// <param name="instanceData">树中所有数据展平后存放于此</param>
+        /// <param name="root">根节点，是游戏对象</param>
+        /// <param name="cullDistance">剔除距离</param>
+        /// <param name="lodDistance">lod距离</param>
+        /// <param name="writeNoPrefab">不写到Prefab？</param>
+        /// <param name="extractMaterial">提取材质？</param>
+        /// <param name="onProgress">处理循环中的回调</param>
         public void Build(SpaceNode rootNode, List<InstanceBuildInfo>
                 infos, AllInstanceData instanceData, GameObject root, float cullDistance, float lodDistance,
             bool useMotionvector,bool writeNoPrefab, bool extractMaterial,
