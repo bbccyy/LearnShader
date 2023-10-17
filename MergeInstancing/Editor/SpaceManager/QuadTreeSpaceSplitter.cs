@@ -137,7 +137,7 @@ namespace Unity.MergeInstancingSystem.SpaceManager
                 onProgress(0.0f);
 
 			//space split first
-			Stack<SpaceNode> nodeStack = new Stack<SpaceNode>();
+			Stack<SpaceNode> nodeStack = new Stack<SpaceNode>(); //注意这里是Stack，其他很多地方是Queue
 			nodeStack.Push(rootNode);
             //切割一个大块，并且递归的切割每一个超过规定大小的块
 			while(nodeStack.Count > 0 )

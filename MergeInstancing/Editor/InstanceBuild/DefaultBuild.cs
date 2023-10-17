@@ -115,7 +115,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
                     }
                 }
                 //处理每个节点
-                var highNodeclassificationObject = spaceNode.classificationObjects;
+                var highNodeclassificationObject = spaceNode.classificationObjects; //classificationObjects -> Dictionary<string, List<NodeObject>>
                 var highObj =  GetNodeData(highNodeclassificationObject,datas);
                 instanceTreeNode.HighObjectIds = highObj;
             }
