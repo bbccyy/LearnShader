@@ -129,6 +129,7 @@ namespace Unity.MergeInstancingSystem.Utils
              
              for (int i = 0; i < postTreeList.Count; i++)
              {
+                 //这是整棵树的归类对象容器，不是一个节点的
                  Dictionary<string, List<NodeObject>> classificationObjects = new Dictionary<string, List<NodeObject>>();
                  //一个节点的所有obj
                  foreach (var node in postTreeList[i].Objects)
@@ -160,7 +161,7 @@ namespace Unity.MergeInstancingSystem.Utils
                          var light_mapindex = meshRenderer.lightmapIndex;
                          bool m_NeedLightMap = (light_mapindex >=0 && light_mapindex < LightmapSettings.lightmaps.Length) ? true : false;
                          var mats = meshRenderer.sharedMaterials;
-                         foreach (var mat in mats)
+                         foreach (var mat in mats) //使用MeshRenderer中获取的mats，会导致allInstanceData中Mat重复
                          {
                              result.AddItem(mat);
                              int Identifier = node.m_mesh.GetHashCode() + mat.GetHashCode();

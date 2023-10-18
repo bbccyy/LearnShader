@@ -176,7 +176,7 @@ namespace Unity.MergeInstancingSystem.SpaceManager
                         float nearestDistance = float.MaxValue;
                         for (int ci = 0; ci < target.GetChildCount(); ++ci)
                         {
-                            if (objectBounds.IsPartOf(target.GetChild(ci).Bounds))
+                            if (objectBounds.IsPartOf(target.GetChild(ci).Bounds))  //比如完整包含该物体
                             {
                                 float dist = Vector3.Distance(target.GetChild(ci).Bounds.center, objectBounds.center);
 

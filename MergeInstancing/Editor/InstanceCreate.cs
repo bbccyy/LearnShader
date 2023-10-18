@@ -115,7 +115,7 @@ namespace Unity.MergeInstancingSystem
                         Level = item.Level + 1,
                         Name = item.Name + "_" + (i+1),
                         TargetGameObjects = new List<GameObject>(),
-                        Distances = new List<int>(),
+                        Distances = new List<int>(),    //Distance是对应下标的GameObj距离当前节点的层级距离
                     });
                 }
                 maxLevel = Math.Max(maxLevel, item.Level);
@@ -148,14 +148,14 @@ namespace Unity.MergeInstancingSystem
                 }
                 for (int mi = 0; mi < meshRenderers.Count; ++mi)
                 {
-                    info.AddWorkingObject(meshRenderers[mi]);
-                    info.Distances.Add(distances[mi]);
+                    info.AddWorkingObject(meshRenderers[mi]);   //renderer会在这里展开成mat_mesh的多种组合
+                    info.Distances.Add(distances[mi]);   //这个Distance没有存在的意义
                 }
                 
             }
             for (int i = 0; i < buildInfoCandidates.Count; ++i)
             {
-                if (buildInfoCandidates[i].classificationObjects.Count > 0)
+                if (buildInfoCandidates[i].classificationObjects.Count > 0) //只有节点里有货的Node会被添加到返回列表中
                 {
                     result.Add(buildInfoCandidates[i]);
                 }
@@ -220,7 +220,7 @@ namespace Unity.MergeInstancingSystem
                     List<InstanceBuildInfo> buildInfos = CreateBuildInfo(ins, rootNode, ins.MinObjectSize);
 
                     //得到的是 按照后序遍历展开的四叉树的节点中的 Instance 信息
-                    AllInstanceData instanceData = ObjectUtils.GetInstanceData(rootNode);
+                    AllInstanceData instanceData = ObjectUtils.GetInstanceData(rootNode); //这里每个节点还不包括LowLodObj
                     //--------------------------- 到这里的数据 ----------------------------------------------------------------------------------
                     // 1. 四叉树，每个节点有按照包围盒放进去的 Object
                     // 2. InstanceBuildInfo ， 按层展开的四叉树，每个节点对应一个四叉树的节点，存放的是包含子节点物体在内的所有 renderer（按层级取不同的lod）。

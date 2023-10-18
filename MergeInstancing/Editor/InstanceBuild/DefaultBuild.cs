@@ -256,11 +256,11 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
                 var spaceNode = spaceNodes.Dequeue();
                 int level = levels.Dequeue();
 
-                convertedTable[spaceNode] = instanceTreeNode;
+                convertedTable[spaceNode] = instanceTreeNode; //一对一对应关系
 
                 instanceTreeNode.Level = level;
                 instanceTreeNode.Bounds = spaceNode.Bounds;
-                if (spaceNode.HasChild())
+                if (spaceNode.HasChild())   //使用Queue保存节点 -> 本质是BFS -> 不是后续遍历
                 {
                     //存放一个和一个节点子孩子数量相同的TreeNode
                     List<InstanceTreeNode> childTreeNodes = new List<InstanceTreeNode>(spaceNode.GetChildCount());
@@ -275,7 +275,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
                         levels.Enqueue(level + 1);
                     }
 
-                    instanceTreeNode.SetChildTreeNode(childTreeNodes);
+                    instanceTreeNode.SetChildTreeNode(childTreeNodes);  //唯一向Container添加元素的地方
 
                 }
             }
