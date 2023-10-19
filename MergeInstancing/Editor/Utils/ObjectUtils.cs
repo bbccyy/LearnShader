@@ -156,7 +156,7 @@ namespace Unity.MergeInstancingSystem.Utils
                      //这些所有的NodeObj是共享mesh和材质的
                      foreach (var node in meshList.Value)
                      {
-                         result.AddItem(node.m_mesh);
+                         result.AddItem(node.m_mesh); //AddItem内部有去重逻辑
                          var meshRenderer = node.m_renderer;
                          var light_mapindex = meshRenderer.lightmapIndex;
                          bool m_NeedLightMap = (light_mapindex >=0 && light_mapindex < LightmapSettings.lightmaps.Length) ? true : false;

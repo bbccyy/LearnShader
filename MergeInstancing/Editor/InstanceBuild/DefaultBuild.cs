@@ -123,7 +123,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
             foreach (var info in infos)
             {
                 var instanceTreeNode = convertedTable[info.Target];
-                var highNodeclassificationObject = info.classificationObjects;
+                var highNodeclassificationObject = info.classificationObjects;  //classificationObjects同时有节点自身数据，也有子节点传递过来的LowLod数据
                 var lowObject =  GetNodeData(highNodeclassificationObject,datas);
                 instanceTreeNode.LowObjectIds = lowObject;
             }
@@ -134,7 +134,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
             string[] existingAssetPaths = AssetDatabase.FindAssets("t:Object", new[] { path });
             foreach (var existingAssetGuid in existingAssetPaths)
             {
-                string existingAssetPath = AssetDatabase.GUIDToAssetPath(existingAssetGuid);
+                string existingAssetPath = AssetDatabase.GUIDToAssetPath(existingAssetGuid); 
                 string existingAssetName = System.IO.Path.GetFileName(existingAssetPath);
 
                 if (existingAssetName == assetName)
@@ -149,8 +149,18 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
         }
         /// <summary>
         /// 从分类好的OBJ中构建NodeData，按照Mesh和材质分类
+        ///
+        ///以下 By WYX
+        ///入参是classificationObjects字典以及AllInstanceData结构；
+        ///前者保存了来自一个节点（可以是SpaceNode也可以是InstanceTreeNode）的
+        ///对应数据（自身Obj或额外附带自身以下全部节点的LowLod数据），后者是以后序遍历展开铺平的全树“节点自身”数据。
+        ///方法遍历字典classificationObjects，里面的每一组Key+Value对应了一种可以交给GPUInstance实例渲染的数据对象，
+        ///并为这样的一组数据产生出一个NodeData数据节点，里面存放了统一的
+        ///Mesh，Mat，MatIdx，SubMeshIdx，NeedLightMapFlag，RenderQueue，NeedCastShadowFlag等公共信息，
+        ///额外的还有MatrixIdx和GIDataIdx等逐实例信息，上面2个信息的本体是指向AllInstanceData内对应数值的Offset和Length。
+        ///
         /// </summary>
-        /// <param name="classificationObjects"></param>
+        /// <param name="classificationObjects">可能只包含自身Obj，也可能还额外附带子节点全部LowLod的Obj</param>
         /// <param name="datas"></param>
         /// <returns></returns>
         private List<NodeData> GetNodeData(Dictionary<string, List<NodeObject>> classificationObjects,AllInstanceData datas)
@@ -162,9 +172,9 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
                 List<int> giIndex = new List<int>();
                 //每种类型（材质加mesh）下的OBJList
                 var nodelist = nodePair.Value;
-                int meshIndex = datas.GetAssetsPositon(nodePair.Value[0].m_meshGUID,
+                int meshIndex = datas.GetAssetsPositon(nodePair.Value[0].m_meshGUID,  //每一组Value共享同样的Mesh
                     AllInstanceData.AssetsEnum.mesh);
-                int matIndex = datas.GetAssetsPositon(nodePair.Value[0].m_matGUID,
+                int matIndex = datas.GetAssetsPositon(nodePair.Value[0].m_matGUID,  //每一组Value共享同样的Mat
                     AllInstanceData.AssetsEnum.material);
                 int subMesh = nodePair.Value[0].m_subMeshIndex;
 
@@ -174,7 +184,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
                 {
                     int index = datas.GetAssetsPositon(nodeObject.m_renderer.GetHashCode().ToString(),AllInstanceData.AssetsEnum.matrix4x4);
                     matrixx4x4Index.Add(index);
-                    if (needLighMap)
+                    if (needLighMap) //GI 参数对应问题 -> Matrix4X4经过sort后原本的遍历顺序已经打乱，如果必然有GI，那么GI对于关系会错乱；如果不是必然有GI，那么缺失matrix2GI的映射关系
                     {
                         int GIindex = datas.GetAssetsPositon(nodeObject.m_renderer.GetHashCode().ToString(),AllInstanceData.AssetsEnum.LightMapIndex);
                         if (GIindex == -1)
