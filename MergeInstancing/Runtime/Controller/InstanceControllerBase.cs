@@ -205,7 +205,7 @@ namespace Unity.MergeInstancingSystem.Controller
             {
                 foreach (var nodeData in rendererObj)
                 {
-                    var mesh = m_instanceData.m_meshs[nodeData.m_meshIndex];
+                    var mesh = m_instanceData.m_meshs[nodeData.m_meshIndex];  //放else分支中
                     var mat = m_instanceData.m_materials[nodeData.m_material];
                     int identifier = nodeData.m_identifier;
                     if (m_renderInfo.TryGetValue(identifier,out var rendererInfo))

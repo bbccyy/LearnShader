@@ -102,6 +102,7 @@ namespace Unity.MergeInstancingSystem.Pool
             m_type = type;
             m_Index = 0;
             // --------------------- 还是得按照一个pool的容量不能超过1000 来做 --------------------------------- 
+            //思考:如果大量存在远远不足1000对象的mat+mesh组合，这里全部按1000开辟内存，则存在内存占用过多的风险
             int size =  Mathf.CeilToInt((float)count / MAX_BUFFCOUNT);
             
             m_item = new List<Pool<T>>();
