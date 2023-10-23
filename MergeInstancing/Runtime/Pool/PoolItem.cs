@@ -131,14 +131,14 @@ namespace Unity.MergeInstancingSystem.Pool
         public void Add(object item)
         {
             //当前list中的使用的那个pool满了
-            if (m_item[m_Index].IsFull)
+            if (m_item[m_Index].IsFull)  //存在问题：对于新开辟的Pool<T>，其capacity等于实际需求数量（可能不足1000的上限）
             {
                 Expande();
                 m_Index += 1;
             }
 
             var pool = m_item[m_Index];
-            pool.OnePool[pool.length] = (T)item;
+            pool.OnePool[pool.length] = (T)item; //这里建议将方法封装给Pool<T>类
             pool.length += 1;
         }
         /// <summary>

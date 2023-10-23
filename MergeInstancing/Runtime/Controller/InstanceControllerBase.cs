@@ -208,7 +208,7 @@ namespace Unity.MergeInstancingSystem.Controller
                     var mesh = m_instanceData.m_meshs[nodeData.m_meshIndex];  //放else分支中
                     var mat = m_instanceData.m_materials[nodeData.m_material];
                     int identifier = nodeData.m_identifier;
-                    if (m_renderInfo.TryGetValue(identifier,out var rendererInfo))
+                    if (m_renderInfo.TryGetValue(identifier,out var rendererInfo)) //这里相当于合并不同NodeData中相同mat+mesh属性的对象
                     {
                         AddDataToPool(nodeData,rendererInfo);
                     }
