@@ -216,7 +216,7 @@ namespace Unity.MergeInstancingSystem.Controller
                     {
                         RendererInfo tempInfo = new RendererInfo();
                         tempInfo.m_mat = mat;
-                        tempInfo.m_mesh = mesh;
+                        tempInfo.m_mesh = mesh;  
                         tempInfo.m_poolID = m_positionPoolMap[identifier];
                         tempInfo.CastShadow = nodeData.m_castShadow;
                         tempInfo.m_queue = nodeData.m_queue;
