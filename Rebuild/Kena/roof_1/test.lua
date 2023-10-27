@@ -40,3 +40,6 @@ local d1 = 1.12
 local D = d + d1
 local OF = saturate(R/D - 1)
 print(OF)
+
+local bi = 0xFF
+print(bi)
