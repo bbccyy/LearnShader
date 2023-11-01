@@ -43,3 +43,6 @@ print(OF)
 
 local bi = 0xFF
 print(bi)
+
+local r0 = 0.11888
+print(math.sqrt(r0))
