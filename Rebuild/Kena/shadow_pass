@@ -69,7 +69,8 @@ ps_5_0
 
   34: add r1.y, -cb0[33].z, l(1.0000)
   35: mad r1.x, r1.x, r1.y, cb0[33].z                             ProjectionDepthBiasParameters = cb0[33]
-  36: mul r1.x, r1.x, cb0[0].z                                    Settings.TransitionScale    SoftTransitionScale == cb0[0].z
+  36: mul r1.x, r1.x, cb0[0].z                                    Settings.TransitionScale    SoftTransitionScale == cb0[0].z = 4652.82666
+
                                                                   ProjectionDepthBiasParameters == [0.00021, 0.00032, 0.1, 10000]
 
   37: mad r1.yz, r2.xxyx, cb0[1].xxyx, l(0.0000, -0.5000, -0.5000, 0.0000)
