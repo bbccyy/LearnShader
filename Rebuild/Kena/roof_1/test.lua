@@ -42,6 +42,7 @@ local OF = saturate(R/D - 1)
 print(OF)
 
 local bi = 0xFF
+bi = 0x80000000
 print(bi)
 
 local r0 = 0.11888

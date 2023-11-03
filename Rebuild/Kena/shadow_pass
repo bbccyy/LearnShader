@@ -73,86 +73,124 @@ ps_5_0
 
                                                                   ProjectionDepthBiasParameters == [0.00021, 0.00032, 0.1, 10000]
 
-  37: mad r1.yz, r2.xxyx, cb0[1].xxyx, l(0.0000, -0.5000, -0.5000, 0.0000)
-  38: frc r2.xy, r1.yzyy
+ManualPCF -> FEATURE_GATHER4
+  37: mad r1.yz, r2.xxyx, cb0[1].xxyx, l(0, -0.5, -0.5, 0)        float2 TexelPos = ShadowPosition * Settings.ShadowBufferSize.xy - 0.5f
+                                                                  cb0[1] = [8192.00, 8192.00, 0.00012, 0.00012] == ShadowBufferSize
+  38: frc r2.xy, r1.yzyy                                          float2 Fraction = frac(TexelPos)
   39: round_ni r1.yz, r1.yyzy
-  40: add r1.yz, r1.yyzy, l(0.0000, 0.5000, 0.5000, 0.0000)
-  41: mul r1.yz, r1.yyzy, cb0[1].zzwz
-  42: gather4(-2,-2,0)(texture2d)(float,float,float,float) r3.xyzw, r1.yzyy, t4.xyzw, s4.x
-  43: mad r0.w, r0.w, r1.x, l(-1.0000)
-  44: mad_sat r4.xyzw, r3.xyzw, r1.xxxx, -r0.wwww
+  40: add r1.yz, r1.yyzy, l(0.0000, 0.5000, 0.5000, 0.0000)       float2 TexelCenter
+  41: mul r1.yz, r1.yyzy, cb0[1].zzwz                             float2 SamplePos = TexelCenter * Settings.ShadowBufferSize.zw
+
+  CalculateOcclusion
+  42: gather4(-2,-2,0)(texture2d)(float,float,float,float) r3.xyzw, r1.yzyy, t4.xyzw, s4.x      ShadowDepthTexture.Gather()
+  43: mad r0.w, r0.w, r1.x, l(-1.0000)                            float ConstantFactor = Settings.SceneDepth * TransitionScale - 1
+  44: mad_sat r4.xyzw, r3.xyzw, r1.xxxx, -r0.wwww     float4 ShadowFactor = saturate(ShadowmapDepth * TransitionScale - ConstantFactor)
+
+  CalculateOcclusion
   45: gather4(0,-2,0)(texture2d)(float,float,float,float) r5.xyzw, r1.yzyy, t4.xyzw, s4.x
   46: mad_sat r6.xyzw, r5.xyzw, r1.xxxx, -r0.wwww
+
+  CalculateOcclusion
   47: gather4(2,-2,0)(texture2d)(float,float,float,float) r7.xyzw, r1.yzyy, t4.xyzw, s4.x
   48: mad_sat r8.xyzw, r7.xyzw, r1.xxxx, -r0.wwww
-  49: add r9.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
+
+  49: add r9.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)      1.0f - Fraction.xy
   50: mad r4.xy, r4.wxww, r9.xxxx, r4.zyzz
   51: add r4.xy, r6.wxww, r4.xyxx
   52: add r4.xy, r6.zyzz, r4.xyxx
   53: add r4.xy, r8.wxww, r4.xyxx
-  54: mad r4.xy, r8.zyzz, r2.xxxx, r4.xyxx
-  55: mad r2.w, r4.x, r9.y, r4.y
+  54: mad r4.xy, r8.zyzz, r2.xxxx, r4.xyxx                        HorizontalPCF5x2
+  55: mad r2.w, r4.x, r9.y, r4.y                                  float Results = Row0.x * (1.0f - Fraction.y) + Row0.y
+
+  CalculateOcclusion
   56: gather4(-2,0,0)(texture2d)(float,float,float,float) r4.xyzw, r1.yzyy, t4.xyzw, s4.x
-  57: mad_sat r6.xyzw, r4.xyzw, r1.xxxx, -r0.wwww
+  57: mad_sat r6.xyzw, r4.xyzw, r1.xxxx, -r0.wwww                 float4 ShadowFactor
+
+  CalculateOcclusion
   58: gather4(texture2d)(float,float,float,float) r8.xyzw, r1.yzyy, t4.xyzw, s4.x
   59: mad_sat r10.xyzw, r8.xyzw, r1.xxxx, -r0.wwww
+
+  CalculateOcclusion
   60: gather4(2,0,0)(texture2d)(float,float,float,float) r11.xyzw, r1.yzyy, t4.xyzw, s4.x
   61: mad_sat r12.xyzw, r11.xyzw, r1.xxxx, -r0.wwww
+
   62: mad r6.xy, r6.wxww, r9.xxxx, r6.zyzz
   63: add r6.xy, r10.wxww, r6.xyxx
   64: add r6.xy, r10.zyzz, r6.xyxx
   65: add r6.xy, r12.wxww, r6.xyxx
-  66: mad r6.xy, r12.zyzz, r2.xxxx, r6.xyxx
+  66: mad r6.xy, r12.zyzz, r2.xxxx, r6.xyxx                       HorizontalPCF5x2
   67: add r6.x, r6.y, r6.x
-  68: add r2.w, r2.w, r6.x
+  68: add r2.w, r2.w, r6.x                                        Results += Row1.x + Row1.y
+
+  CalculateOcclusion
   69: gather4(-2,2,0)(texture2d)(float,float,float,float) r6.xyzw, r1.yzyy, t4.xyzw, s4.x
   70: mad_sat r10.xyzw, r6.xyzw, r1.xxxx, -r0.wwww
+  CalculateOcclusion
   71: gather4(0,2,0)(texture2d)(float,float,float,float) r12.xyzw, r1.yzyy, t4.xyzw, s4.x
   72: mad_sat r13.xyzw, r12.xyzw, r1.xxxx, -r0.wwww
+  CalculateOcclusion
   73: gather4(2,2,0)(texture2d)(float,float,float,float) r14.xyzw, r1.yzyy, t4.xyzw, s4.x
   74: mad_sat r15.xyzw, r14.xyzw, r1.xxxx, -r0.wwww
+
   75: mad r1.xy, r10.wxww, r9.xxxx, r10.zyzz
   76: add r1.xy, r13.wxww, r1.xyxx
   77: add r1.xy, r13.zyzz, r1.xyxx
   78: add r1.xy, r15.wxww, r1.xyxx
-  79: mad r1.xy, r15.zyzz, r2.xxxx, r1.xyxx
-  80: mad r0.w, r1.y, r2.y, r1.x
-  81: add r0.w, r0.w, r2.w
-  82: add r0.z, r0.z, -cb0[35].y
-  83: mul_sat r0.z, r0.z, cb0[35].z
-  84: add o0.w, -r0.z, l(1.0000)
+  79: mad r1.xy, r15.zyzz, r2.xxxx, r1.xyxx                       HorizontalPCF5x2
+
+  80: mad r0.w, r1.y, r2.y, r1.x 
+  81: add r0.w, r0.w, r2.w                                        Results += Row2.x + Row2.y * Fraction.y;
+
+  82: add r0.z, r0.z, -cb0[35].y                                  FadePlaneOffset == cb0[35].y = 1547.69238
+  83: mul_sat r0.z, r0.z, cb0[35].z                               cb0[35].z == InvFadePlaneLength = 0.0065
+  84: add o0.w, -r0.z, l(1.0000)                BlendFactor = 1.0f - saturate((SceneW - FadePlaneOffset) * InvFadePlaneLength)
+
   85: sample_l(texture2d)(float,float,float,float) r0.z, r0.xyxx, t2.xywz, s2, l(0)
   86: mul r0.z, r0.z, l(255.0000)
   87: round_ne r0.z, r0.z
   88: ftou r0.z, r0.z
   89: and r1.x, r0.z, l(15)
-  90: ieq r10.xyzw, r1.xxxx, l(2, 3, 5, 6)
+  90: ieq r10.xyzw, r1.xxxx, l(2, 3, 5, 6)                        GetGBufferData(ScreenUV) -> ShadingModelID
+
   91: or r1.y, r10.y, r10.x
   92: or r1.y, r10.z, r1.y
   93: or r1.y, r10.w, r1.y
   94: ieq r1.xz, r1.xxxx, l(7, 0, 9, 0)
   95: or r1.y, r1.x, r1.y
   96: or r1.y, r1.z, r1.y
-  97: if_nz r1.y
-  98:   sample_l(texture2d)(float,float,float,float) r0.x, r0.xyxx, t3.wxyz, s3, l(0)
+  97: if_nz r1.y                                                  if IsSubsurfaceModel(GBufferData.ShadingModelID)
+
+  98:   sample_l(texture2d)(float,float,float,float) r0.x, r0.xyxx, t3.wxyz, s3, l(0)     float Opacity = GBufferData.CustomData.a
+
   99:   and r0.y, r0.z, l(16)
+
  100:   min r0.x, r0.x, l(0.9990)
  101:   add r0.x, -r0.x, l(1.0000)
  102:   log r0.x, r0.x
- 103:   mul r0.x, r0.x, l(-0.0347)
- 104:   movc r0.x, r0.y, l(0x80000000), r0.x
+ 103:   mul r0.x, r0.x, l(-0.0347)                    float Density = -.05f * log(1 - min(Opacity, .999f)); //这里-0.05f实际为-0.0347f
+
+ 104:   movc r0.x, r0.y, l(0x80000000), r0.x          0x80000000 == -2147483648 -> min value of int32 decimals
  105:   or r0.y, r1.z, r1.x
- 106:   movc r0.x, r0.y, l(1.0000), r0.x
- 107:   add r0.y, r2.z, cb0[33].x
- 108:   mul r0.x, r0.x, cb0[33].w
- 109:   add r10.xyzw, -r3.xyzw, r0.yyyy
- 110:   max r10.xyzw, r10.xyzw, l(0, 0, 0, 0)
- 111:   mul r10.xyzw, r0.xxxx, -r10.xyzw
+ 106:   movc r0.x, r0.y, l(1.0000), r0.x              if ... then Density = 1
+
+ 107:   add r0.y, r2.z, cb0[33].x                     ProjectionDepthBiasParameters = cb0[33]
+                                                      Settings.SceneDepth = LightSpacePixelDepthForSSS + ProjectionDepthBiasParameters.x
+ 108:   mul r0.x, r0.x, cb0[33].w                     Settings.DensityMulConstant = Density * ProjectionDepthBiasParameters.w
+
+CalculateOcclusion
+ 109:   add r10.xyzw, -r3.xyzw, r0.yyyy               Settings.SceneDepth - SampledDepth
+ 110:   max r10.xyzw, r10.xyzw, l(0, 0, 0, 0)         float3 Thickness = max(Settings.SceneDepth - SampledDepth, 0)
+ 111:   mul r10.xyzw, r0.xxxx, -r10.xyzw              Settings.DensityMulConstant * (-Thickness)
+
  112:   mul r10.xyzw, r10.xyzw, l(1.4427, 1.4427, 1.4427, 1.4427)
- 113:   exp r10.xyzw, r10.xyzw
- 114:   min r10.xyzw, r10.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
+ 113:   exp r10.xyzw, r10.xyzw                        FastExp
+
+ 114:   min r10.xyzw, r10.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)       float4 Occlusion
+
  115:   lt r3.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r3.xyzw
- 116:   movc r3.xyzw, r3.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r10.xyzw
+ 116:   movc r3.xyzw, r3.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r10.xyzw    return ShadowmapDepth > .99f ? 1 : Occlusion;
+
+CalculateOcclusion
  117:   add r10.xyzw, -r5.xyzw, r0.yyyy
  118:   max r10.xyzw, r10.xyzw, l(0, 0, 0, 0)
  119:   mul r10.xyzw, r0.xxxx, -r10.xyzw
@@ -161,6 +199,8 @@ ps_5_0
  122:   min r10.xyzw, r10.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  123:   lt r5.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r5.xyzw
  124:   movc r5.xyzw, r5.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r10.xyzw
+
+CalculateOcclusion
  125:   add r10.xyzw, -r7.xyzw, r0.yyyy
  126:   max r10.xyzw, r10.xyzw, l(0, 0, 0, 0)
  127:   mul r10.xyzw, r0.xxxx, -r10.xyzw
@@ -169,12 +209,15 @@ ps_5_0
  130:   min r10.xyzw, r10.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  131:   lt r7.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r7.xyzw
  132:   movc r7.xyzw, r7.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r10.xyzw
+
  133:   mad r1.xy, r3.wxww, r9.xxxx, r3.zyzz
  134:   add r1.xy, r5.wxww, r1.xyxx
  135:   add r1.xy, r5.zyzz, r1.xyxx
  136:   add r1.xy, r7.wxww, r1.xyxx
- 137:   mad r1.xy, r7.zyzz, r2.xxxx, r1.xyxx
- 138:   mad r0.z, r1.x, r9.y, r1.y
+ 137:   mad r1.xy, r7.zyzz, r2.xxxx, r1.xyxx          HorizontalPCF5x2
+ 138:   mad r0.z, r1.x, r9.y, r1.y                    Results = Row0.x * (1.0f - Fraction.y) + Row0.y;          
+
+CalculateOcclusion
  139:   add r3.xyzw, -r4.xyzw, r0.yyyy
  140:   max r3.xyzw, r3.xyzw, l(0, 0, 0, 0)
  141:   mul r3.xyzw, r0.xxxx, -r3.xyzw
@@ -183,6 +226,8 @@ ps_5_0
  144:   min r3.xyzw, r3.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  145:   lt r4.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r4.xyzw
  146:   movc r3.xyzw, r4.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r3.xyzw
+
+ CalculateOcclusion
  147:   add r4.xyzw, -r8.xyzw, r0.yyyy
  148:   max r4.xyzw, r4.xyzw, l(0, 0, 0, 0)
  149:   mul r4.xyzw, r0.xxxx, -r4.xyzw
@@ -191,6 +236,8 @@ ps_5_0
  152:   min r4.xyzw, r4.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  153:   lt r5.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r8.xyzw
  154:   movc r4.xyzw, r5.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r4.xyzw
+
+ CalculateOcclusion
  155:   add r5.xyzw, -r11.xyzw, r0.yyyy
  156:   max r5.xyzw, r5.xyzw, l(0, 0, 0, 0)
  157:   mul r5.xyzw, r0.xxxx, -r5.xyzw
@@ -199,13 +246,17 @@ ps_5_0
  160:   min r5.xyzw, r5.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  161:   lt r7.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r11.xyzw
  162:   movc r5.xyzw, r7.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r5.xyzw
+
+
  163:   mad r1.xy, r3.wxww, r9.xxxx, r3.zyzz
  164:   add r1.xy, r4.wxww, r1.xyxx
  165:   add r1.xy, r4.zyzz, r1.xyxx
  166:   add r1.xy, r5.wxww, r1.xyxx
- 167:   mad r1.xy, r5.zyzz, r2.xxxx, r1.xyxx
+ 167:   mad r1.xy, r5.zyzz, r2.xxxx, r1.xyxx                HorizontalPCF5x2
  168:   add r1.x, r1.y, r1.x
- 169:   add r0.z, r0.z, r1.x
+ 169:   add r0.z, r0.z, r1.x                                Results += Row1.x + Row1.y;
+
+CalculateOcclusion
  170:   add r3.xyzw, -r6.xyzw, r0.yyyy
  171:   max r3.xyzw, r3.xyzw, l(0, 0, 0, 0)
  172:   mul r3.xyzw, r0.xxxx, -r3.xyzw
@@ -214,6 +265,8 @@ ps_5_0
  175:   min r3.xyzw, r3.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  176:   lt r4.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r6.xyzw
  177:   movc r3.xyzw, r4.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r3.xyzw
+
+ CalculateOcclusion
  178:   add r4.xyzw, -r12.xyzw, r0.yyyy
  179:   max r4.xyzw, r4.xyzw, l(0, 0, 0, 0)
  180:   mul r4.xyzw, r0.xxxx, -r4.xyzw
@@ -222,6 +275,8 @@ ps_5_0
  183:   min r4.xyzw, r4.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  184:   lt r5.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r12.xyzw
  185:   movc r4.xyzw, r5.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r4.xyzw
+
+ CalculateOcclusion
  186:   add r5.xyzw, -r14.xyzw, r0.yyyy
  187:   max r5.xyzw, r5.xyzw, l(0, 0, 0, 0)
  188:   mul r5.xyzw, r0.xxxx, -r5.xyzw
@@ -230,23 +285,32 @@ ps_5_0
  191:   min r5.xyzw, r5.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000)
  192:   lt r6.xyzw, l(0.9900, 0.9900, 0.9900, 0.9900), r14.xyzw
  193:   movc r5.xyzw, r6.xyzw, l(1.0000, 1.0000, 1.0000, 1.0000), r5.xyzw
+
  194:   mad r0.xy, r3.wxww, r9.xxxx, r3.zyzz
  195:   add r0.xy, r4.wxww, r0.xyxx
  196:   add r0.xy, r4.zyzz, r0.xyxx
  197:   add r0.xy, r5.wxww, r0.xyxx
- 198:   mad r0.xy, r5.zyzz, r2.xxxx, r0.xyxx
+ 198:   mad r0.xy, r5.zyzz, r2.xxxx, r0.xyxx                HorizontalPCF5x2
  199:   mad r0.x, r0.y, r2.y, r0.x
- 200:   add r0.x, r0.x, r0.z
- 201:   mul r0.x, r0.x, l(0.0400)
+ 200:   add r0.x, r0.x, r0.z                                Results += Row2.x + Row2.y * Fraction.y;
+
+ 201:   mul r0.x, r0.x, l(0.0400)                           return 0.04f * Results -> SSSTransmission
  202: else
- 203:   mov r0.x, l(1.0000)
+ 203:   mov r0.x, l(1.0000)                                 -> SSSTransmission
  204: endif
- 205: mad r0.y, r0.w, l(0.0400), l(-0.5000)
- 206: mad_sat r0.y, r0.y, cb0[26].z, l(0.5000)
- 207: mul r0.z, r1.w, cb0[26].y
+
+ 205: mad r0.y, r0.w, l(0.0400), l(-0.5000)                 (Shadow - 0.5)
+ 206: mad_sat r0.y, r0.y, cb0[26].z, l(0.5000)              Shadow = saturate( (Shadow - 0.5) * ShadowSharpen + 0.5 )
+                                                            ShadowSharpen == cb0[26].z = 1
+ 207: mul r0.z, r1.w, cb0[26].y                             ShadowFadeFraction * PerObjectDistanceFadeFraction
+                                                            PerObjectDistanceFadeFraction == cb0[26].y = 1
  208: mad r0.y, r0.y, r0.y, l(-1.0000)
- 209: mad r0.y, r0.z, r0.y, l(1.0000)
+ 209: mad r0.y, r0.z, r0.y, l(1)
+                              float FadedShadow = lerp(1.0f, Square(Shadow), ShadowFadeFraction * PerObjectDistanceFadeFraction)
+
  210: mad r0.x, r0.x, r0.x, l(-1.0000)
- 211: mad r0.x, r0.z, r0.x, l(1.0000)
- 212: sqrt o0.xyz, r0.yxyy
+ 211: mad r0.x, r0.z, r0.x, l(1) 
+                              float FadedSSSShadow = lerp(1.0f, Square(SSSTransmission), ShadowFadeFraction * PerObjectDistanceFadeFraction)
+ 
+ 212: sqrt o0.xyz, r0.yxyy    OutColor = EncodeLightAttenuation(half4(FadedShadow, FadedSSSShadow, FadedShadow, FadedSSSShadow));
  213: ret
