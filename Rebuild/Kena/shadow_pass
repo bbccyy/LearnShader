@@ -313,4 +313,6 @@ CalculateOcclusion
                               float FadedSSSShadow = lerp(1.0f, Square(SSSTransmission), ShadowFadeFraction * PerObjectDistanceFadeFraction)
  
  212: sqrt o0.xyz, r0.yxyy    OutColor = EncodeLightAttenuation(half4(FadedShadow, FadedSSSShadow, FadedShadow, FadedSSSShadow));
+                                          EncodeLightAttenuation -> sqrt(input)
+
  213: ret
