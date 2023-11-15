@@ -148,7 +148,7 @@ namespace Unity.MergeInstancingSystem.InstanceBuild
             return false;
         }
         /// <summary>
-        /// 从分类好的OBJ中构建NodeData，按照Mesh和材质分类
+        /// 从分类好的OBJ中构建NodeData，按照Mesh和材质分类 TODO: update later
         ///
         ///以下 By WYX
         ///入参是classificationObjects字典以及AllInstanceData结构；
