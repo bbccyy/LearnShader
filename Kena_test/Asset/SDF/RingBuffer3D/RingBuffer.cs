@@ -9,7 +9,7 @@ namespace Rendering.RuntimeTools.RingBuffer
 {
     public interface ISourceProvider
     {
-        public UnityEngine.Object SyncLoad(string aPath);
+        public UnityEngine.Object SyncLoad(string aPath);  
 
         //public Texture3D SyncLoad(Vector3 aPosWS);
 
