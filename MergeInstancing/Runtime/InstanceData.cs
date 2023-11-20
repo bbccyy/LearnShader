@@ -10,7 +10,7 @@ namespace Unity.MergeInstancingSystem
     public class InstanceData :ScriptableObject, ISerializationCallbackReceiver 
     {
         [Serializable]
-        public struct MaterialPropertyData
+        public struct MaterialPropertyData  //与每个GPUInstance关联
         {
             public int material_ID;
             public string name;
