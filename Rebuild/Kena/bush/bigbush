@@ -40,7 +40,7 @@ ps_5_0
    7: div r1.xyz, r1.xyzx, r1.wwww
    8: dp3 r0.w, -r1.xyzx, -r1.xyzx
    9: rsq r0.w, r0.w
-  10: mul r2.xyz, r0.wwww, -r1.xyzx
+  10: mul r2.xyz, r0.wwww, -r1.xyzx                   //what's this? view dir?
 
   11: imad r3.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
   12: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r3.x, l(12), t0.xxxx
@@ -77,19 +77,23 @@ ps_5_0
 
   38: add r4.xyw, -r5.xyxz, r1.wwww
   39: mad r6.xyz, cb2[6].zzzz, r4.xywx, r5.xyzx                   Lerp(diffuse, lum, 0) -> 100% diffuse
-  40: mul r6.yzw, r6.xxyz, cb2[6].wwww
-  41: mul r6.yzw, r6.yyzw, cb2[5].xxyz
-  42: dp3 r1.w, r0.xyzx, r2.xyzx
+  40: mul r6.yzw, r6.xxyz, cb2[6].wwww                            colorOut *= _DZ_Color_Intensity;
+  41: mul r6.yzw, r6.yyzw, cb2[5].xxyz                            colorOut = saturate(colorOut * _DZ_Color_Overlay);
+
+  42: dp3 r1.w, r0.xyzx, r2.xyzx                                  N dot V
   43: max r1.w, r1.w, l(0)
-  44: add r1.w, -r1.w, l(1.0000)
-  45: max r1.w, abs(r1.w), l(0.0000)
+  44: add r1.w, -r1.w, l(1.0000)                                  
+  45: max r1.w, abs(r1.w), l(0.0000)                              abs(1 - max(NoV,0)) = X
   46: log r1.w, r1.w
-  47: mul r1.w, r1.w, cb2[7].x
-  48: exp r1.w, r1.w
+  47: mul r1.w, r1.w, cb2[7].x                                    
+  48: exp r1.w, r1.w                                              exp(logX * 1/2)
   49: mad r1.w, r1.w, l(0.9600), l(0.0400)
-  50: add r2.w, cb2[7].y, l(-1.0000)
-  51: mad r1.w, r1.w, r2.w, l(1.0000)
-  52: mul_sat r6.yzw, r1.wwww, r6.yyzw
+  50: add r2.w, cb2[7].y, l(-1.0000)                              0.5
+  51: mad r1.w, r1.w, r2.w, l(1.0000)                             (exp(logX * 1/2) * 0.96 + 0.04) * 0.5 + 1  = 1.236
+
+  52: mul_sat r6.yzw, r1.wwww, r6.yyzw                            Final Color = saturate(colorOut * (~)) 
+                                                                              //r6.yzw = 0.01234, 0.02419, 0.00105
+
   53: mul r7.xyz, r0.wwww, v1.xyzx
   54: dp3 r0.w, r7.xyzx, r2.xyzx
   55: max r0.w, r0.w, l(0)
