@@ -26,6 +26,7 @@ ps_5_0
       dcl_output o3.xyzw
       dcl_output o4.xyzw
       dcl_temps 8
+      
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
    2: mul r0.xyz, r0.xyzx, v1.wwww
