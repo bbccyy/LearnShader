@@ -19,7 +19,7 @@ ps_5_0
       dcl_input_ps linear centroid v0.xyz                         vertex.NormalWS
       dcl_input_ps linear centroid v1.xyzw                        vertex.TangentWS
       dcl_input_ps linear v2.xy                                   uv
-      dcl_input_ps nointerpolation v3.x
+      dcl_input_ps nointerpolation v3.x                           InstanceID
       dcl_input_ps_siv linear noperspective v4.xyzw, position
       dcl_input_ps_sgv nointerpolation v5.x, isfrontface
       dcl_output o0.xyzw
@@ -41,36 +41,42 @@ ps_5_0
    8: dp3 r0.w, -r1.xyzx, -r1.xyzx
    9: rsq r0.w, r0.w
   10: mul r2.xyz, r0.wwww, -r1.xyzx
-  
+
   11: imad r3.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
   12: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r3.x, l(12), t0.xxxx
   13: mul r0.w, r0.w, cb0[140].w
   14: movc r1.w, v5.x, l(1.0000), l(-1.0000)
   15: mul r0.w, r0.w, r1.w
-  16: sample_b(texture2d)(float,float,float,float) r3.xz, v2.xyxx, t1.xzyw, s0, cb0[142].y
-  17: mad r4.xy, r3.xzxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
+
+  16: sample_b(texture2d)(float,float,float,float) r3.xz, v2.xyxx, t1.xzyw, s0, cb0[142].y                  Normal.rg
+  17: mad r4.xy, r3.xzxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)            rg * 2 - 1
   18: dp2 r1.w, r4.xyxx, r4.xyxx
   19: add r1.w, -r1.w, l(1.0000)
   20: max r1.w, r1.w, l(0)
-  21: sqrt r4.z, r1.w
-  22: mad r3.xzw, cb2[2].xxyz, r4.xxyz, r4.xxyz
-  23: mul r3.xzw, r0.wwww, r3.xxzw
+  21: sqrt r4.z, r1.w                                             Normal.b = sqrt(1 - rg^2)
+
+  22: mad r3.xzw, cb2[2].xxyz, r4.xxyz, r4.xxyz                   Normal.xyz
+  23: mul r3.xzw, r0.wwww, r3.xxzw                                
   24: mad r3.xzw, r3.xxzw, cb0[137].wwww, cb0[137].xxyz
   25: dp3 r1.w, r3.xzwx, r3.xzwx
   26: rsq r1.w, r1.w
-  27: mul r3.xzw, r1.wwww, r3.xxzw
+  27: mul r3.xzw, r1.wwww, r3.xxzw                                对Normal进行朝向修正，然后归一化
+
   28: mul r0.xyz, r0.xyzx, r3.zzzz
   29: mad r0.xyz, r3.xxxx, v0.xyzx, r0.xyzx
-  30: mad r0.xyz, r3.wwww, v1.xyzx, r0.xyzx
+  30: mad r0.xyz, r3.wwww, v1.xyzx, r0.xyzx                       应用 TBN 矩阵 -> 转换 local Normal 
   31: dp3 r1.w, r0.xyzx, r0.xyzx
   32: rsq r1.w, r1.w
   33: mul r0.xyz, r0.xyzx, r1.wwww
-  34: mul r0.xyz, r0.wwww, r0.xyzx
+  34: mul r0.xyz, r0.wwww, r0.xyzx                                Final Normal (使用r0.w修正了方向)
+
   35: mul r3.xzw, cb2[3].xxyz, cb2[6].yyyy
-  36: sample_b(texture2d)(float,float,float,float) r5.xyzw, v2.xyxx, t2.xyzw, s1, cb0[142].y
-  37: dp3 r1.w, r5.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+
+  36: sample_b(texture2d)(float,float,float,float) r5.xyzw, v2.xyxx, t2.xyzw, s1, cb0[142].y   用uv采样diffuse
+  37: dp3 r1.w, r5.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)              Luminance(diffuse_color)
+
   38: add r4.xyw, -r5.xyxz, r1.wwww
-  39: mad r6.xyz, cb2[6].zzzz, r4.xywx, r5.xyzx
+  39: mad r6.xyz, cb2[6].zzzz, r4.xywx, r5.xyzx                   Lerp(diffuse, lum, 0) -> 100% diffuse
   40: mul r6.yzw, r6.xxyz, cb2[6].wwww
   41: mul r6.yzw, r6.yyzw, cb2[5].xxyz
   42: dp3 r1.w, r0.xyzx, r2.xyzx
