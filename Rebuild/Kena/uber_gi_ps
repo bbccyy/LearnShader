@@ -23,7 +23,7 @@ ps_5_0
       dcl_resource_texturecube (float,float,float,float) t1                   -> cubemap 几乎全黑 
       dcl_resource_texturecubearray (float,float,float,float) t2              -> IBL cubemap，有 57 张 
       dcl_resource_buffer (uint,uint,uint,uint) t3                            -> ForwardLightData.NumCulledLightsGrid 
-      dcl_resource_buffer (uint,uint,uint,uint) t4                            -> ForwardLightData.CulledLightDataGrid  
+      dcl_resource_buffer (uint,uint,uint,uint) t4                            -> ForwardLightData.CulledLightDataGrid 
       dcl_resource_texture2d (float,float,float,float) t5                     -> BRDF LUT 
       dcl_resource_texture2d (float,float,float,float) t6                     -> [NormalWS.xyz, DepthWS] 看起来像被模糊过，且分辨率减半 
       dcl_resource_texture2d (float,float,float,float) t7                     -> Depth01 (R通道) 
