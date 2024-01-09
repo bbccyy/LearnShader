@@ -46,7 +46,7 @@ ps_5_0
    1: add r0.zw, v0.xxxy, -cb1[129].xxxy                                      -> float2 PixelPos = SvPosition.xy - View.ViewRectMin.xy;   
    2: mad r1.xy, r0.zwzz, cb1[130].zwzz, l(-0.5000, -0.5000, 0.0000, 0.0000)
    3: mul r1.xy, r1.xyxx, v0.wwww
-   4: mul r1.xy, r1.xyxx, l(2.0000, -2.0000, 0.0000, 0.0000)                  -> float4 SvPositionToScreenPosition(float4 SvPosition)
+   4: mul r1.xy, r1.xyxx, l(2.0000, -2.0000, 0.0000, 0.0000)                  -> float4 SvPositionToScreenPosition(float4 SvPosition) 
 
 ------------Func:DecodeGBufferData() Start------------
    5: sample_l(texture2d)(float,float,float,float) r2.xyz, r0.xyxx, t8.xyzw, s0, l(0)     -> Normal
