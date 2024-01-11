@@ -47,3 +47,11 @@ print(bi)
 
 local r0 = 0.11888
 print(math.sqrt(r0))
+
+--for (int planeIndex = 0; planeIndex < 6; ++planeIndex)
+--{
+--    ref DPlane plane = ref planes[planeIndex];
+--    distRadius.x = math.dot(plane.normalDist.xyz, box.center) + plane.normalDist.w;
+--    distRadius.y = math.dot(math.abs(plane.normalDist.xyz), box.extents);
+--    visible = math.select(visible,0,  distRadius.x + distRadius.y < 0);
+--}
