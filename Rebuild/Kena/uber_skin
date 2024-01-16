@@ -6,8 +6,9 @@ cpp部分对应： Source\Runtime\Renderer\Pirvate\PostProcess\PostProcessSubsur
 Shader hash 6bb788c7-18abcca6-c234fe19-484d4f22 
 DC -> 18384 
 
+
 cs_5_0
-      dcl_globalFlags refactoringAllowed
+      dcl_globalFlags refactoringAllowed  
       dcl_constantbuffer cb0[52], immediateIndexed
       dcl_constantbuffer cb1[152], immediateIndexed
       dcl_constantbuffer cb2[1], immediateIndexed
