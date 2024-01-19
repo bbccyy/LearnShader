@@ -22,11 +22,12 @@ ps_5_0
       dcl_input_ps nointerpolation v3.x                           InstanceID
       dcl_input_ps_siv linear noperspective v4.xyzw, position
       dcl_input_ps_sgv nointerpolation v5.x, isfrontface
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+
+      dcl_output o0.xyzw                CameraColor
+      dcl_output o1.xyzw                Normal
+      dcl_output o2.xyzw                M_D_R_I
+      dcl_output o3.xyzw                Diffuse
+      dcl_output o4.xyzw                Custom
       dcl_temps 8
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
