@@ -41,7 +41,7 @@ ps_5_0
       dcl_input_ps linear centroid v1.xyzw 							Tangent
       dcl_input_ps linear v2.xy 									UV
       dcl_input_ps nointerpolation v3.x 							InstanceID
-      dcl_input_ps linear v4.xyz 									???
+      dcl_input_ps linear v4.xyz 									some dir -> view dir
       dcl_input_ps_siv linear noperspective v5.xyz, position 		SV_Position
 
       dcl_output o0.xyzw                CameraColor
@@ -55,15 +55,18 @@ ps_5_0
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
    2: mul r0.xyz, r0.xyzx, v1.wwww                  float3 BitangentWS = cross(i.NormalWS, i.TangentWS) * i.TangentWS.w
-   
+
    3: mul r1.xyzw, v5.yyyy, cb0[45].xyzw
    4: mad r1.xyzw, v5.xxxx, cb0[44].xyzw, r1.xyzw
    5: mad r1.xyzw, v5.zzzz, cb0[46].xyzw, r1.xyzw
    6: add r1.xyzw, r1.xyzw, cb0[47].xyzw
-   7: div r1.xyz, r1.xyzx, r1.wwww
+   7: div r1.xyz, r1.xyzx, r1.wwww 					此处的r1.xyz 与 v4.xyz 非常相似 (1093.98889, 1826.24487, 2765.40552, 0.00032) 
+
    8: add r2.xyz, r1.xyzx, -cb0[70].xyzx
    9: add r3.xyz, v4.xyzx, -cb0[70].xyzx
-  10: dp3 r0.w, -r1.xyzx, -r1.xyzx
+  10: dp3 r0.w, -r1.xyzx, -r1.xyzx 					view dir
+
+
   11: rsq r0.w, r0.w
   12: mul r1.xyz, r0.wwww, -r1.xyzx
   13: sample_b(texture2d)(float,float,float,float) r4.xy, v2.xyxx, t1.xyzw, s1, cb0[142].y
