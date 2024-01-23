@@ -77,7 +77,7 @@ ps_5_0
   17: max r0.w, r0.w, l(0)
   18: sqrt r4.z, r0.w                                       求解出 4K_Normal.xyz -> r4
 
-  19: mul r5.xyz, r4.xyzx, cb2[2].xyzx                      4K_Normal.xyz * [2,2,1]                  
+  19: mul r5.xyz, r4.xyzx, cb2[2].xyzx                      4K_Normal.xyz * [2,2,1] -> 4K_Normal      
   20: mad r0.w, r4.z, cb2[2].z, l(1.0000)                   4K_Normal.z * 1 + 1
 
   21: div r6.xyz, r3.xyzx, cb2[16].wwww                     posWS / -376.8 -> r6 = [158.43385, -63.32237, 17.52998]
@@ -183,7 +183,7 @@ ps_5_0
  103: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx     norm * 1 + 0
  104: dp3 r0.w, r4.xyzx, r4.xyzx
  105: rsq r0.w, r0.w
- 106: mul r4.xyz, r0.wwww, r4.xyzx                          norm = normalize(norm)
+ 106: mul r4.xyz, r0.wwww, r4.xyzx                          norm = normalize(norm)  -> or local_norm
 
  107: mul r0.xyz, r0.xyzx, r4.yyyy
  108: mad r0.xyz, r4.xxxx, v0.xyzx, r0.xyzx
@@ -216,84 +216,101 @@ ps_5_0
  129: mad r8.xy, cb0[141].zzzz, l(0.0100, 0.0200, 0.0000, 0.0000), r8.xyxx          47.1054 * (0.01, 0.02) + r8.xy -> r8.xy
 
  130: sample_b(texture2d)(float,float,float,float) r0.w, r8.xyxx, t5.yzwx, s4, cb0[142].y       拿缩放和偏移后的 UV3 采样 WaterWave_Noise -> n3
- 131: mul r8.xyz, r0.wwww, r7.xyzx 
- 132: mad r7.xyz, -r7.xyzx, r0.wwww, cb2[10].xyzx
- 133: mad r7.xyz, cb2[21].zzzz, r7.xyzx, r8.xyzx
- 134: mul r8.xy, v2.xyxx, cb2[21].wwww
- 135: sample_b(texture2d)(float,float,float,float) r8.xyz, r8.xyxx, t7.xyzw, s6, cb0[142].y
- 136: mul r8.xyz, r8.xyzx, cb2[22].xxxx
- 137: mul r10.xyz, r8.xyzx, cb2[12].xyzx
- 138: dp3 r0.w, r10.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
- 139: mad r8.xyz, -r8.xyzx, cb2[12].xyzx, r0.wwww
- 140: mad r8.xyz, cb2[22].yyyy, r8.xyzx, r10.xyzx
- 141: add r10.xyz, -r8.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
- 142: add r10.xyz, r10.xyzx, r10.xyzx
- 143: add r0.w, r4.y, l(-1.0000)
- 144: mad r0.w, r0.w, l(0.6500), l(1.0000)
- 145: add r1.w, -r0.w, l(1.0000)
- 146: mad r10.xyz, -r10.xyzx, r1.wwww, l(1.0000, 1.0000, 1.0000, 0.0000)
- 147: mul r11.xyz, r0.wwww, r8.xyzx
- 148: add r11.xyz, r11.xyzx, r11.xyzx
+ 131: mul r8.xyz, r0.wwww, r7.xyzx                                      0
+ 132: mad r7.xyz, -r7.xyzx, r0.wwww, cb2[10].xyzx                       0
+ 133: mad r7.xyz, cb2[21].zzzz, r7.xyzx, r8.xyzx                        0
+
+ 134: mul r8.xy, v2.xyxx, cb2[21].wwww                                  14.06 * UV
+ 135: sample_b(texture2d)(float,float,float,float) r8.xyz, r8.xyxx, t7.xyzw, s6, cb0[142].y     拿放大14倍的UV采样 T_BarkTest_03_D 
+ 136: mul r8.xyz, r8.xyzx, cb2[22].xxxx                                 Bark_D * 2.57 -> Bark_D
+ 137: mul r10.xyz, r8.xyzx, cb2[12].xyzx                                (0.0625, 0.03371, 0.01582) * Bark_D -> Bark_D
+ 138: dp3 r0.w, r10.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)             lum(Bark_D)
+ 139: mad r8.xyz, -r8.xyzx, cb2[12].xyzx, r0.wwww                       lum(Bark_D) - Bark_D
+ 140: mad r8.xyz, cb2[22].yyyy, r8.xyzx, r10.xyzx                       Bark_D - 0.0095 * (lum(Bark_D) - Bark_D) -> Bark_D
+ 141: add r10.xyz, -r8.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)          1 - Bark_D
+ 142: add r10.xyz, r10.xyzx, r10.xyzx                                   2 * (1 - Bark_D) -> Re_Bark_D
+
+ 143: add r0.w, r4.y, l(-1.0000)                                        1 - local_norm.y
+ 144: mad r0.w, r0.w, l(0.6500), l(1.0000)                              
+ 145: add r1.w, -r0.w, l(1.0000)                                        1 - (1 + 0.65 * (1 - local_norm.y))
+ 146: mad r10.xyz, -r10.xyzx, r1.wwww, l(1, 1, 1, 0)                    1 - Re_Bark_D * ~ -> D_1
+
+ 147: mul r11.xyz, r0.wwww, r8.xyzx                                     (1 + 0.65 * (1 - local_norm.y)) * Bark_D
+ 148: add r11.xyz, r11.xyzx, r11.xyzx                                   2 * ~ -> D_2
  149: ge r8.xyz, r8.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000)
- 150: movc r8.xyz, r8.xyzx, r10.xyzx, r11.xyzx
+ 150: movc r8.xyz, r8.xyzx, r10.xyzx, r11.xyzx                          Bark_D = Bark_D >= 0.5 ? D_1 : D_2 
+
  151: max r0.w, r4.x, l(0.0000)
  152: log r0.w, r0.w
  153: mul r0.w, r0.w, cb2[22].z
- 154: exp r0.w, r0.w
- 155: mul r10.xyz, r0.wwww, r8.xyzx
- 156: sample_indexable(texture2d)(float,float,float,float) r11.xyz, r3.xzxx, t8.xyzw, s0
- 157: sample_indexable(texture2d)(float,float,float,float) r12.xyz, r3.yzyy, t8.xyzw, s0
+ 154: exp r0.w, r0.w                                                    local_norm.x ^ 2
+
+ 155: mul r10.xyz, r0.wwww, r8.xyzx                                     (local_norm.x ^ 2) * Bark_D
+
+ 156: sample_indexable(texture2d)(float,float,float,float) r11.xyz, r3.xzxx, t8.xyzw, s0        用基于世界坐标的随机 UV1 采样 1K_D 
+ 157: sample_indexable(texture2d)(float,float,float,float) r12.xyz, r3.yzyy, t8.xyzw, s0        用基于世界坐标的随机 UV2 采样 1K_D 
  158: add r12.xyz, -r11.xyzx, r12.xyzx
- 159: mad r11.xyz, r9.xxxx, r12.xyzx, r11.xyzx
- 160: sample_indexable(texture2d)(float,float,float,float) r12.xyz, r3.xyxx, t8.xyzw, s0
+ 159: mad r11.xyz, r9.xxxx, r12.xyzx, r11.xyzx                          lerp(1K_D_1, 1K_D_2, r9.x) -> 1K_D_1
+ 160: sample_indexable(texture2d)(float,float,float,float) r12.xyz, r3.xyxx, t8.xyzw, s0        用基于世界坐标的随机 UV3 采样 1K_D
  161: add r12.xyz, -r11.xyzx, r12.xyzx
- 162: mad r11.xyz, r9.yyyy, r12.xyzx, r11.xyzx
- 163: mul r11.xyz, r11.xyzx, cb2[22].wwww
- 164: mul r11.xyz, r11.xyzx, cb2[14].xyzx
- 165: add r12.xyzw, v1.zxyz, l(1.0000, 0.0000, 0.0000, 1.0000)
- 166: mul r5.xyz, r5.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)
- 167: dp3 r1.w, r12.yzwy, r5.xyzx
- 168: mul r5.xyz, r5.xyzx, r12.xxxx
- 169: mad r5.xyz, r12.yzwy, r1.wwww, -r5.xyzx
- 170: dp3 r1.x, r5.xyzx, r1.xyzx
- 171: max r1.x, r1.x, l(0)
- 172: add r1.x, -r1.x, l(1.0000)
- 173: max r1.x, abs(r1.x), l(0.0000)
+ 162: mad r11.xyz, r9.yyyy, r12.xyzx, r11.xyzx                          lerp(1K_D_1, 1K_D_3, r9.y) -> 1K_D_1
+
+ 163: mul r11.xyz, r11.xyzx, cb2[22].wwww                               1K_D * 2
+ 164: mul r11.xyz, r11.xyzx, cb2[14].xyzx                               (0.25818, 0.53948, 0.33716) * (1K_D * 2) -> 1K_D
+
+ 165: add r12.xyzw, v1.zxyz, l(1.0000, 0.0000, 0.0000, 1.0000)          (tangent.z+1, tangent.xy, tangent.z+1)
+ 166: mul r5.xyz, r5.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)          4K_Normal * (-1, -1, 1)
+
+ 167: dp3 r1.w, r12.yzwy, r5.xyzx                                       Dot(tg.yzw, 4k_n)
+ 168: mul r5.xyz, r5.xyzx, r12.xxxx                                     4k_n * tg.x
+ 169: mad r5.xyz, r12.yzwy, r1.wwww, -r5.xyzx                           tg.yzw * Dot(tg.yzw, 4k_n) - 4k_n * tg.x -> N'
+ 170: dp3 r1.x, r5.xyzx, r1.xyzx                                        Dot(N', viewDir) -> NoV
+ 171: max r1.x, r1.x, l(0)                                              max(NoV, 0)
+ 172: add r1.x, -r1.x, l(1.0000)                                        
+ 173: max r1.x, abs(r1.x), l(0.0000)                                    abs(1 - max(NoV, 0)) -> c
  174: log r1.x, r1.x
  175: mul r1.x, r1.x, cb2[23].x
- 176: exp r1.x, r1.x
- 177: add r1.x, r1.x, l(0.4000)
- 178: mul r1.yzw, r1.xxxx, r11.xxyz
- 179: dp3 r2.w, r1.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
- 180: mad r5.xyz, -r11.xyzx, r1.xxxx, r2.wwww
- 181: mad r1.xyz, cb2[23].yyyy, r5.xyzx, r1.yzwy
- 182: dp3 r1.w, r0.xyzx, cb2[9].xyzx
- 183: mad r1.w, r1.w, l(0.5000), l(0.5000)
- 184: mad_sat r1.w, r1.w, cb2[19].z, cb2[20].y
- 185: mad r1.xyz, -r8.xyzx, r0.wwww, r1.xyzx
- 186: mad_sat r1.xyz, r1.wwww, r1.xyzx, r10.xyzx
- 187: sample_indexable(texture2d)(float,float,float,float) r0.w, r6.xzxx, t9.xzwy, s0
- 188: sample_indexable(texture2d)(float,float,float,float) r2.w, r6.yzyy, t9.xzwy, s0
- 189: add r2.w, -r0.w, r2.w
- 190: mad r0.w, r9.x, r2.w, r0.w
- 191: sample_indexable(texture2d)(float,float,float,float) r2.w, r6.xyxx, t9.xzwy, s0
+ 176: exp r1.x, r1.x                                                    c ^ 2
+ 177: add r1.x, r1.x, l(0.4000)                                         c ^ 2 + 0.4 -> c
+
+ 178: mul r1.yzw, r1.xxxx, r11.xxyz                                     c * 1K_D -> 1K_D
+ 179: dp3 r2.w, r1.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)              lum(1K_D)
+ 180: mad r5.xyz, -r11.xyzx, r1.xxxx, r2.wwww                           lum(1K_D) - 1K_D
+ 181: mad r1.xyz, cb2[23].yyyy, r5.xyzx, r1.yzwy                        lerp(1K_D, lum(1K_D) - 1K_D, 0) -> 1K_D
+ 182: dp3 r1.w, r0.xyzx, cb2[9].xyzx                                    Dot(norm, (0.27268, 0.00, 0.9621)) -> NoL (推测这个Vector是LightDir)
+ 183: mad r1.w, r1.w, l(0.5000), l(0.5000)                              NoL = 0.5 * NoL + 0.5
+ 184: mad_sat r1.w, r1.w, cb2[19].z, cb2[20].y                          sat(2 * NoL - 1.36)
+ 185: mad r1.xyz, -r8.xyzx, r0.wwww, r1.xyzx                            1K_D - (local_norm.x ^ 2) * Bark_D -> 1K_Bark_D
+ 186: mad_sat r1.xyz, r1.wwww, r1.xyzx, r10.xyzx                        Diffuse Final =  1K_Bark_D * sat(2 * NoL - 1.36) + (local_norm.x ^ 2) * Bark_D
+
+ 187: sample_indexable(texture2d)(float,float,float,float) r0.w, r6.xzxx, t9.xzwy, s0     用基于世界坐标的随机 UV1 采样 T_BarkTest_03_comp_H_R_Ao_Msk -> Rgh
+ 188: sample_indexable(texture2d)(float,float,float,float) r2.w, r6.yzyy, t9.xzwy, s0     用基于世界坐标的随机 UV2 采样 T_BarkTest_03_comp_H_R_Ao_Msk
+ 189: add r2.w, -r0.w, r2.w 
+ 190: mad r0.w, r9.x, r2.w, r0.w                                        lerp(Rgh_1, Rgh_2, r9.x) -> Rgh_1
+ 191: sample_indexable(texture2d)(float,float,float,float) r2.w, r6.xyxx, t9.xzwy, s0     用基于世界坐标的随机 UV3 采样 T_BarkTest_03_comp_H_R_Ao_Msk
  192: add r2.w, -r0.w, r2.w
- 193: mad r0.w, r9.y, r2.w, r0.w
- 194: mul r0.w, r0.w, cb2[24].x
- 195: mad r2.w, r4.z, cb2[24].y, -r0.w
- 196: mad r0.w, r2.w, l(0.5000), r0.w
- 197: sample_indexable(texture2d)(float,float,float,float) r2.w, r3.xzxx, t10.xzwy, s0
- 198: sample_indexable(texture2d)(float,float,float,float) r3.z, r3.yzyy, t10.xzyw, s0
+ 193: mad r0.w, r9.y, r2.w, r0.w                                        lerp(Rgh_1, Rgh_3, r9.y) -> Rgh_1 -> Rgh
+
+ 194: mul r0.w, r0.w, cb2[24].x                                         5 * Rgh
+ 195: mad r2.w, r4.z, cb2[24].y, -r0.w                                  (1 - AO) * 4.9 - 5 * Rgh
+ 196: mad r0.w, r2.w, l(0.5000), r0.w                                   ~ * 0.5 + 5 * Rgh -> AO_R
+
+ 197: sample_indexable(texture2d)(float,float,float,float) r2.w, r3.xzxx, t10.xzwy, s0     用基于世界坐标的随机 UV1 采样 ?? 的通道 #2
+ 198: sample_indexable(texture2d)(float,float,float,float) r3.z, r3.yzyy, t10.xzyw, s0     用基于世界坐标的随机 UV2 采样 ?? 的通道 #2
  199: add r3.z, -r2.w, r3.z
- 200: mad r2.w, r9.x, r3.z, r2.w
- 201: sample_indexable(texture2d)(float,float,float,float) r3.x, r3.xyxx, t10.yxzw, s0
+ 200: mad r2.w, r9.x, r3.z, r2.w                                        lerp(?_1, ?_2, r9.x)
+ 201: sample_indexable(texture2d)(float,float,float,float) r3.x, r3.xyxx, t10.yxzw, s0     用基于世界坐标的随机 UV3 采样 ?? 的通道 #2
  202: add r3.x, -r2.w, r3.x
- 203: mad r2.w, r9.y, r3.x, r2.w
- 204: mad r2.w, r2.w, cb2[24].z, -r0.w
- 205: mad_sat r0.w, r1.w, r2.w, r0.w
- 206: mov_sat r3.xy, cb2[23].zwzz
- 207: mov_sat r4.x, r4.x
- 208: mad o2.z, r0.w, cb0[138].y, cb0[138].x
+ 203: mad r2.w, r9.y, r3.x, r2.w                                        lerp(?_1, ?_3, r9.y) -> ?_1
+
+ 204: mad r2.w, r2.w, cb2[24].z, -r0.w                                  2 * ?_1 - AO_R
+ 205: mad_sat r0.w, r1.w, r2.w, r0.w                                    sat(2 * NoL - 1.36) * (2 * ?_1 - AO_R) + AO_R -> AO_R_?
+
+ 206: mov_sat r3.xy, cb2[23].zwzz                                       (0, 0.03)
+ 207: mov_sat r4.x, r4.x                                                sat(local_norm.x)
+ 
+ 208: mad o2.z, r0.w, cb0[138].y, cb0[138].x                            Final Roughness = AO_R_? * 1 + 0
+
  209: imad r0.w, v3.x, l(35), l(20)
  210: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx
  211: mul r0.w, r3.y, l(0.0800)
@@ -331,12 +348,14 @@ ps_5_0
  243:   movc r2.xyz, r1.wwww, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
  244:   movc r5.xyz, r0.wwww, r2.xyzx, r5.xyzx
  245: endif
- 246: mad r2.xyz, cb0[144].yyyy, r4.xyzx, r5.xyzx
- 247: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)       Norm * 0.5 + 0.5 -> 转到[0, 1]区间
- 248: mul o0.xyz, r2.xyzx, cb0[134].yyyy
- 249: mov o0.w, l(0)
- 250: mov o2.w, l(0.6941)
- 251: mov o2.xy, r3.xyxx
- 252: mov o3.xyz, r1.xyzx
- 253: mov o4.xyzw, l(0, 0, 0, 0)
+
+ 246: mad r2.xyz, cb0[144].yyyy, r4.xyzx, r5.xyzx           cb0[144].y == 0 -> r5.xyz + 0
+
+ 247: mad o1.xyz, r0.xyzx, l(0.5, 0.5, 0.5, 0), l(0.5, 0.5, 0.5, 0)       Norm * 0.5 + 0.5 -> 转到[0, 1]区间
+ 248: mul o0.xyz, r2.xyzx, cb0[134].yyyy        todo  -> Emition    
+ 249: mov o0.w, l(0)                            DONE
+ 250: mov o2.w, l(0.6941)                       DONE  -> Flag
+ 251: mov o2.xy, r3.xyxx                        todo  -> M_D_
+ 252: mov o3.xyz, r1.xyzx                       Diffuse
+ 253: mov o4.xyzw, l(0, 0, 0, 0)                DONE
  254: ret
