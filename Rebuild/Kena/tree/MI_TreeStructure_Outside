@@ -17,25 +17,36 @@ ps_5_0
       dcl_sampler s6, mode_default
 
       dcl_resource_structured t0, 16
-      dcl_resource_texture2d (float,float,float,float) t1 			???_N -> 4K Normal
-      dcl_resource_texture2d (float,float,float,float) t2 			T_BarkTest_02_N -> 2K Normal
+      dcl_resource_texture2d (float,float,float,float) t1 			T_TreeStructure_Outside_N -> 4K Normal           OK
+                                                                        Mochi/Art/Inorganic/Structures/Village/TreeStructure/Textures/
+                                                                        
+      dcl_resource_texture2d (float,float,float,float) t2 			T_BarkTest_02_N -> 2K Normal           OK
+      											Mochi\Environment\Tests\MaterialBlending_Tests\Textures/T_BarkTest_02_N
+
+      dcl_resource_texture2d (float,float,float,float) t3 			???_N -> 0.5k Normal           OK
+                                                                        Mochi/Environment/Prototype/Assets/Tiles/Textures/Moss/moss_normal
+                                                                        or Mochi\MaterialLibrary\Textures\Moss\T_Moss_01_N
+
+      dcl_resource_texture2d (float,float,float,float) t4 			T_TreeStructure_Outside_Comp_Msk_Curv_Aol           OK
+                                                                        Mochi/Art/Inorganic/Structures/Village/TreeStructure/Textures/
+
+      dcl_resource_texture2d (float,float,float,float) t5 			WaterWave_Noise -> T_NoiseCaustic02
+                                                                        Game/ThirdParty/InteractiveForceFields/Textures/T_NoiseCaustic02
+
+      dcl_resource_texture2d (float,float,float,float) t6 			GoodCommon_Noise -> T_NoiseClassic01
+                                                                        Game/ThirdParty/InteractiveForceFields/Textures/T_NoiseClassic01
+
+      dcl_resource_texture2d (float,float,float,float) t7 			T_BarkTest_03_D           OK
       											Mochi\Environment\Tests\MaterialBlending_Tests\Textures
-      dcl_resource_texture2d (float,float,float,float) t3 			???_N -> 0.5k Normal
 
-      dcl_resource_texture2d (float,float,float,float) t4 			T_GodTreeStump01_Comp_Msk_Curv_AO
+      dcl_resource_texture2d (float,float,float,float) t8			1K_D -> 1K Diffuse           OK
+                                                                        Mochi/Art/Organic/Trees/Textures/DeadMoss
 
-      dcl_resource_texture2d (float,float,float,float) t5 			WaterWave_Noise
-      dcl_resource_texture2d (float,float,float,float) t6 			GoodCommon_Noise
-
-      dcl_resource_texture2d (float,float,float,float) t7 			T_BarkTest_03_D
+      dcl_resource_texture2d (float,float,float,float) t9 			T_BarkTest_03_comp_H_R_Ao_Msk           OK
       											Mochi\Environment\Tests\MaterialBlending_Tests\Textures
 
-      dcl_resource_texture2d (float,float,float,float) t8			1K_D -> 1K Diffuse
-
-      dcl_resource_texture2d (float,float,float,float) t9 			T_BarkTest_03_comp_H_R_Ao_Msk
-      											Mochi\Environment\Tests\MaterialBlending_Tests\Textures
-
-      dcl_resource_texture2d (float,float,float,float) t10 			???
+      dcl_resource_texture2d (float,float,float,float) t10 			??? T_Moss_01_Comp_H_R_Ao           OK
+                                                                        Mochi/MaterialLibrary/Textures/Moss/
 
       dcl_input_ps linear centroid v0.xyz 					Normal
       dcl_input_ps linear centroid v1.xyzw 					Tangent
@@ -111,12 +122,12 @@ ps_5_0
 
   45: mad r7.xyz, cb2[4].xyzx, r7.xyzx, r7.xyzx             2K_Normal * [0.2, 0.2, 0] + 2K_Normal
   46: mad r5.w, r4.z, cb2[2].z, l(1.0000)                   4K_Normal.z * 1 + 1
-  47: mul r7.xyz, r7.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)       2K_Normal * [-1, -1, 1]   
+  47: mul r7.xyz, r7.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)       2K_Normal * [-1, -1, 1] 
   48: dp3 r1.w, r5.xywx, r7.xyzx                            4K_Normal dot 2K_Normal  -> 注意 4K_Normal.z 使用了 w 通道 -> similarity
   49: mul r7.xyz, r0.wwww, r7.xyzx                          2K_Normal * scaler(r0.w)
   50: mad r7.xyz, r5.xywx, r1.wwww, -r7.xyzx                4K_Normal * similarity - 2K_Normal -> mix_norm
 
-  51: add r8.xyz, r2.xyzx, -cb0[67].xyzx                    回滚cb0[70]的处理，获得刨去Transition变换的 “世界空间”坐标 
+  51: add r8.xyz, r2.xyzx, -cb0[67].xyzx                    回滚cb0[70]的处理，获得刨去Transition变换的 “世界空间”坐标 -> 求的是相机到着色点的距离！
   52: dp3 r0.w, r8.xyzx, r8.xyzx
   53: sqrt r0.w, r0.w                                       当前着色点到模型中心点的距离 d
   54: div r0.w, r0.w, cb2[17].x                             d / 1863.49 -> 似乎是除以了模型球形轮廓的半径 -> 距离模型表面的比例 rate
@@ -281,7 +292,7 @@ ps_5_0
  183: mad r1.w, r1.w, l(0.5000), l(0.5000)                              NoL = 0.5 * NoL + 0.5
  184: mad_sat r1.w, r1.w, cb2[19].z, cb2[20].y                          sat(2 * NoL - 1.36)
  185: mad r1.xyz, -r8.xyzx, r0.wwww, r1.xyzx                            1K_D - (local_norm.x ^ 2) * Bark_D -> 1K_Bark_D
- 186: mad_sat r1.xyz, r1.wwww, r1.xyzx, r10.xyzx                        Diffuse Final =  1K_Bark_D * sat(2 * NoL - 1.36) + (local_norm.x ^ 2) * Bark_D
+ 186: mad_sat r1.xyz, r1.wwww, r1.xyzx, r10.xyzx                        Final Diffuse =  1K_Bark_D * sat(2 * NoL - 1.36) + (local_norm.x ^ 2) * Bark_D
 
  187: sample_indexable(texture2d)(float,float,float,float) r0.w, r6.xzxx, t9.xzwy, s0     用基于世界坐标的随机 UV1 采样 T_BarkTest_03_comp_H_R_Ao_Msk -> Rgh
  188: sample_indexable(texture2d)(float,float,float,float) r2.w, r6.yzyy, t9.xzwy, s0     用基于世界坐标的随机 UV2 采样 T_BarkTest_03_comp_H_R_Ao_Msk
@@ -306,33 +317,44 @@ ps_5_0
  204: mad r2.w, r2.w, cb2[24].z, -r0.w                                  2 * ?_1 - AO_R
  205: mad_sat r0.w, r1.w, r2.w, r0.w                                    sat(2 * NoL - 1.36) * (2 * ?_1 - AO_R) + AO_R -> AO_R_?
 
- 206: mov_sat r3.xy, cb2[23].zwzz                                       (0, 0.03)
+ 206: mov_sat r3.xy, cb2[23].zwzz                                       (0, 0.03)   -> 对应了(Metallic, Dialetric)
  207: mov_sat r4.x, r4.x                                                sat(local_norm.x)
- 
+
  208: mad o2.z, r0.w, cb0[138].y, cb0[138].x                            Final Roughness = AO_R_? * 1 + 0
 
- 209: imad r0.w, v3.x, l(35), l(20)
- 210: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx
- 211: mul r0.w, r3.y, l(0.0800)
- 212: mad r4.yzw, -r3.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r1.xxyz
- 213: mad r4.yzw, r3.xxxx, r4.yyzw, r0.wwww
- 214: mad r5.xyz, -r1.xyzx, r3.xxxx, r1.xyzx
- 215: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx
- 216: mad r4.yzw, r4.yyzw, cb0[136].wwww, cb0[136].xxyz
- 217: ne r0.w, l(0, 0, 0, 0), cb0[177].w
- 218: mad r6.xyz, r4.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
- 219: movc r5.xyz, r0.wwww, r6.xyzx, r5.xyzx
- 220: movc r4.yzw, r0.wwww, l(0, 0, 0, 0), r4.yyzw
- 221: dp3 r0.w, r4.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
- 222: mad r6.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
- 223: mad r0.w, r4.x, r6.x, r6.y
- 224: mad r0.w, r0.w, r4.x, r6.z
- 225: mul r0.w, r4.x, r0.w
- 226: max o3.w, r0.w, r4.x
+ 209: imad r0.w, v3.x, l(35), l(20)                                     SV_InstanceID * 35 + 20
+ 210: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx         Final Mask = 0
+
+ 211: mul r0.w, r3.y, l(0.0800)                                         0.03 * 0.08 -> Dialetric * 0.08 = DielectricSpecular
+                                                                        或者对应方法： DielectricSpecularToF0(float Specular)
+
+ 212: mad r4.yzw, -r3.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r1.xxyz  Final Diffuse - F0 其中 F0 = 0.08 * 0.03
+ 213: mad r4.yzw, r3.xxxx, r4.yyzw, r0.wwww                             Metallic(0) * ~ + 0.03 * 0.08 = (0.0024, 0.0024, 0.0024)
+ 214: mad r5.xyz, -r1.xyzx, r3.xxxx, r1.xyzx                            Final Diffuse - (Final Diffuse * 0.0024) -> Final Diffuse'
+ 215: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx                 Final Diffuse' * 1 + 0
+ 216: mad r4.yzw, r4.yyzw, cb0[136].wwww, cb0[136].xxyz                 (0.0024, 0.0024, 0.0024) * 1 + 0
+
+ 217: ne r0.w, l(0, 0, 0, 0), cb0[177].w                                0 != 0 ? false
+ 218: mad r6.xyz, r4.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx   (0.0024, 0.0024, 0.0024) * 0.45 + Final Diffuse'
+ 219: movc r5.xyz, r0.wwww, r6.xyzx, r5.xyzx                            Final Diffuse'
+ 220: movc r4.yzw, r0.wwww, l(0, 0, 0, 0), r4.yyzw                      (0.0024, 0.0024, 0.0024)
+
+//参考 UnrealEngine-4.25\Engine\Shaders\Private\BasePassPixelShader.usf -> AOMultiBounce 方法 
+ 221: dp3 r0.w, r4.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)              lum((0.0024, 0.0024, 0.0024))
+ 222: mad r6.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)     ~ * const_1 + const_2 -> c
+ 223: mad r0.w, r4.x, r6.x, r6.y                                        sat(local_norm.x) * c.x + c.y
+ 224: mad r0.w, r0.w, r4.x, r6.z                                        ~ * sat(local_norm.x) + c.z
+ 225: mul r0.w, r4.x, r0.w                                              ~ * sat(local_norm.x)
+ 226: max o3.w, r0.w, r4.x                                              Final Diffuse_AO = max(~, sat(local_norm.x))
+
+((a * c.x + c.y) * a + c.z) * a = a^3*c.x + a^2*c.y + a*c.z
+
+
  227: mad r4.xyz, r4.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
  228: max r5.xyz, r7.xyzx, l(0, 0, 0, 0)
- 229: lt r0.w, l(0), cb0[139].x
- 230: if_nz r0.w
+
+ 229: lt r0.w, l(0), cb0[139].x                 0 < 0 ? -> false
+ 230: if_nz r0.w                                -> 推测判断材质是否自发光 
  231:   imad r3.zw, v3.xxxx, l(0, 0, 35, 35), l(0, 0, 5, 19)
  232:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r3.z, l(0), t0.xyzx
  233:   add r6.xyz, r2.xyzx, -r6.xyzx
@@ -352,10 +374,10 @@ ps_5_0
  246: mad r2.xyz, cb0[144].yyyy, r4.xyzx, r5.xyzx           cb0[144].y == 0 -> r5.xyz + 0
 
  247: mad o1.xyz, r0.xyzx, l(0.5, 0.5, 0.5, 0), l(0.5, 0.5, 0.5, 0)       Norm * 0.5 + 0.5 -> 转到[0, 1]区间
- 248: mul o0.xyz, r2.xyzx, cb0[134].yyyy        todo  -> Emition    
+ 248: mul o0.xyz, r2.xyzx, cb0[134].yyyy        DONE  -> Emition = 0
  249: mov o0.w, l(0)                            DONE
  250: mov o2.w, l(0.6941)                       DONE  -> Flag
- 251: mov o2.xy, r3.xyxx                        todo  -> M_D_
+ 251: mov o2.xy, r3.xyxx                        DONE  -> M_D_
  252: mov o3.xyz, r1.xyzx                       Diffuse
  253: mov o4.xyzw, l(0, 0, 0, 0)                DONE
  254: ret
