@@ -49,7 +49,7 @@ ps_5_0
                                                                         Mochi/MaterialLibrary/Textures/Moss/
 
       dcl_input_ps linear centroid v0.xyz 					Normal
-      dcl_input_ps linear centroid v1.xyzw 					Tangent
+      dcl_input_ps linear centroid v1.xyzw 					Tangent   -> 疑惑，后续很多逻辑最好将这个变量解释为 Normal 不然就不合理了 
       dcl_input_ps linear v2.xy 							UV
       dcl_input_ps nointerpolation v3.x 						InstanceID
       dcl_input_ps linear v4.xyz 							some positionWS(not dir)
@@ -147,6 +147,7 @@ ps_5_0
   65: add r0.w, -r0.w, l(1.0000)
   66: max r0.w, r0.w, l(0)
   67: sqrt r0.w, r0.w
+
   68: mul r8.y, r0.w, v1.y                                  求解值 * tangent.y
   69: mov r8.xz, -r7.xxyx                                   求解出 HalfK_Normal_1 -> 注意 y 通道是求解出来的 xz 通道是采样出来的
 
@@ -156,6 +157,7 @@ ps_5_0
   73: add r0.w, -r0.w, l(1.0000)
   74: max r0.w, r0.w, l(0)
   75: sqrt r0.w, r0.w
+
   76: mul r10.x, r0.w, v1.x                                 求解值 * tangent.x
   77: mov r10.yz, -r7.xxyx                                  求解出 HalfK_Normal_2 -> 注意 x 通道是求解出来的 yz 通道是采样出来的
 
@@ -169,8 +171,9 @@ ps_5_0
   84: add r0.w, -r0.w, l(1.0000)
   85: max r0.w, r0.w, l(0)
   86: sqrt r0.w, r0.w
+
   87: mov r8.xy, -r8.xyxx
-  88: mul r8.z, r0.w, v1.z                                  求解出 HalfK_Normal_3 
+  88: mul r8.z, r0.w, v1.z                                  求解出 HalfK_Normal_3  
 
   89: add r8.xyz, -r7.xzwx, r8.xyzx
   90: mad r7.xyz, r7.yyyy, r8.xyzx, r7.xzwx                 lerp(HalfK_Normal_A, HalfK_Normal_3, rate.y) -> HalfK_Normal_B
@@ -203,6 +206,7 @@ ps_5_0
  110: dp3 r0.w, r0.xyzx, r0.xyzx
  111: rsq r0.w, r0.w
  112: mul r0.xyz, r0.wwww, r0.xyzx                          norm = normalize(norm)
+
 
  113: sample_b(texture2d)(float,float,float,float) r4.xy, v2.xyxx, t4.zyxw, s3, cb0[142].y      拿 UV 采样 T_GodTreeStump01_Comp_Msk_Curv_AO 注意返回zy通道
 
@@ -241,12 +245,12 @@ ps_5_0
  141: add r10.xyz, -r8.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)          1 - Bark_D
  142: add r10.xyz, r10.xyzx, r10.xyzx                                   2 * (1 - Bark_D) -> Re_Bark_D
 
- 143: add r0.w, r4.y, l(-1.0000)                                        1 - local_norm.y
+ 143: add r0.w, r4.y, l(-1.0000)                                        local_norm.y - 1
  144: mad r0.w, r0.w, l(0.6500), l(1.0000)                              
- 145: add r1.w, -r0.w, l(1.0000)                                        1 - (1 + 0.65 * (1 - local_norm.y))
+ 145: add r1.w, -r0.w, l(1.0000)                                        1 - (1 + 0.65 * (local_norm.y - 1))
  146: mad r10.xyz, -r10.xyzx, r1.wwww, l(1, 1, 1, 0)                    1 - Re_Bark_D * ~ -> D_1
 
- 147: mul r11.xyz, r0.wwww, r8.xyzx                                     (1 + 0.65 * (1 - local_norm.y)) * Bark_D
+ 147: mul r11.xyz, r0.wwww, r8.xyzx                                     (1 + 0.65 * (local_norm.y - 1)) * Bark_D
  148: add r11.xyz, r11.xyzx, r11.xyzx                                   2 * ~ -> D_2
  149: ge r8.xyz, r8.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000)
  150: movc r8.xyz, r8.xyzx, r10.xyzx, r11.xyzx                          Bark_D = Bark_D >= 0.5 ? D_1 : D_2 
@@ -288,6 +292,7 @@ ps_5_0
  179: dp3 r2.w, r1.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)              lum(1K_D)
  180: mad r5.xyz, -r11.xyzx, r1.xxxx, r2.wwww                           lum(1K_D) - 1K_D
  181: mad r1.xyz, cb2[23].yyyy, r5.xyzx, r1.yzwy                        lerp(1K_D, lum(1K_D) - 1K_D, 0) -> 1K_D
+
  182: dp3 r1.w, r0.xyzx, cb2[9].xyzx                                    Dot(norm, (0.27268, 0.00, 0.9621)) -> NoL (推测这个Vector是LightDir)
  183: mad r1.w, r1.w, l(0.5000), l(0.5000)                              NoL = 0.5 * NoL + 0.5
  184: mad_sat r1.w, r1.w, cb2[19].z, cb2[20].y                          sat(2 * NoL - 1.36)
@@ -306,21 +311,21 @@ ps_5_0
  195: mad r2.w, r4.z, cb2[24].y, -r0.w                                  (1 - AO) * 4.9 - 5 * Rgh
  196: mad r0.w, r2.w, l(0.5000), r0.w                                   ~ * 0.5 + 5 * Rgh -> AO_R
 
- 197: sample_indexable(texture2d)(float,float,float,float) r2.w, r3.xzxx, t10.xzwy, s0     用基于世界坐标的随机 UV1 采样 ?? 的通道 #2
- 198: sample_indexable(texture2d)(float,float,float,float) r3.z, r3.yzyy, t10.xzyw, s0     用基于世界坐标的随机 UV2 采样 ?? 的通道 #2
+ 197: sample_indexable(texture2d)(float,float,float,float) r2.w, r3.xzxx, t10.xzwy, s0     用基于世界坐标的随机 UV1 采样 T_Moss_01_Comp_H_R_Ao 的通道 #2
+ 198: sample_indexable(texture2d)(float,float,float,float) r3.z, r3.yzyy, t10.xzyw, s0     用基于世界坐标的随机 UV2 采样 T_Moss_01_Comp_H_R_Ao 的通道 #2
  199: add r3.z, -r2.w, r3.z
- 200: mad r2.w, r9.x, r3.z, r2.w                                        lerp(?_1, ?_2, r9.x)
- 201: sample_indexable(texture2d)(float,float,float,float) r3.x, r3.xyxx, t10.yxzw, s0     用基于世界坐标的随机 UV3 采样 ?? 的通道 #2
+ 200: mad r2.w, r9.x, r3.z, r2.w                                        lerp(r_1, r_2, r9.x)
+ 201: sample_indexable(texture2d)(float,float,float,float) r3.x, r3.xyxx, t10.yxzw, s0     用基于世界坐标的随机 UV3 采样 T_Moss_01_Comp_H_R_Ao 的通道 #2
  202: add r3.x, -r2.w, r3.x
- 203: mad r2.w, r9.y, r3.x, r2.w                                        lerp(?_1, ?_3, r9.y) -> ?_1
+ 203: mad r2.w, r9.y, r3.x, r2.w                                        lerp(r_1, r_3, r9.y) -> r_1
 
- 204: mad r2.w, r2.w, cb2[24].z, -r0.w                                  2 * ?_1 - AO_R
- 205: mad_sat r0.w, r1.w, r2.w, r0.w                                    sat(2 * NoL - 1.36) * (2 * ?_1 - AO_R) + AO_R -> AO_R_?
+ 204: mad r2.w, r2.w, cb2[24].z, -r0.w                                  2 * r_1 - AO_R
+ 205: mad_sat r0.w, r1.w, r2.w, r0.w                                    sat(2 * NoL - 1.36) * (2 * r_1 - AO_R) + AO_R -> AO_R_r
 
  206: mov_sat r3.xy, cb2[23].zwzz                                       (0, 0.03)   -> 对应了(Metallic, Dialetric)
  207: mov_sat r4.x, r4.x                                                sat(local_norm.x)
 
- 208: mad o2.z, r0.w, cb0[138].y, cb0[138].x                            Final Roughness = AO_R_? * 1 + 0
+ 208: mad o2.z, r0.w, cb0[138].y, cb0[138].x                            Final Roughness = AO_R_r * 1 + 0
 
  209: imad r0.w, v3.x, l(35), l(20)                                     SV_InstanceID * 35 + 20
  210: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx         Final Mask = 0
