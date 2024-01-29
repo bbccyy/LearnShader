@@ -334,8 +334,8 @@ ps_5_0
                                                                         或者对应方法： DielectricSpecularToF0(float Specular)
 
  212: mad r4.yzw, -r3.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r1.xxyz  Final Diffuse - F0 其中 F0 = 0.08 * 0.03
- 213: mad r4.yzw, r3.xxxx, r4.yyzw, r0.wwww                             Metallic(0) * ~ + 0.03 * 0.08 = (0.0024, 0.0024, 0.0024)
- 214: mad r5.xyz, -r1.xyzx, r3.xxxx, r1.xyzx                            Final Diffuse - (Final Diffuse * 0.0024) -> Final Diffuse'
+ 213: mad r4.yzw, r3.xxxx, r4.yyzw, r0.wwww                             Metallic(0) * ~ + 0.03 * 0.08 = (0.0024, 0.0024, 0.0024) -> ComputeF0函数 
+ 214: mad r5.xyz, -r1.xyzx, r3.xxxx, r1.xyzx                            Final Diffuse - (Final Diffuse * Metallic) -> Final Diffuse'
  215: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx                 Final Diffuse' * 1 + 0
  216: mad r4.yzw, r4.yyzw, cb0[136].wwww, cb0[136].xxyz                 (0.0024, 0.0024, 0.0024) * 1 + 0
 
@@ -350,7 +350,7 @@ ps_5_0
  223: mad r0.w, r4.x, r6.x, r6.y                                        sat(local_norm.x) * c.x + c.y
  224: mad r0.w, r0.w, r4.x, r6.z                                        ~ * sat(local_norm.x) + c.z
  225: mul r0.w, r4.x, r0.w                                              ~ * sat(local_norm.x)
- 226: max o3.w, r0.w, r4.x                                              Final Diffuse_AO = max(~, sat(local_norm.x))
+ 226: max o3.w, r0.w, r4.x                                              Final Diffuse_AO = max(~, sat(local_norm.x))  
 
 ((a * c.x + c.y) * a + c.z) * a = a^3*c.x + a^2*c.y + a*c.z
 
