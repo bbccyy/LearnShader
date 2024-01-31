@@ -61,6 +61,12 @@ dcl_output o4.xyzw        未知 -> 似乎区分了角色本体，树叶和建�
 dcl_output oDepthLE 
 dcl_temps 7 
 
+dcl_output o0.xyzw                CameraColor
+dcl_output o1.xyzw                Normal
+dcl_output o2.xyzw                M_D_R_I
+dcl_output o3.xyzw                Diffuse
+dcl_output o4.xyzw                Custom
+
 //获取 BitangentWS -> r0.xyz = Cross(NormalWS，TangentWS) * sign 
 mul r0.xyz, v0.yzxy, v1.zxyz
 mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
@@ -105,7 +111,7 @@ rsq r1.w, r1.w
 mul r0.xyz, r0.xyzx, r1.wwww    再次归一化
 mul r0.xyz, r0.wwww, r0.xyzx    调整朝向
 
-mul r2.xzw, cb1[1].xxyz, cb1[4].yyyy   -> 清除R2 
+mul r2.xzw, cb1[1].xxyz, cb1[4].yyyy   -> 赋值(但结果为0) 
 
 //用UV采样 Grass 纹理，获取基础色，返回值存放在了 R3 中 
 mul r3.xy, v2.xyxx, cb1[5].xxxx     -> cb1[5].x = 2 -> UV scale by 2 
@@ -168,8 +174,8 @@ mad r1.y, r1.y, r1.w, r1.z            -> r1.y = saturate((Clip.w-24)/256) * rand
 div r1.y, r1.x, r1.y                  -> r1.y = Clip.z / (saturate((Clip.w-24)/256) * rand[0, 24.99] + Clip.w) 
 min r1.y, r1.y, v4.z                  -> r1.y 不能大于 NDC.z -> 既取到的 R1.y 总是在原始 NDC.z 之前（靠近摄像机) 
 
-add r0.w, r0.w, l(-0.100000)          -> NoiseRGB.x - 0.1 
-lt r0.w, r0.w, l(0.000000)            -> (NoiseRGB.x - 0.1) < 0 ? true : false 
+add r0.w, r0.w, l(-0.100000)          -> Cdlum - 0.1 
+lt r0.w, r0.w, l(0.000000)            -> (Cdlum - 0.1) < 0 ? true : false 
 discard_nz r0.w                       -> Discard 部分像素 -> 依据 NoiseRGB.x 
 
 
