@@ -62,6 +62,12 @@ dcl_output o4.xyzw        未知 -> 似乎区分了角色衣服布料和树叶 -
 dcl_output oDepthLE
 dcl_temps 8
 
+dcl_output o0.xyzw                CameraColor
+dcl_output o1.xyzw                Normal
+dcl_output o2.xyzw                M_D_R_I
+dcl_output o3.xyzw                Diffuse
+dcl_output o4.xyzw                Custom
+
 //获取 BitangentWS -> r0.xyz = Cross(NormalWS，TangentWS) * sign 
 mul r0.xyz, v0.yzxy, v1.zxyz
 mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
@@ -89,8 +95,8 @@ dp2 r1.w, r3.xyxx, r3.xyxx
 add r1.w, -r1.w, l(1.000000)
 max r1.w, r1.w, l(0.000000)   -> w在 [0,1] 区间
 sqrt r3.z, r1.w               -> 到这里从RG通道中解出了第三个通道B
-add r4.xyz, -r3.xyzx, l(0.000000, 0.000000, 1.000000, 0.000000)   -> 这两行add + mad的组合符合 lerp 指令 -> lerp((0,0,1), Norm, Rate) 
-mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                         -> cb1[4].y = Rate = 0 -> [float3(0,0,1) - TexNorm] * Rate + TexNorm 
+add r4.xyz, -r3.xyzx, l(0, 0, 1, 0)                       -> 这两行add + mad的组合符合 lerp 指令 -> lerp((0,0,1), Norm, Rate) 
+mad r3.xyz, cb1[4].yyyy, r4.xyzx, r3.xyzx                 -> cb1[4].y = Rate = 0 -> [float3(0,0,1) - TexNorm] * Rate + TexNorm 
 mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx                 -> 对切线空间法线进行 Scale 和 Offset 等常规操作 
 dp3 r1.w, r3.xyzx, r3.xyzx                                        -> 以下 3 行负责 归一化 TexNormal 
 rsq r1.w, r1.w 
