@@ -148,7 +148,7 @@ sample_b_indexable(texture2d)(float,float,float,float) r0.w, r4.xyxx, t3.yzwx, s
 
 //利用 VertexInput.xy 构造顶点噪声      -> 存入 r1.w 
 add r4.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0
-add r4.zw, r4.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  对当前fragment在屏幕上的坐标进行两次独立偏移 
+add r4.zw, r4.xxxy, cb0[151].xxxx     -> cb0[151] = 3,3,3,3  对当前fragment在屏幕上的坐标进行两次独立偏移 
 ftou r4.zw, r4.zzzw                   -> r4.xy是屏幕坐标原始值，r4.zw是屏幕坐标整数值 -> 这步可以佐证 VertexInput.xy = 屏幕像素坐标 
 ishl r1.w, r4.w, l(1)                 -> VertexInput.y << 1 
 iadd r1.w, r1.w, r4.z                 -> VertexInput.y * 2 + VertexInput.x 
@@ -162,7 +162,7 @@ mul r4.xy, r4.xyxx, l(0.015625, 0.015625, 0.000000, 0.000000)    -> 0.015625=1/6
 sample_b_indexable(texture2d)(float,float,float,float) r3.w, r4.xyxx, t4.yzwx, s3, cb0[142].y
 add r1.w, r1.w, r3.w            -> r1.w           取值 0.0 ~ 4.99 
 mul r1.w, r1.w, cb1[6].w        -> cb1[6].w = 30  取值 0.0 ~ 149.99 
-mul r1.w, r1.w, l(0.166667)    -> 0.1667 = 1/6    取值 0.0 ~ 24.99 
+mul r1.w, r1.w, l(0.166667)     -> 0.1667 = 1/6    取值 0.0 ~ 24.99 
 
 //目的是为了转换出 R1.y -> 某种基于距离的 Noise -> 推测用于 Dithering(?) 在一定距离内 
 //R1.y 等效于一种计算出来的 NDC.z 

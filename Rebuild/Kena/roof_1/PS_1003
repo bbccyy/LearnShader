@@ -144,7 +144,7 @@ mul_sat r0.w, r2.x, cb1[6].x                    -> R0.w = saturate(1.5 * PurpleR
 
 //利用 VertexInput.xy 构造噪声         -> 存入 r1.w   ->  此噪声基于屏幕空间，与EyePosition相关 
 add r5.xy, v4.xyxx, -cb0[129].xyxx    -> cb0[129] = 0,0,0,0 
-add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 0,0,0,0  可以认为 r5.xy|zw 是对当前fragment在屏幕上的坐标进行前后两次偏移后获得 
+add r5.zw, r5.xxxy, cb0[151].xxxx     -> cb0[151] = 3,3,3,3  可以认为 r5.xy|zw 是对当前fragment在屏幕上的坐标进行前后两次偏移后获得 
 ftou r5.zw, r5.zzzw                   -> r5.xy是屏幕坐标原始值，r5.zw是屏幕坐标‘整数’值 -> 这步可以佐证 VertexInput.xy = 屏幕像素坐标 
 ishl r1.w, r5.w, l(1)                 -> VertexInput.y << 1 
 iadd r1.w, r1.w, r5.z                 -> VertexInput.y * 2 + VertexInput.x 
@@ -184,7 +184,7 @@ ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o
 
 //对baseCol颜色R4进行小范围调整，期间利用了新的 PurpleRGB 的 y 通道作为底子，分别产生了 R5 和 R6 两个分支颜色 
 mul r0.w, r1.w, l(0.080000)     -> cb1[5].w * 0.08 = 0.2 * 0.08 
-mad r5.xyz, -r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx  -> R4颜色 - 0.2 * 0.08^2 -> 先对R4向下做个微调 
+mad r5.xyz, -r1.wwww, l(0.080000, 0.080000, 0.080000, 0.000000), r4.xyzx  -> R4颜色 - 0.2 * 0.08 -> 先对R4向下做个微调 
 mad r5.xyz, r2.xxxx, r5.xyzx, r0.wwww     -> R5 = PurpleRGB.y * R5颜色 + 0.2*0.08 -> 本质是对 R4 颜色做基于 PurpleRGB.y 的上下波动 
 mad r6.xyz, -r4.xyzx, r2.xxxx, r4.xyzx    -> R6 = R4颜色 * (1 - PurpleRGB.y) 
 mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx       -> 对R6颜色 -> 进行未知缩放 + 平移 -> 可以默认为 scale=1，offset=0 
