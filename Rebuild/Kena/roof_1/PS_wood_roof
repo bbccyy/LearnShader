@@ -13,7 +13,7 @@ ps_5_0
       dcl_resource_structured t0, 16
       dcl_resource_texture2d (float,float,float,float) t1               NormalRG
       dcl_resource_texture2d (float,float,float,float) t2               Diffuse
-      dcl_resource_texture2d (float,float,float,float) t3               Comp
+      dcl_resource_texture2d (float,float,float,float) t3               Comp_M_R_D_F  (注:#2通道为Roughness)
 
       dcl_input_ps linear centroid v0.xyz                               NormalWS
       dcl_input_ps linear centroid v1.xyzw                              TangentWS + Sign
@@ -63,60 +63,83 @@ ps_5_0
   25: dp3 r0.w, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)  Lum(Diffuse)
 
   26: mad r3.xyz, -r3.xyzx, cb1[5].xyzx, r0.wwww 
-  27: mad_sat r3.xyz, cb1[7].zzzz, r3.xyzx, r4.xyzx         Lerp(Diffuse, Lum(Diffuse) - Diffuse, 0)  -> desaturateRate = 0
+  27: mad_sat r3.xyz, cb1[7].zzzz, r3.xyzx, r4.xyzx         BaseCol = Lerp(Diffuse, Lum(Diffuse) - Diffuse, 0)  -> desaturateRate = 0
 
-  28: sample_b(texture2d)(float,float,float,float) r1.xyz, r1.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_D_R_F -> xyz=[R,M,D]
-  29: mul_sat r4.x, r1.y, cb1[7].w
-  30: mul_sat r0.w, r1.z, cb1[8].w
-  31: mov_sat r4.y, cb1[8].y
-  32: mov_sat r1.x, r1.x
-  33: mad o2.z, r0.w, cb0[138].y, cb0[138].x
+[r1.xy = (0.2881381, 0.5539439)]
+  28: sample_b(texture2d)(float,float,float,float) r1.xyz, r1.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_R_D_F -> xyz=[D,M,R]
+[r1.xyz = (0.8864271, 0.00, 0.5956664)]
+
+  29: mul_sat r4.x, r1.y, cb1[7].w                          sat(TexMetallic * MetallicScaler) = 0   -> (MetallicScaler=0)
+
+  30: mul_sat r0.w, r1.z, cb1[8].w                          sat(TexRough * RoughScaler) = TexRough  -> (RoughScaler=1)
+
+  31: mov_sat r4.y, cb1[8].y                                Specular = saturate(0.2)
+  32: mov_sat r1.x, r1.x                                    baseAO = saturate(TexRoughness) //这里用roughness近似了ao
+
+  33: mad o2.z, r0.w, cb0[138].y, cb0[138].x                Output Roughness = TexRough * 1 + 0
+
   34: imad r0.w, v3.x, l(35), l(20)
-  35: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx
-  36: mul r0.w, r4.y, l(0.0800)
-  37: mad r1.yzw, -r4.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r3.xxyz
-  38: mad r1.yzw, r4.xxxx, r1.yyzw, r0.wwww
-  39: mad r5.xyz, -r3.xyzx, r4.xxxx, r3.xyzx
-  40: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx
-  41: mad r1.yzw, r1.yyzw, cb0[136].wwww, cb0[136].xxyz
-  42: ne r0.w, l(0, 0, 0, 0), cb0[177].w
-  43: mad r6.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
-  44: movc r5.xyz, r0.wwww, r6.xyzx, r5.xyzx
-  45: movc r1.yzw, r0.wwww, l(0, 0, 0, 0), r1.yyzw
+  35: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx          0.33333
+
+  36: mul r0.w, r4.y, l(0.0800)                             DielectricSpecularToF0 
+  37: mad r1.yzw, -r4.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r3.xxyz 
+  38: mad r1.yzw, r4.xxxx, r1.yyzw, r0.wwww                 SpecCol = lerp(F0, Diffuse, Metallic) -> ComputeF0(Specular, BaseCol, Metallic)
+
+  39: mad r5.xyz, -r3.xyzx, r4.xxxx, r3.xyzx                BaseCol * (1 - Metallic)
+  40: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx     BaseCol * 1 + 0   -> BaseCol
+  41: mad r1.yzw, r1.yyzw, cb0[136].wwww, cb0[136].xxyz     SpecCol * 1 + 0   -> SpecCol
+
+  42: ne r0.w, l(0, 0, 0, 0), cb0[177].w                    false -> useMix?
+
+  43: mad r6.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx   CompCol = SpecCol * 0.45 + BaseCol
+  44: movc r5.xyz, r0.wwww, r6.xyzx, r5.xyzx                emitBaseCol = useMix ? CompCol : BaseCol;
+  45: movc r1.yzw, r0.wwww, l(0, 0, 0, 0), r1.yyzw          emitSpecCol = useMix ? 0 : SpecCol;
+
   46: dp3 r0.w, r1.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
   47: mad r6.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
   48: mad r0.w, r1.x, r6.x, r6.y
   49: mad r0.w, r0.w, r1.x, r6.z
   50: mul r0.w, r1.x, r0.w
-  51: max o3.w, r0.w, r1.x
-  52: mad r1.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
-  53: max r2.xyz, r2.xyzx, l(0, 0, 0, 0)
-  54: lt r0.w, l(0), cb0[139].x
+  51: max o3.w, r0.w, r1.x                                  FinalAO = AOMultiBounce(Luminance(emitSpecCol), baseAO);
+
+  52: mad r1.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx         emitSpecCol * 0.45 + emitBaseCol
+  53: max r2.xyz, r2.xyzx, l(0, 0, 0, 0)                    max(_Emissive_Color.rgb, 0)
+
+  54: lt r0.w, l(0), cb0[139].x     false
   55: if_nz r0.w
+
   56:   mul r5.xyzw, v4.yyyy, cb0[45].xyzw
   57:   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
   58:   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
   59:   add r5.xyzw, r5.xyzw, cb0[47].xyzw
-  60:   div r5.xyz, r5.xyzx, r5.wwww
-  61:   add r5.xyz, r5.xyzx, -cb0[70].xyzx
+  60:   div r5.xyz, r5.xyzx, r5.wwww                        posWS
+
+  61:   add r5.xyz, r5.xyzx, -cb0[70].xyzx                  posWS - cameraWS = -ViewDir
+
   62:   imad r4.zw, v3.xxxx, l(0, 0, 35, 35), l(0, 0, 5, 19)
   63:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r4.z, l(0), t0.xyzx
-  64:   add r6.xyz, r5.xyzx, -r6.xyzx
+  64:   add r6.xyz, r5.xyzx, -r6.xyzx                       - V - L
+
   65:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r4.w, l(0), t0.xyzx
   66:   add r7.xyz, r7.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+
   67:   lt r6.xyz, r7.xyzx, abs(r6.xyzx)
   68:   or r0.w, r6.y, r6.x
   69:   or r0.w, r6.z, r0.w
-  70:   dp3 r1.w, r5.xyzx, l(0.5770, 0.5770, 0.5770, 0.0000)
+
+  70:   dp3 r1.w, r5.xyzx, l(0.5770, 0.5770, 0.5770, 0.0000)            dot(-V, 0.577) 
   71:   mul r1.w, r1.w, l(0.0020)
   72:   frc r1.w, r1.w
   73:   lt r1.w, l(0.5000), r1.w
   74:   movc r5.xyz, r1.wwww, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
-  75:   movc r2.xyz, r0.wwww, r5.xyzx, r2.xyzx
+  75:   movc r2.xyz, r0.wwww, r5.xyzx, r2.xyzx              Emissive_Color ? 
   76: endif
-  77: mad r1.xyz, cb0[144].yyyy, r1.xyzx, r2.xyzx
-  78: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
-  79: mul o0.xyz, r1.xyzx, cb0[134].yyyy
+
+  77: mad r1.xyz, cb0[144].yyyy, r1.xyzx, r2.xyzx 
+                              EmitCol = max(_Emissive_Color.rgb, 0) + (emitSpecCol * 0.45 + emitBaseCol) * _EmissiveAmount
+
+  78: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)  Normal 
+  79: mul o0.xyz, r1.xyzx, cb0[134].yyyy       EmitCol * 1
   80: mov o0.w, l(0)
   81: mov o2.w, l(0.6941)
   82: mov o2.xy, r4.xyxx
