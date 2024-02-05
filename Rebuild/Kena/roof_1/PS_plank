@@ -34,78 +34,102 @@ ps_5_0
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
+   2: mul r0.xyz, r0.xyzx, v1.wwww              BitangentWS = Cross(NormalWS，TangentWS) * sign
+
    3: mov r1.x, v4.z
    4: mov r1.y, l(1.0000)
-   5: mul r1.xz, r1.xxyx, v4.wwww
-   6: mul r2.xy, v2.xyxx, cb1[6].yyyy
-   7: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t1.zwxy, s0, cb0[142].y
+   5: mul r1.xz, r1.xxyx, v4.wwww               [NDC.z * Clip.w = Clip.z, Clip.w]
+
+   6: mul r2.xy, v2.xyxx, cb1[6].yyyy           UV * 1
+
+   7: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t1.zwxy, s0, cb0[142].y            Sample NormalTS
    8: mad r3.xy, r2.zwzz, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
    9: dp2 r0.w, r3.xyxx, r3.xyxx
   10: add r0.w, -r0.w, l(1.0000)
   11: max r0.w, r0.w, l(0)
-  12: sqrt r3.z, r0.w
-  13: mad r3.xyz, cb1[2].xyzx, r3.xyzx, r3.xyzx
-  14: mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx
+  12: sqrt r3.z, r0.w                           Unpack NormalTS RGB in Tangent Space
+
+  13: mad r3.xyz, cb1[2].xyzx, r3.xyzx, r3.xyzx             NormalTS * 0 + NormalTS
+  14: mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * 1 + 0 -> NormalTS
+
   15: dp3 r0.w, r3.xyzx, r3.xyzx
-  16: rsq r0.w, r0.w
-  17: mul r3.xyz, r0.wwww, r3.xyzx
+  16: rsq r0.w, r0.w 
+  17: mul r3.xyz, r0.wwww, r3.xyzx              normalize(NormalTS)
+
   18: mul r0.xyz, r0.xyzx, r3.yyyy
   19: mad r0.xyz, r3.xxxx, v0.xyzx, r0.xyzx
   20: mad r0.xyz, r3.zzzz, v1.xyzx, r0.xyzx
   21: dp3 r0.w, r0.xyzx, r0.xyzx
   22: rsq r0.w, r0.w
-  23: mul r0.xyz, r0.wwww, r0.xyzx
-  24: mul r3.xyz, cb1[3].xyzx, cb1[6].zzzz
-  25: sample_b(texture2d)(float,float,float,float) r4.xyz, r2.xyxx, t2.xyzw, s1, cb0[142].y
-  26: mul r4.xyz, r4.xyzx, cb1[6].wwww
-  27: mul r5.xyz, r4.xyzx, cb1[5].xyzx
+  23: mul r0.xyz, r0.wwww, r0.xyzx              nDirWS = normalize(mul(NormalTS, tbn))
+
+  24: mul r3.xyz, cb1[3].xyzx, cb1[6].zzzz      _Emissive_Color = 0
+
+  25: sample_b(texture2d)(float,float,float,float) r4.xyz, r2.xyxx, t2.xyzw, s1, cb0[142].y     Sampel Diffuse
+  26: mul r4.xyz, r4.xyzx, cb1[6].wwww          d * 1
+  27: mul r5.xyz, r4.xyzx, cb1[5].xyzx          d * (0.378472, 0.293729, 0.241802) -> _Color_Overlay
+
   28: dp3 r0.w, r5.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
   29: mad r4.xyz, -r4.xyzx, cb1[5].xyzx, r0.wwww
-  30: mad_sat r4.xyz, cb1[7].zzzz, r4.xyzx, r5.xyzx
-  31: sample_b(texture2d)(float,float,float,float) r2.xyz, r2.xyxx, t3.zxyw, s2, cb0[142].y
-  32: mul_sat r5.x, r2.y, cb1[7].w
-  33: mul_sat r0.w, r2.z, cb1[8].w
-  34: add r2.yz, v4.xxyx, -cb0[129].xxyx
+  30: mad_sat r4.xyz, cb1[7].zzzz, r4.xyzx, r5.xyzx         dBase = lerp(dBase, lum(dBase) - dBase, 0) -> _Desaturate = 0
+
+  31: sample_b(texture2d)(float,float,float,float) r2.xyz, r2.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_R_Ao -> [AO, M, Rough]
+
+  32: mul_sat r5.x, r2.y, cb1[7].w              Metallic = sat(M * 0)         MetallicScaler = 0
+  33: mul_sat r0.w, r2.z, cb1[8].w              Roughness = sat(Rough * 1)    RoughnessScaler = 1
+
+  34: add r2.yz, v4.xxyx, -cb0[129].xxyx        利用 VertexInput.xy 构造顶点噪声 
   35: add r5.zw, r2.yyyz, cb0[151].xxxx
   36: ftou r5.zw, r5.zzzw
   37: ishl r1.w, r5.w, l(1)
   38: iadd r1.w, r1.w, r5.z
   39: udiv null, r1.w, r1.w, l(5)
-  40: utof r1.w, r1.w
-  41: mul r2.yz, r2.yyzy, l(0.0000, 0.0156, 0.0156, 0.0000)
-  42: sample_b(texture2d)(float,float,float,float) r2.y, r2.yzyy, t4.yxzw, s3, cb0[142].y
+  40: utof r1.w, r1.w                           uint2 screenIdx = uint2(i.vertex.xy + 3)
+                                                half random_0_to_4 = (screenIdx.y << 1 + screenIdx.x) % 5;
+
+  41: mul r2.yz, r2.yyzy, l(0.0000, 0.0156, 0.0156, 0.0000)       uv -> frac(i.vertex.xy / 64).xy
+  42: sample_b(texture2d)(float,float,float,float) r2.y, r2.yzyy, t4.yxzw, s3, cb0[142].y       Sample GodNoise64
   43: add r1.w, r1.w, r2.y
-  44: mul r1.w, r1.w, cb1[9].x
-  45: mul r1.w, r1.w, l(0.1667)
+  44: mul r1.w, r1.w, cb1[9].x                  cb1[9].x = 2 -> 0.02
+  45: mul r1.w, r1.w, l(0.1667)                 randDistW = (random_0_to_4 + Noise) * _PixelDepth_Dither * 0.166667
   46: mad r1.y, r1.y, v4.w, l(-24.0000)
   47: div_sat r1.y, r1.y, cb1[9].y
-  48: mad r1.y, r1.y, r1.w, r1.z
-  49: div r1.y, r1.x, r1.y
-  50: min r1.y, r1.y, v4.z
-  51: mov_sat r5.y, cb1[8].y
-  52: mov_sat r2.x, r2.x
-  53: mad o2.z, r0.w, cb0[138].y, cb0[138].x
+  48: mad r1.y, r1.y, r1.w, r1.z                rClipW = saturate((clipW - 0.24) / _PixelDepth_Dither_NearFade) * randDistW + clipW
+  49: div r1.y, r1.x, r1.y                      rNDCZ = clipZ / rClipW = NDC.z * Clip.w / rClip.W
+  50: min r1.y, r1.y, v4.z                      rNDCZ = min(rNDCZ, NDC.z)
+
+  51: mov_sat r5.y, cb1[8].y                    Specular = sat(0.2)
+  52: mov_sat r2.x, r2.x                        baseAO = sat(texAO)
+
+  53: mad o2.z, r0.w, cb0[138].y, cb0[138].x    Output Roughness = Roughness * 1 + 0
+
   54: imad r0.w, v3.x, l(35), l(20)
-  55: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx
+  55: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r0.w, l(4), t0.xxxx    0.33333
+
   56: mul r0.w, r5.y, l(0.0800)
   57: mad r2.yzw, -r5.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r4.xxyz
-  58: mad r2.yzw, r5.xxxx, r2.yyzw, r0.wwww
-  59: mad r6.xyz, -r4.xyzx, r5.xxxx, r4.xyzx
-  60: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx
-  61: mad r2.yzw, r2.yyzw, cb0[136].wwww, cb0[136].xxyz
-  62: ne r0.w, l(0, 0, 0, 0), cb0[177].w
-  63: mad r7.xyz, r2.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
-  64: movc r6.xyz, r0.wwww, r7.xyzx, r6.xyzx
-  65: movc r2.yzw, r0.wwww, l(0, 0, 0, 0), r2.yyzw
+  58: mad r2.yzw, r5.xxxx, r2.yyzw, r0.wwww     SpecCol = ComputeF0(Specular, dBase, Metallic)
+
+  59: mad r6.xyz, -r4.xyzx, r5.xxxx, r4.xyzx                            BaseCol = dBase * (1 - Metallic)
+  60: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx                 BaseCol * 1 + 0
+  61: mad r2.yzw, r2.yyzw, cb0[136].wwww, cb0[136].xxyz                 SpecCol * 1 + 0
+
+  62: ne r0.w, l(0, 0, 0, 0), cb0[177].w                                useMix = false
+
+  63: mad r7.xyz, r2.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx   CompCol = SpecCol * 0.45 + BaseCol;
+  64: movc r6.xyz, r0.wwww, r7.xyzx, r6.xyzx                            emitBaseCol = useMix ? CompCol : BaseCol;
+  65: movc r2.yzw, r0.wwww, l(0, 0, 0, 0), r2.yyzw                      emitSpecCol = useMix ? 0 : SpecCol;
+
   66: dp3 r0.w, r2.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
   67: mad r7.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
   68: mad r0.w, r2.x, r7.x, r7.y
   69: mad r0.w, r0.w, r2.x, r7.z
   70: mul r0.w, r2.x, r0.w
-  71: max o3.w, r0.w, r2.x
+  71: max o3.w, r0.w, r2.x                                              AOMultiBounce(Luminance(emitSpecCol), baseAO)
+
   72: mad r2.xyz, r2.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
   73: max r3.xyz, r3.xyzx, l(0, 0, 0, 0)
+
   74: lt r0.w, l(0), cb0[139].x
   75: if_nz r0.w
   76:   mul r6.xyzw, v4.yyyy, cb0[45].xyzw
@@ -135,7 +159,9 @@ ps_5_0
  100:   movc r1.xzw, r1.xxxx, l(0.0000, 0.0000, 1.0000, 1.0000), l(1.0000, 0.0000, 1.0000, 0.0000)
  101:   movc r3.xyz, r0.wwww, r1.xzwx, r3.xyzx
  102: endif
+
  103: mad r1.xzw, cb0[144].yyyy, r2.xxyz, r3.xxyz
+                              EmitCol = max(_Emissive_Color.rgb, 0) + (emitSpecCol * 0.45 + emitBaseCol) * _EmissiveAmount;
  104: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
  105: mul o0.xyz, r1.xzwx, cb0[134].yyyy
  106: mov o0.w, l(0)
