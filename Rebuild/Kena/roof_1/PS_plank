@@ -73,12 +73,12 @@ ps_5_0
   29: mad r4.xyz, -r4.xyzx, cb1[5].xyzx, r0.wwww
   30: mad_sat r4.xyz, cb1[7].zzzz, r4.xyzx, r5.xyzx         dBase = lerp(dBase, lum(dBase) - dBase, 0) -> _Desaturate = 0
 
-  31: sample_b(texture2d)(float,float,float,float) r2.xyz, r2.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_R_Ao -> [AO, M, Rough]
+  31: sample_b(texture2d)(float,float,float,float) r2.xyz, r2.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_R_Ao -> [Ao, M, Rough]
 
   32: mul_sat r5.x, r2.y, cb1[7].w              Metallic = sat(M * 0)         MetallicScaler = 0
   33: mul_sat r0.w, r2.z, cb1[8].w              Roughness = sat(Rough * 1)    RoughnessScaler = 1
 
-  34: add r2.yz, v4.xxyx, -cb0[129].xxyx        利用 VertexInput.xy 构造顶点噪声 
+  34: add r2.yz, v4.xxyx, -cb0[129].xxyx        利用 VertexInput.xy 构造顶点噪声
   35: add r5.zw, r2.yyyz, cb0[151].xxxx
   36: ftou r5.zw, r5.zzzw
   37: ishl r1.w, r5.w, l(1)
@@ -99,7 +99,7 @@ ps_5_0
   50: min r1.y, r1.y, v4.z                      rNDCZ = min(rNDCZ, NDC.z)
 
   51: mov_sat r5.y, cb1[8].y                    Specular = sat(0.2)
-  52: mov_sat r2.x, r2.x                        baseAO = sat(texAO)
+  52: mov_sat r2.x, r2.x                        baseAO = sat(texD)      //使用texAo近似AO
 
   53: mad o2.z, r0.w, cb0[138].y, cb0[138].x    Output Roughness = Roughness * 1 + 0
 

@@ -1,0 +1,128 @@
+PS_WoodTiledInteriors
+
+Shader hash 1000176f-168151bf-5197fb4a-79a9ed6e
+
+ps_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[178], immediateIndexed
+      dcl_constantbuffer cb1[9], immediateIndexed
+      dcl_sampler s0, mode_default
+      dcl_sampler s1, mode_default
+      dcl_sampler s2, mode_default
+      dcl_resource_structured t0, 16
+      dcl_resource_texture2d (float,float,float,float) t1         Normal
+      dcl_resource_texture2d (float,float,float,float) t2         Diffuse
+      dcl_resource_texture2d (float,float,float,float) t3         Comp_M_R_Ao
+
+      dcl_input_ps linear centroid v0.xyz
+      dcl_input_ps linear centroid v1.xyzw
+      dcl_input_ps linear v2.xy
+      dcl_input_ps nointerpolation v3.x
+      dcl_input_ps_siv linear noperspective v4.xyz, position
+      dcl_input_ps_sgv nointerpolation v5.x, isfrontface
+
+      dcl_output o0.xyzw
+      dcl_output o1.xyzw
+      dcl_output o2.xyzw
+      dcl_output o3.xyzw
+      dcl_output o4.xyzw
+      dcl_temps 8
+
+   0: mul r0.xyz, v0.yzxy, v1.zxyz
+   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
+   2: mul r0.xyz, r0.xyzx, v1.wwww
+
+   3: imad r1.xy, v3.xxxx, l(35, 35, 0, 0), l(4, 20, 0, 0)
+   4: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r1.x, l(12), t0.xxxx
+   5: mul r0.w, r0.w, cb0[140].w                flag -> dont flip norm -> true -> 1
+
+   6: movc r1.x, v5.x, l(1.0000), l(-1.0000)
+   7: mul r0.w, r0.w, r1.x                      flip boolean -> signed_dir
+
+   8: mul r1.xz, v2.xxyx, cb1[6].yyyy           UV * 1
+   9: sample_b(texture2d)(float,float,float,float) r2.xy, r1.xzxx, t1.xyzw, s0, cb0[142].y
+  10: mad r2.xy, r2.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
+  11: dp2 r1.w, r2.xyxx, r2.xyxx
+  12: add r1.w, -r1.w, l(1.0000)
+  13: max r1.w, r1.w, l(0)
+  14: sqrt r2.z, r1.w                           Unpack NormalTS RGB in Tangent Space
+
+  15: mad r2.xyz, cb1[2].xyzx, r2.xyzx, r2.xyzx                   half3(0.5, 0.5, 0) * NormalTS + NormalTS
+  16: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx           NormalTS * 1 + 0
+
+  17: dp3 r1.w, r2.xyzx, r2.xyzx
+  18: rsq r1.w, r1.w
+  19: mul r2.xyz, r1.wwww, r2.xyzx              normalize(NormalTS)
+
+  20: mul r0.xyz, r0.xyzx, r2.yyyy
+  21: mad r0.xyz, r2.xxxx, v0.xyzx, r0.xyzx
+  22: mad r0.xyz, r2.zzzz, v1.xyzx, r0.xyzx
+  23: dp3 r1.w, r0.xyzx, r0.xyzx
+  24: rsq r1.w, r1.w
+  25: mul r0.xyz, r0.xyzx, r1.wwww              nDirWS = normalize(mul(NormalTS, tbn))
+
+  26: mul r0.xyz, r0.wwww, r0.xyzx              nDirWS = nDirWS * signed_dir 
+  27: mul r2.xyz, cb1[3].xyzx, cb1[6].zzzz
+  28: sample_b(texture2d)(float,float,float,float) r3.xyz, r1.xzxx, t2.xyzw, s1, cb0[142].y
+  29: mul r3.xyz, r3.xyzx, cb1[6].wwww
+  30: mul r4.xyz, r3.xyzx, cb1[5].xyzx
+  31: dp3 r0.w, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
+  32: mad r3.xyz, -r3.xyzx, cb1[5].xyzx, r0.wwww
+  33: mad_sat r3.xyz, cb1[7].zzzz, r3.xyzx, r4.xyzx
+  34: sample_b(texture2d)(float,float,float,float) r1.xzw, r1.xzxx, t3.zwxy, s2, cb0[142].y
+  35: mul_sat r4.x, r1.z, cb1[7].w
+  36: mul_sat r0.w, r1.w, cb1[8].w
+  37: mov_sat r4.y, cb1[8].y
+  38: mov_sat r1.x, r1.x
+  39: mad o2.z, r0.w, cb0[138].y, cb0[138].x
+  40: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r1.y, l(4), t0.xxxx
+  41: mul r0.w, r4.y, l(0.0800)
+  42: mad r1.yzw, -r4.yyyy, l(0.0000, 0.0800, 0.0800, 0.0800), r3.xxyz
+  43: mad r1.yzw, r4.xxxx, r1.yyzw, r0.wwww
+  44: mad r5.xyz, -r3.xyzx, r4.xxxx, r3.xyzx
+  45: mad r5.xyz, r5.xyzx, cb0[135].wwww, cb0[135].xyzx
+  46: mad r1.yzw, r1.yyzw, cb0[136].wwww, cb0[136].xxyz
+  47: ne r0.w, l(0, 0, 0, 0), cb0[177].w
+  48: mad r6.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
+  49: movc r5.xyz, r0.wwww, r6.xyzx, r5.xyzx
+  50: movc r1.yzw, r0.wwww, l(0, 0, 0, 0), r1.yyzw
+  51: dp3 r0.w, r1.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
+  52: mad r6.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
+  53: mad r0.w, r1.x, r6.x, r6.y
+  54: mad r0.w, r0.w, r1.x, r6.z
+  55: mul r0.w, r1.x, r0.w
+  56: max o3.w, r0.w, r1.x
+  57: mad r1.xyz, r1.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r5.xyzx
+  58: max r2.xyz, r2.xyzx, l(0, 0, 0, 0)
+  59: lt r0.w, l(0), cb0[139].x
+  60: if_nz r0.w
+  61:   mul r5.xyzw, v4.yyyy, cb0[45].xyzw
+  62:   mad r5.xyzw, v4.xxxx, cb0[44].xyzw, r5.xyzw
+  63:   mad r5.xyzw, v4.zzzz, cb0[46].xyzw, r5.xyzw
+  64:   add r5.xyzw, r5.xyzw, cb0[47].xyzw
+  65:   div r5.xyz, r5.xyzx, r5.wwww
+  66:   add r5.xyz, r5.xyzx, -cb0[70].xyzx
+  67:   imad r4.zw, v3.xxxx, l(0, 0, 35, 35), l(0, 0, 5, 19)
+  68:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r4.z, l(0), t0.xyzx
+  69:   add r6.xyz, r5.xyzx, -r6.xyzx
+  70:   ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r4.w, l(0), t0.xyzx
+  71:   add r7.xyz, r7.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+  72:   lt r6.xyz, r7.xyzx, abs(r6.xyzx)
+  73:   or r0.w, r6.y, r6.x
+  74:   or r0.w, r6.z, r0.w
+  75:   dp3 r1.w, r5.xyzx, l(0.5770, 0.5770, 0.5770, 0.0000)
+  76:   mul r1.w, r1.w, l(0.0020)
+  77:   frc r1.w, r1.w
+  78:   lt r1.w, l(0.5000), r1.w
+  79:   movc r5.xyz, r1.wwww, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
+  80:   movc r2.xyz, r0.wwww, r5.xyzx, r2.xyzx
+  81: endif
+  82: mad r1.xyz, cb0[144].yyyy, r1.xyzx, r2.xyzx
+  83: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
+  84: mul o0.xyz, r1.xyzx, cb0[134].yyyy
+  85: mov o0.w, l(0)
+  86: mov o2.w, l(0.6941)
+  87: mov o2.xy, r4.xyxx
+  88: mov o3.xyz, r3.xyzx
+  89: mov o4.xyzw, l(0, 0, 0, 0)
+  90: ret
