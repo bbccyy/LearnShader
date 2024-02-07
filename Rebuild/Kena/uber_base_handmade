@@ -250,11 +250,12 @@ ps_5_0
  201:   mov r1.xyz, l(0, 0, 0, 0)
  202: endif
 
- 203: sample_b(texture2d)(float,float,float,float) r0.x, r0.xyxx, t6.xyzw, s3, cb0[5].x
- 204: mul r0.x, r0.x, r1.w
- 205: ieq r0.yz, r6.xxxx, l(0, 2, 3, 0)
+ 203: sample_b(texture2d)(float,float,float,float) r0.x, r0.xyxx, t6.xyzw, s3, cb0[5].x         sample _SSAO via uv
+ 204: mul r0.x, r0.x, r1.w                      AmbientOcclusion = GBuffer.GBufferAO * SSAO
+
+ 205: ieq r0.yz, r6.xxxx, l(0, 2, 3, 0)         Subsurface or Skin
  206: or r0.y, r0.z, r0.y
- 207: if_nz r0.y
+ 207: if_nz r0.y                                Subsurface or Skin Branch
  208:   mul r0.yzw, r4.xxyz, r4.xxyz
  209:   mul r2.xyz, r0.yzwy, r11.xyzx
  210:   mad r1.xyz, r2.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), r1.xyzx
@@ -263,8 +264,9 @@ ps_5_0
  213:   mul r1.w, r0.x, l(0.5000)
  214:   mad r7.xyz, r0.yzwy, r1.wwww, r7.xyzx
  215: endif
- 216: add r0.yzw, r1.xxyz, r7.xxyz
- 217: mul r0.xyz, r0.xxxx, r0.yzwy
- 218: mul o0.xyz, r0.xyzx, l(0.1472, 0.1713, 0.2000, 0.0000)
+
+ 216: add r0.yzw, r1.xxyz, r7.xxyz              col = NonSpecularContribution + SpecularContribution
+ 217: mul r0.xyz, r0.xxxx, r0.yzwy              col * AmbientOcclusion
+ 218: mul o0.xyz, r0.xyzx, l(0.1472, 0.1713, 0.2000, 0.0000)      ~ * AmbientCubemapColor.rgb
  219: mov o0.w, l(0)
  220: ret

@@ -287,13 +287,14 @@ ps_5_0
 
 
  208: sample_l(texture2d)(float,float,float,float) r0.x, v0.xyxx, t6.xyzw, s3, l(0)
-                                                -> float SampledAO = * AmbientOcclusionTexture.SampleLevel(AmbientOcclusionSampler, BufferUV, 0).r;
+                          -> float SampledAO = * AmbientOcclusionTexture.SampleLevel(AmbientOcclusionSampler, BufferUV, 0).r;
 
  209: mul r0.x, r0.x, r2.w                                        -> float AmbientOcclusion = GBuffer.GBufferAO * SampledAO 
 
  210: ieq r0.yz, r5.xxxx, l(0, 2, 3, 0)
  211: or r0.y, r0.z, r0.y
- 212: if_nz r0.y        -> if(GBuffer.ShadingModelID == SHADINGMODELID_SUBSURFACE || GBuffer.ShadingModelID == SHADINGMODELID_PREINTEGRATED_SKIN)
+ 212: if_nz r0.y 
+        -> if(GBuffer.ShadingModelID == SHADINGMODELID_SUBSURFACE || GBuffer.ShadingModelID == SHADINGMODELID_PREINTEGRATED_SKIN)
 
  213:   mul r0.yzw, r3.xxyz, r3.xxyz                              -> float3 SubsurfaceColor = ExtractSubsurfaceColor(GBuffer);
  214:   mul r1.xyz, r0.yzwy, r10.xyzx
