@@ -49,6 +49,7 @@ ps_5_0
   18: movc r3.xyz, r5.zzzz, l(0, 0, 0, 0), r3.xyzx
   19: ieq r6.xyzw, r5.xxxx, l(9, 5, 4, 7)                         -> r6.x = eye, r6.y = subsurface_profile, r6.z = clear_coat, r6.w = hair 
   20: movc r1.w, r6.x, l(0), r1.x                                 -> 和 Metalic 有关 
+
   21: mad r7.xyz, -r1.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r2.xyzx
   22: mad r7.xyz, r1.wwww, r7.xyzx, r5.yyyy
   23: or r4.w, r6.x, r6.y                                         -> UseSubsurfaceProfile(GBuffer.ShadingModelID) -> Skin or Eye 
@@ -74,11 +75,13 @@ ps_5_0
   37: mov r7.xyz, r2.xyzx                                         -> r2.xyz = raw BaseColor
   38: movc r7.xyzw, r4.wwww, r8.xyzw, r7.xyzw 
 
-  39: mad r2.xyz, -r7.xyzx, r1.wwww, r7.xyzx                      -> GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic; 
+  39: mad r2.xyz, -r7.xyzx, r1.wwww, r7.xyzx      -> GBuffer.DiffuseColor = GBuffer.BaseColor - GBuffer.BaseColor * GBuffer.Metallic; 
+
   40: mad r2.xyz, r2.xyzx, cb1[135].wwww, cb1[135].xyzx           
-                              -> GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
+              -> GBuffer.DiffuseColor = GBuffer.DiffuseColor * View.DiffuseOverrideParameter.www + View.DiffuseOverrideParameter.xyz;
+
   41: mad r5.yzw, r5.yyzw, cb1[136].wwww, cb1[136].xxyz
-                              -> GBuffer.SpecularColor = GBuffer.SpecularColor * View.SpecularOverrideParameter.w + View.SpecularOverrideParameter.xyz; 
+              -> GBuffer.SpecularColor = GBuffer.SpecularColor * View.SpecularOverrideParameter.w + View.SpecularOverrideParameter.xyz; 
 
   42: mul r8.xyz, v0.wwww, cb1[49].xyzx                           -> v0.zw = ScreenSpacePos = UVAndScreenPos.zw 
   43: mad r8.xyz, v0.zzzz, cb1[48].xyzx, r8.xyzx
@@ -110,26 +113,27 @@ ps_5_0
   63:   add r6.x, cb0[28].w, l(-1.0000)
   64:   add r3.w, -r3.w, r6.x                                     -> return MipCount - 1 - Level;
                                                                   -> half ComputeCubemapMipFromRoughness( half Roughness, half MipCount ) 
-                                          -> float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
+                                -> float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
 
   65:   sample_l(texturecube)(float,float,float,float) r11.xyz, r0.xyzx, t0.xyzw, s1, r3.w 
-                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
+                                -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
 
   66:   mov r1.y, r1.z                                            -> r1.z == GBuffer.Roughness
   67:   sample_l(texture2d)(float,float,float,float) r6.yz, r1.xyxx, t1.zxyw, s2, l(0)
-                                          -> float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
+                        -> float2 AB = PreIntegratedGF.SampleLevel( PreIntegratedGFSampler, float2( NoV, GBuffer.Roughness ), 0 ).rg;
 
   68:   add r1.y, -r3.x, l(1.0000)                                -> 1 - ClearCoat where ClearCoat == GBuffer.CustomData.x 
   69:   mul r1.y, r1.y, r6.z
   70:   mad r12.xyz, r5.yzwy, r6.yyyy, r1.yyyy
-  71:   mul r11.xyz, r11.xyzx, r12.xyzx   -> SpecularContribution += SampleColor * ( GBuffer.SpecularColor * AB.x + AB.y * (1 - ClearCoat) );
+  71:   mul r11.xyz, r11.xyzx, r12.xyzx   
+                        -> SpecularContribution += SampleColor * ( GBuffer.SpecularColor * AB.x + AB.y * (1 - ClearCoat) );
 
   72:   log r1.y, r3.y                                            -> r3.y = ClearCoatRoughness = GBuffer.CustomData.y 
   73:   mad r1.y, -r1.y, l(1.1500), l(3.0000)
   74:   add r1.y, -r1.y, r6.x             -> float Mip = ComputeCubemapMipFromRoughness( ClearCoatRoughness, AmbientCubemapMipAdjust.w );
 
   75:   sample_l(texturecube)(float,float,float,float) r6.xyz, r9.xyzx, t0.xyzw, s1, r1.y
-                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R0, Mip ).rgb;
+                              -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R0, Mip ).rgb;
 
   // F_Schlick                                         
   76:   add r1.y, -r1.x, l(1.0000) 
@@ -153,16 +157,17 @@ ps_5_0
   91:   add r1.y, -r1.y, r3.w             -> float Mip = ComputeCubemapMipFromRoughness( GBuffer.Roughness, AmbientCubemapMipAdjust.w );
 
   92:   sample_l(texturecube)(float,float,float,float) r0.xyz, r0.xyzx, t0.xyzw, s1, r1.y
-                                          -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
+                                  -> float3 SampleColor = TextureCubeSampleLevel( AmbientCubemap, AmbientCubemapSampler, R, Mip ).rgb;
   // EnvBRDF                  
   93:   sample_l(texture2d)(float,float,float,float) r1.xy, r1.xzxx, t1.xyzw, s2, l(0)
-                                          float2 AB = Texture2DSampleLevel( PreIntegratedGF, PreIntegratedGFSampler, float2( NoV, Roughness ), 0 ).rg; 
+                      float2 AB = Texture2DSampleLevel( PreIntegratedGF, PreIntegratedGFSampler, float2( NoV, Roughness ), 0 ).rg; 
 
-  94:   mul_sat r3.w, r5.z, l(50.0000)
+  94:   mul_sat r3.w, r5.z, l(50.0000)                            -> saturate(50.0 * SpecularColor.g)
   95:   mul r1.y, r1.y, r3.w
   96:   mad r5.yzw, r5.yyzw, r1.xxxx, r1.yyyy                     -> float3 GF = SpecularColor * AB.x + saturate( 50.0 * SpecularColor.g ) * AB.y;
 
-  97:   mul r6.xyz, r0.xyzx, r5.yzwy      -> SpecularContribution += SampleColor * EnvBRDF( GBuffer.SpecularColor, GBuffer.Roughness, NoV );
+  97:   mul r6.xyz, r0.xyzx, r5.yzwy      
+                                      -> SpecularContribution += SampleColor * EnvBRDF( GBuffer.SpecularColor, GBuffer.Roughness, NoV );
   98: endif
 
 
