@@ -58,7 +58,8 @@ ps_5_0
   26: and r5.y, r5.z, r5.y                                        -> const bool bCheckerboardRequired = both (~)
 
   27: ne r5.z, l(0, 0, 0, 0), cb1[155].x
-  28: movc r8.xyz, r5.zzzz, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx  -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
+  28: movc r8.xyz, r5.zzzz, l(1.0000, 1.0000, 1.0000, 0.0000), r2.xyzx  
+                                                        -> BaseColor = View.bSubsurfacePostprocessEnabled ? float3(1, 1, 1) : BaseColor;
 
   29: movc r5.zw, r0.wwww, l(0.0000, 0.0000, 1.0000, 0.0000), l(0.0000, 0.0000, 0.0000, 1.0000) -> r5.z=bChecker;  r5.w=!bChecker; 
   30: mul r9.xyz, r5.wwww, r7.xyzx                                -> SpecularColor *= !bChecker;
@@ -164,7 +165,7 @@ ps_5_0
 
   94:   mul_sat r3.w, r5.z, l(50.0000)                            -> saturate(50.0 * SpecularColor.g)
   95:   mul r1.y, r1.y, r3.w
-  96:   mad r5.yzw, r5.yyzw, r1.xxxx, r1.yyyy                     -> float3 GF = SpecularColor * AB.x + saturate( 50.0 * SpecularColor.g ) * AB.y;
+  96:   mad r5.yzw, r5.yyzw, r1.xxxx, r1.yyyy        -> float3 GF = SpecularColor * AB.x + saturate( 50.0 * SpecularColor.g ) * AB.y;
 
   97:   mul r6.xyz, r0.xyzx, r5.yzwy      
                                       -> SpecularContribution += SampleColor * EnvBRDF( GBuffer.SpecularColor, GBuffer.Roughness, NoV );
