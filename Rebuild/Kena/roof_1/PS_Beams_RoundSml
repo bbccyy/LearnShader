@@ -11,39 +11,46 @@ ps_5_0
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
       dcl_resource_structured t0, 16
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_input_ps linear centroid v0.xyz
-      dcl_input_ps linear centroid v1.xyzw
+      dcl_resource_texture2d (float,float,float,float) t1         Normal
+      dcl_resource_texture2d (float,float,float,float) t2         Diffuse
+      dcl_resource_texture2d (float,float,float,float) t3         Comp_M_R_Ao
+
+      dcl_input_ps linear centroid v0.xyz                         Tangent!
+      dcl_input_ps linear centroid v1.xyzw                        Normal!
       dcl_input_ps linear v2.xy
       dcl_input_ps nointerpolation v3.x
       dcl_input_ps_siv linear noperspective v4.xyz, position
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+
+      dcl_output o0.xyzw                CameraColor
+      dcl_output o1.xyzw                Normal
+      dcl_output o2.xyzw                M_D_R_I
+      dcl_output o3.xyzw                Diffuse
+      dcl_output o4.xyzw                Custom
+
       dcl_temps 8
 
-   0: mul r0.xyz, v0.yzxy, v1.zxyz
+   0: mul r0.xyz, v0.yzxy, v1.zxyz              注意，这里是 Tangent X Normal
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
-   3: mul r1.xy, v2.xyxx, cb1[6].yyyy
+   2: mul r0.xyz, r0.xyzx, v1.wwww              Bitangent
+
+   3: mul r1.xy, v2.xyxx, cb1[6].yyyy           UV * 1
+
    4: sample_b(texture2d)(float,float,float,float) r1.zw, r1.xyxx, t1.zwxy, s0, cb0[142].y
    5: mad r2.xy, r1.zwzz, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
    6: dp2 r0.w, r2.xyxx, r2.xyxx
    7: add r0.w, -r0.w, l(1.0000)
    8: max r0.w, r0.w, l(0)
-   9: sqrt r2.z, r0.w
+   9: sqrt r2.z, r0.w                           Unpack NormalTS RGB in Tangent Space
+
   10: mad r2.xyz, cb1[2].xyzx, r2.xyzx, r2.xyzx
   11: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx
   12: dp3 r0.w, r2.xyzx, r2.xyzx
   13: rsq r0.w, r0.w
-  14: mul r2.xyz, r0.wwww, r2.xyzx
-  15: mul r0.xyz, r0.xyzx, r2.yyyy
-  16: mad r0.xyz, r2.xxxx, v0.xyzx, r0.xyzx
-  17: mad r0.xyz, r2.zzzz, v1.xyzx, r0.xyzx
+  14: mul r2.xyz, r0.wwww, r2.xyzx              nTs -> normal in Tangent Space
+
+  15: mul r0.xyz, r0.xyzx, r2.yyyy              nTs.y * Bitangent.xyz
+  16: mad r0.xyz, r2.xxxx, v0.xyzx, r0.xyzx     nTs.x * Tangent.xyz -> 问题点：v0不带w分量，一般为Normal（Unity中）可疑
+  17: mad r0.xyz, r2.zzzz, v1.xyzx, r0.xyzx     nTs.z * Normal.xyz
   18: dp3 r0.w, r0.xyzx, r0.xyzx
   19: rsq r0.w, r0.w
   20: mul r0.xyz, r0.wwww, r0.xyzx
