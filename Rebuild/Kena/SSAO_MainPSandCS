@@ -1,6 +1,7 @@
 SSAO_MainPSandCS
 
-
+Img : Kena_cabin_only_2
+DC : 16324
 
 Shader hash 7dd9e392-708fa2fc-ed57219d-2526d77d
 
@@ -11,40 +12,67 @@ ps_5_0
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_input_ps linear noperspective v0.xyzw
+
+      dcl_resource_texture2d (float,float,float,float) t0         Normal+Depth in One R16G16B16A15_Float Texture
+      dcl_resource_texture2d (float,float,float,float) t1         ??
+      dcl_resource_texture2d (float,float,float,float) t2         RandomNormalTexture
+
+      dcl_input_ps linear noperspective v0.xyzw                   UVAndScreenPos
       dcl_input_ps_siv linear noperspective v1.xy, position
       dcl_output o0.xyzw
+
       dcl_temps 10
-   0: mad r0.xy, v0.xyxx, cb0[28].xyxx, cb0[30].xyxx
+
+   0: mad r0.xy, v0.xyxx, cb0[28].xyxx, cb0[30].xyxx        UV * ViewportUVToRandomUV + TemporalOffset
+                                                            cb0_v28 15.00, 8.1875, 0.31875, 1.835564
+                                                            cb0_v30 0.2325, 0.705, 1.00, 1.0761317
+
    1: sample_indexable(texture2d)(float,float,float,float) r0.xy, r0.xyxx, t2.xyzw, s2
    2: mad r0.xyz, r0.xyxx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)
+                  Texture2DSample(RandomNormalTexture, RandomNormalTextureSampler, TemporalOffset + UV * ViewportUVToRandomUV).rg * 2 - 1)
+
    3: sample_indexable(texture2d)(float,float,float,float) r0.w, v0.xyxx, t0.xyzw, s0
-   4: mad r1.xy, -r0.wwww, l(131072.0000, 131072.0000, 0.0000, 0.0000), l(1.0000, 1000.0000, 0.0000, 0.0000)
-   5: mul r2.z, r0.w, l(131072.0000)
-   6: mad r1.xy, cb0[29].zzzz, r1.xyxx, r2.zzzz
-   7: mul r0.w, r1.x, cb0[28].z
-   8: mul r1.x, r1.y, l(0.0800)
-   9: mul r0.xyw, r0.wwww, r0.xyxz
+   4: mad r1.xy, -r0.wwww, l(131072.0000, 131072.0000, 0.0000, 0.0000), l(1.0000, 1000.0000, 0.0000, 0.0000) -> 这两个与后面的lerp有关
+   5: mul r2.z, r0.w, l(131072.0000)                        float SceneDepth = GetDepthFromAOInput(UV);
+
+   6: mad r1.xy, cb0[29].zzzz, r1.xyxx, r2.zzzz             ScaleRadiusInWorldSpace = cb0[29].z = 0
+
+   7: mul r0.w, r1.x, cb0[28].z     float ActualAORadius = AORadiusInShader * lerp(SceneDepth, 1, ScaleRadiusInWorldSpace);
+                                    AORadiusInShader = cb0[28].z = 0.31875
+
+   8: mul r1.x, r1.y, l(0.0800)                             0.08f * lerp(SceneDepth, 1000, ScaleRadiusInWorldSpace);
+
+   9: mul r0.xyw, r0.wwww, r0.xyxz                          RandomVec
+
   10: mov r0.z, -r0.y
-  11: mov r3.x, cb0[30].w
-  12: mul r3.y, cb0[28].w, cb0[30].w
-  13: mul r1.y, r2.z, cb0[27].y
-  14: mul r1.y, r1.y, cb0[29].x
-  15: mul r2.xy, r2.zzzz, v0.zwzz
-  16: mov r3.z, l(1.0000)
+
+  11: mov r3.x, cb0[30].w                                   float InvTanHalfFov = ScreenSpaceAOParams[3].w = 1.0761317 
+
+  12: mul r3.y, cb0[28].w, cb0[30].w                        Ratio * InvTanHalfFov = 1.835564 * 1.0761317
+                                                            float Ratio = ScreenSpaceAOParams[1].w = cb0[28].w = 1.835564
+
+  13: mul r1.y, r2.z, cb0[27].y                             float AmbientOcclusionBias = ScreenSpaceAOParams[0].y = cb0[27].y
+                                                            cb0_v27 2.00, 0.003, 0.0125, 0.6712401 
+
+  14: mul r1.y, r1.y, cb0[29].x                             float ScaleFactor = ScreenSpaceAOParams[2].x = cb0[29].x
+                                                            cb0_v29 2.00, 0.005, 0.00, 0.60 
+
+  15: mul r2.xy, r2.zzzz, v0.zwzz                           ScreenPos * SceneDepth
+                                                            r2.xyz = ViewSpacePosition = ReconstructCSPos(SceneDepth, ScreenPos);
+
+  16: mov r3.z, l(1.0000)                                   r3.xyz = FovFix
   17: frc r1.zw, v0.xxxy
-  18: sample_indexable(texture2d)(float,float,float,float) r4.xyz, r1.zwzz, t0.xyzw, s0
+  18: sample_indexable(texture2d)(float,float,float,float) r4.xyz, r1.zwzz, t0.xyzw, s0         -> sample normal
   19: mad r4.xyz, r4.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)
   20: mul r5.xyz, r4.yyyy, cb1[13].xyzx
   21: mad r4.xyw, r4.xxxx, cb1[12].xyxz, r5.xyxz
   22: mad r4.xyz, r4.zzzz, cb1[14].xyzx, r4.xywx
   23: dp3 r1.z, r4.xyzx, r4.xyzx
   24: rsq r1.z, r1.z
-  25: mul r4.yzw, r1.zzzz, r4.xxyz
-  26: mul r5.xyz, r3.xyzx, r4.yzwy
+  25: mul r4.yzw, r1.zzzz, r4.xxyz        float3 ViewSpaceNormal = normalize(mul(WorldNormal, (float3x3)View.TranslatedWorldToView));
+  
+  26: mul r5.xyz, r3.xyzx, r4.yzwy                          FovFix * ViewSpaceNormal
+
   27: mad r1.yzw, r1.yyyy, r5.xxyz, r2.xxyz
   28: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
   29: mul r2.xyzw, r2.xxxx, r3.xyxy
