@@ -92,11 +92,11 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
 
   43: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), cb1[11].w
   44: mov r3.z, l(1.0000)
-  45: mul r5.xyz, r3.xyzx, r5.xyzx                    float3 DeltaL = (SamplePositionL - ViewSpacePosition) * InvFovFix;
+  45: mul r5.xyz, r3.xyzx, r5.xyzx                    float3 DeltaL = (SamplePositionL - ViewSpacePosition) * InvFovFix;  (for step 1)
 
   46: dp3 r1.w, r5.xyzx, r5.xyzx                      dot(DeltaL, DeltaL)
   47: dp3 r2.w, r5.xyzx, r1.xyzx                      dot(DeltaL, ScaledViewSpaceNormal)
-  48: div_sat r5.x, r2.w, r1.w                        float InvNormAngleL = saturate(dot(...) / dot(DeltaL, DeltaL))
+  48: div_sat r5.x, r2.w, r1.w                        float InvNormAngleL = saturate(dot(...) / dot(DeltaL, DeltaL)) -> (for step 1)
 
                                              0.1333 = (2/3) * 0.2 = Scale * UnrotatedRandom.y -> 也就是当step == 1时的数值 
   49: mad r4.zw, -r0.xxxy, l(0.0000, 0.0000, 0.1333, 0.1333), r4.xxxy   float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
@@ -106,108 +106,140 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
   53: div r7.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
   54: mul r7.xy, r4.zwzz, r7.zzzz
   55: add r7.xyz, -r2.xyzx, r7.xyzx
-  56: mul r7.xyz, r3.xyzx, r7.xyzx
+  56: mul r7.xyz, r3.xyzx, r7.xyzx                    float3 DeltaR for step 1
   57: dp3 r1.w, r7.xyzx, r7.xyzx
   58: dp3 r2.w, r7.xyzx, r1.xyzx
-  59: div_sat r5.y, r2.w, r1.w                        float InvNormAngleR
+  59: div_sat r5.y, r2.w, r1.w                        float InvNormAngleR  for step 1
+                                                      r5.xy = LocalAccumulator
 
-  60: mad r7.xyzw, r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy        0.0667 = (1/3) * 0.2 = Scale * UnrotatedRandom.y
+                              0.0667 = (1/3) * 0.2 = Scale * UnrotatedRandom.y -> step = 0；  0.2 -> step = 2
+  60: mad r7.xyzw, r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy        float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;
   61: mad r8.xyzw, r7.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
-  62: sample_l r9.xyzw, r8.xyxx, t0.xyzw, s0, r6.x
-  63: sample_l r8.xyzw, r8.zwzz, t0.xyzw, s0, r6.z
+  62: sample_l r9.xyzw, r8.xyxx, t0.xyzw, s0, r6.x    step = 0 时的采样 
+  63: sample_l r8.xyzw, r8.zwzz, t0.xyzw, s0, r6.z    step = 2 时的采样 
   64: mad r1.w, cb0[23].z, r8.x, cb0[23].w
-  65: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
+  65: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w     SceneDepth for step 2
   66: mad r1.w, cb0[23].z, r9.x, cb0[23].w
-  67: div r9.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
+  67: div r9.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w     SceneDepth for step 0
+
   68: mul r9.xy, r7.xyxx, r9.zzzz
-  69: add r9.xyz, -r2.xyzx, r9.xyzx
-  70: mul r9.xyz, r3.xyzx, r9.xyzx
+  69: add r9.xyz, -r2.xyzx, r9.xyzx                         SamplePositionL - ViewSpacePosition
+  70: mul r9.xyz, r3.xyzx, r9.xyzx                          float3 DeltaL for step 0
   71: mul r8.xy, r7.zwzz, r8.zzzz
   72: add r7.xyz, -r2.xyzx, r8.xyzx
-  73: mul r7.xyz, r3.xyzx, r7.xyzx
+  73: mul r7.xyz, r3.xyzx, r7.xyzx                          float3 DeltaL for step 2
   74: dp3 r1.w, r9.xyzx, r9.xyzx
   75: dp3 r2.w, r9.xyzx, r1.xyzx
-  76: div_sat r8.x, r2.w, r1.w
+  76: div_sat r8.x, r2.w, r1.w                              float InvNormAngleL for step 0 sampleid 0
 
-  77: mad r9.xyzw, -r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy
+  77: mad r9.xyzw, -r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy       float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
   78: mad r10.xyzw, r9.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
-  79: sample_l r11.xyzw, r10.xyxx, t0.xyzw, s0, r6.x
-  80: sample_l r10.xyzw, r10.zwzz, t0.xyzw, s0, r6.z
+  79: sample_l r11.xyzw, r10.xyxx, t0.xyzw, s0, r6.x        step = 0 时的采样 
+  80: sample_l r10.xyzw, r10.zwzz, t0.xyzw, s0, r6.z        step = 2 时的采样 
+
   81: mad r1.w, cb0[23].z, r10.x, cb0[23].w
-  82: div r10.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
+  82: div r10.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w    SceneDepth for step 2
+
   83: mad r1.w, cb0[23].z, r11.x, cb0[23].w
-  84: div r11.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
+  84: div r11.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w    SceneDepth for step 0
+
   85: mul r11.xy, r9.xyxx, r11.zzzz
   86: add r11.xyz, -r2.xyzx, r11.xyzx
-  87: mul r11.xyz, r3.xyzx, r11.xyzx
+  87: mul r11.xyz, r3.xyzx, r11.xyzx                        float3 DeltaR for step 0
+
   88: mul r10.xy, r9.zwzz, r10.zzzz
   89: add r9.xyz, -r2.xyzx, r10.xyzx
-  90: mul r9.xyz, r3.xyzx, r9.xyzx
+  90: mul r9.xyz, r3.xyzx, r9.xyzx                          float3 DeltaR for step 2
+
   91: dp3 r1.w, r11.xyzx, r11.xyzx
   92: dp3 r2.w, r11.xyzx, r1.xyzx
-  93: div_sat r8.y, r2.w, r1.w
-  94: max r4.zw, r5.xxxy, r8.xxxy
+  93: div_sat r8.y, r2.w, r1.w                              float InvNormAngleR for step 0 sampleid 0
+
+  94: max r4.zw, r5.xxxy, r8.xxxy         LocalAccumulator = float3(max(LocalAccumulator.xy, StepSample.xy), 1); -> step 0 sampleid 0
+
   95: dp3 r1.w, r7.xyzx, r7.xyzx
   96: dp3 r2.w, r7.xyzx, r1.xyzx
-  97: div_sat r5.x, r2.w, r1.w
+  97: div_sat r5.x, r2.w, r1.w                              float InvNormAngleL for step 2 sampleid 0
+
   98: dp3 r1.w, r9.xyzx, r9.xyzx
   99: dp3 r2.w, r9.xyzx, r1.xyzx
- 100: div_sat r5.y, r2.w, r1.w
+ 100: div_sat r5.y, r2.w, r1.w                              float InvNormAngleR for step 2 sampleid 0
 
- 101: max r4.zw, r4.zzzw, r5.xxxy
+ 101: max r4.zw, r4.zzzw, r5.xxxy         LocalAccumulator = float3(max(LocalAccumulator.xy, StepSample.xy), 1); -> step 2 sampleid 0
+
  102: add r4.zw, -r4.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  103: mad r1.w, r4.z, r4.z, l(0.0001)
- 104: mad r1.w, r4.w, r4.w, r1.w
+ 104: mad r1.w, r4.w, r4.w, r1.w                            WeightAccumulator += ... for sampleid 0
 
+
+sampleid = 1
  105: mul r4.zw, r0.xxxy, l(0.0000, 0.0000, 0.1010, 0.1010)
- 106: mad r4.zw, r0.zzzw, l(0.0000, 0.0000, 0.3250, 0.3250), r4.zzzw
-
- 107: mad r5.xyzw, r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
+ 106: mad r4.zw, r0.zzzw, l(0.0000, 0.0000, 0.3250, 0.3250), r4.zzzw 
+                                          float2 LocalRandom = (UnrotatedRandom.x * RandomBase.xy + UnrotatedRandom.y * RandomBase.zw)
+                              Scale = (1/3) and (2/3) -> step = 0 and 1
+ 107: mad r5.xyzw, r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy              
  108: mad r7.xyzw, r5.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
- 109: sample_l r8.xyzw, r7.xyxx, t0.xyzw, s0, r6.z
- 110: sample_l r7.xyzw, r7.zwzz, t0.xyzw, s0, r6.w
+ 109: sample_l r8.xyzw, r7.xyxx, t0.xyzw, s0, r6.z                step 0
+ 110: sample_l r7.xyzw, r7.zwzz, t0.xyzw, s0, r6.w                step 1
  111: mad r2.w, cb0[23].z, r7.x, cb0[23].w
- 112: div r7.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w
+ 112: div r7.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w           SceneDepth for step 1
  113: mad r2.w, cb0[23].z, r8.x, cb0[23].w
- 114: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w
+ 114: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w           SceneDepth for step 0
+
  115: mul r8.xy, r5.xyxx, r8.zzzz
  116: add r8.xyz, -r2.xyzx, r8.xyzx
- 117: mul r8.xyz, r3.xyzx, r8.xyzx
+ 117: mul r8.xyz, r3.xyzx, r8.xyzx              float3 DeltaL for step 0
+
  118: mul r7.xy, r5.zwzz, r7.zzzz
  119: add r5.xyz, -r2.xyzx, r7.xyzx
- 120: mul r5.xyz, r3.xyzx, r5.xyzx
+ 120: mul r5.xyz, r3.xyzx, r5.xyzx              float3 DeltaL for step 1
+
  121: dp3 r2.w, r8.xyzx, r8.xyzx
  122: dp3 r3.w, r8.xyzx, r1.xyzx
- 123: div_sat r6.x, r3.w, r2.w
- 124: mad r7.xyzw, -r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
+ 123: div_sat r6.x, r3.w, r2.w                  float InvNormAngleL for step 0
+
+ 124: mad r7.xyzw, -r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy       float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
  125: mad r8.xyzw, r7.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
- 126: sample_l r9.xyzw, r8.xyxx, t0.xyzw, s0, r6.z
- 127: sample_l r8.xyzw, r8.zwzz, t0.xyzw, s0, r6.w
+ 126: sample_l r9.xyzw, r8.xyxx, t0.xyzw, s0, r6.z          0
+ 127: sample_l r8.xyzw, r8.zwzz, t0.xyzw, s0, r6.w          1
  128: mad r2.w, cb0[23].z, r8.x, cb0[23].w
- 129: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w
+ 129: div r8.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w      SceneDepth for step 1
  130: mad r2.w, cb0[23].z, r9.x, cb0[23].w
- 131: div r9.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w
+ 131: div r9.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w      SceneDepth for step 0
+
  132: mul r9.xy, r7.xyxx, r9.zzzz
  133: add r9.xyz, -r2.xyzx, r9.xyzx
- 134: mul r9.xyz, r3.xyzx, r9.xyzx
+ 134: mul r9.xyz, r3.xyzx, r9.xyzx              float3 DeltaR for step 0
+
  135: mul r8.xy, r7.zwzz, r8.zzzz
  136: add r7.xyz, -r2.xyzx, r8.xyzx
- 137: mul r7.xyz, r3.xyzx, r7.xyzx
+ 137: mul r7.xyz, r3.xyzx, r7.xyzx              float3 DeltaR for step 1
+
  138: dp3 r2.w, r9.xyzx, r9.xyzx
  139: dp3 r3.w, r9.xyzx, r1.xyzx
- 140: div_sat r6.y, r3.w, r2.w
+ 140: div_sat r6.y, r3.w, r2.w                  float InvNormAngleR for step 0
+
  141: dp3 r2.w, r5.xyzx, r5.xyzx
- 142: dp3 r3.w, r5.xyzx, r1.xyzx
- 143: div_sat r5.x, r3.w, r2.w
+ 142: dp3 r3.w, r5.xyzx, r1.xyzx 
+ 143: div_sat r5.x, r3.w, r2.w                  float InvNormAngleL for step 1
+ 
  144: dp3 r2.w, r7.xyzx, r7.xyzx
  145: dp3 r3.w, r7.xyzx, r1.xyzx
- 146: div_sat r5.y, r3.w, r2.w
- 147: max r5.xy, r5.xyxx, r6.xyxx
- 148: add r5.zw, r4.zzzw, r4.xxxy
- 149: add r4.zw, -r4.zzzw, r4.xxxy
+ 146: div_sat r5.y, r3.w, r2.w                  float InvNormAngleR for step 1
+
+ 147: max r5.xy, r5.xyxx, r6.xyxx               LocalAccumulator for step 0 and 1 in sampleid 1
+
+ 148: add r5.zw, r4.zzzw, r4.xxxy         float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;    -> for step 2
+ 149: add r4.zw, -r4.zzzw, r4.xxxy        float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;    -> for step 2 -> Scale = (3/3)
  150: mad r6.xy, r5.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), l(0.5000, 0.5000, 0.0000, 0.0000)
+
  151: mul r7.xyzw, cb1[12].zzzz, l(0.2500, 0.1389, 0.2778, 0.4167)
- 152: log r7.xyzw, r7.xyzw
+ 152: log r7.xyzw, r7.xyzw                 ComputeMipLevel  -> for step = 2, 0, 1, 2 and sampleid = 1, 2
+                                                            -> 0.2500 = Scale * SamplePos[at step=2 and sampleid=1]
+                                                            -> 0.1389 = Scale * SamplePos[at step=0 and sampleid=2]
+                                                            -> 0.2778 = Scale * SamplePos[at step=1 and sampleid=2]
+                                                            -> 0.4167 = Scale * SamplePos[at step=2 and sampleid=2]
+
  153: sample_l r6.xyzw, r6.xyxx, t0.xyzw, s0, r7.x
  154: mad r2.w, cb0[23].z, r6.x, cb0[23].w
  155: div r6.z, l(1.0000, 1.0000, 1.0000, 1.0000), r2.w
@@ -217,6 +249,7 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  159: dp3 r2.w, r6.xyzx, r6.xyzx
  160: dp3 r3.w, r6.xyzx, r1.xyzx
  161: div_sat r6.x, r3.w, r2.w
+
  162: mad r5.zw, r4.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), l(0.0000, 0.0000, 0.5000, 0.5000)
  163: sample_l r8.xyzw, r5.zwzz, t0.xyzw, s0, r7.x
  164: mad r2.w, cb0[23].z, r8.x, cb0[23].w
@@ -227,10 +260,14 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  169: dp3 r2.w, r8.xyzx, r8.xyzx
  170: dp3 r3.w, r8.xyzx, r1.xyzx
  171: div_sat r6.y, r3.w, r2.w
- 172: max r4.zw, r5.xxxy, r6.xxxy
+
+ 172: max r4.zw, r5.xxxy, r6.xxxy               LocalAccumulator for step 2 in sampleid 1
+
+sampleid = 2
  173: add r4.zw, -r4.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  174: mad r1.w, r4.z, r4.z, r1.w
- 175: mad r1.w, r4.w, r4.w, r1.w
+ 175: mad r1.w, r4.w, r4.w, r1.w                WeightAccumulator += ... for sampleid 1
+
  176: mul r4.zw, r0.xxxy, l(0.0000, 0.0000, -0.3960, -0.3960)
  177: mad r4.zw, r0.zzzw, l(0.0000, 0.0000, 0.2720, 0.2720), r4.zzzw
  178: mad r5.xyzw, r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
@@ -297,9 +334,12 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  239: dp3 r3.w, r7.yzwy, r1.xyzx
  240: div_sat r6.y, r3.w, r2.w
  241: max r4.zw, r5.xxxy, r6.xxxy
+
  242: add r4.zw, -r4.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  243: mad r1.w, r4.z, r4.z, r1.w
- 244: mad r1.w, r4.w, r4.w, r1.w
+ 244: mad r1.w, r4.w, r4.w, r1.w                WeightAccumulator += ... for sampleid 2
+
+sampleid = 3
  245: mul r4.zw, r0.xxxy, l(0.0000, 0.0000, -0.4880, -0.4880)
  246: mad r4.zw, r0.zzzw, l(0.0000, 0.0000, -0.3850, -0.3850), r4.zzzw
  247: mad r5.xyzw, r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
@@ -368,9 +408,12 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  310: dp3 r3.w, r7.yzwy, r1.xyzx
  311: div_sat r6.y, r3.w, r2.w
  312: max r4.zw, r5.xxxy, r6.xxxy
+
  313: add r4.zw, -r4.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  314: mad r1.w, r4.z, r4.z, r1.w
- 315: mad r1.w, r4.w, r4.w, r1.w
+ 315: mad r1.w, r4.w, r4.w, r1.w                WeightAccumulator += ... for sampleid 3
+
+sampleid = 4
  316: mul r5.xyzw, r0.xyzw, l(0.2740, 0.2740, 0.0600, 0.0600)
  317: mad r0.zw, r0.zzzw, l(0.0000, 0.0000, -0.7110, -0.7110), r5.xxxy
  318: mad r0.xy, r0.xyxx, l(0.9000, 0.9000, 0.0000, 0.0000), r5.zwzz
@@ -440,9 +483,12 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  382: dp3 r0.w, r7.xyzx, r1.xyzx
  383: div_sat r5.y, r0.w, r0.z
  384: max r0.zw, r4.zzzw, r5.xxxy
+
  385: add r0.zw, -r0.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  386: mad r0.z, r0.z, r0.z, r1.w
- 387: mad r0.z, r0.w, r0.w, r0.z
+ 387: mad r0.z, r0.w, r0.w, r0.z                WeightAccumulator += ... for sampleid 4
+
+sampleid = 5
  388: mad r5.xyzw, r0.xyxy, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
  389: mad r7.xyzw, r5.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
  390: sample_l r8.xyzw, r7.xyxx, t0.xyzw, s0, r6.y
@@ -507,9 +553,11 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
  449: dp3 r0.x, r0.xywx, r0.xywx
  450: div_sat r4.y, r1.x, r0.x
  451: max r0.xy, r4.xyxx, r4.zwzz
+
  452: add r0.xy, -r0.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
  453: mad r0.x, r0.x, r0.x, r0.z
- 454: mad r0.x, r0.y, r0.y, r0.x
- 455: mul o0.x, r0.x, l(0.0833)
+ 454: mad r0.x, r0.y, r0.y, r0.x                      WeightAccumulator += ... for sampleid 5
+
+ 455: mul o0.x, r0.x, l(0.0833)                       WeightAccumulator.x / WeightAccumulator.y;  其中 y = 12
  456: mov o0.yzw, l(0, 0, 0, 0)
  457: ret
