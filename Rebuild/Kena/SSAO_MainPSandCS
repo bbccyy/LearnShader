@@ -14,7 +14,7 @@ ps_5_0
       dcl_sampler s2, mode_default
 
       dcl_resource_texture2d (float,float,float,float) t0         Normal+Depth in One R16G16B16A15_Float Texture
-      dcl_resource_texture2d (float,float,float,float) t1         ??
+      dcl_resource_texture2d (float,float,float,float) t1         ?? -> Hzb Depth with 10 Levle Mips
       dcl_resource_texture2d (float,float,float,float) t2         RandomNormalTexture
 
       dcl_input_ps linear noperspective v0.xyzw                   UVAndScreenPos
@@ -79,7 +79,7 @@ ps_5_0
   28: div r2.x, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
   29: mul r2.xyzw, r2.xxxx, r3.xyxy                         float2 FovFixXY = FovFix.xy * (1.0f / ViewSpacePosition.z);
 
-  30: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), r3.y     InvFovFix ?
+  30: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), r3.y     InvFovFix ? -> 用于快速计算 PorjToView 转换 
 
   31: mul r0.xyzw, r0.xyzw, r2.xyzw
                                           float4 RandomBase = float4(RandomVec, -RandomVec.y, RandomVec.x) * float4(FovFixXY, FovFixXY);
