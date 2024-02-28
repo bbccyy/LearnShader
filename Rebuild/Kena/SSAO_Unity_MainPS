@@ -7,64 +7,100 @@ ps_4_0
       dcl_constantbuffer cb1[13], immediateIndexed
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_input_ps_siv linear noperspective v0.xy, position
-      dcl_input_ps linear v1.xy
+
+      dcl_resource_texture2d (float,float,float,float) t0               Depth with 10 Mips
+      dcl_resource_texture2d (float,float,float,float) t1               HalfSize Norm + Depth
+      dcl_resource_texture2d (float,float,float,float) t2               Random Texture
+
+      dcl_input_ps_siv linear noperspective v0.xy, position             pixel index XY
+      dcl_input_ps linear v1.xy                                         UV
+
       dcl_output o0.xyzw
       dcl_temps 12
-   0: mad r0.xy, v1.xyxx, cb1[9].xyxx, cb1[11].xyxx
-   1: sample_b r0.xyzw, r0.xyxx, t2.xyzw, s1, cb0[5].x
-   2: mad r0.xyz, r0.xxyx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)
+
+cb1[8]  -> ScreenSpaceAOParams[0]: .x:AOPower, .y:AOBias/BiasDistance, .z:1/AmbientOcclusionDistance, .w:AmbientOcclusionIntensity
+cb1[9]  -> ScreenSpaceAOParams[1]: .xy:ViewportUVToRandomUV, .z:AORadiusInShader, .w:Ratio
+cb1[10] -> ScreenSpaceAOParams[2]: .x:ScaleFactor, .y:InvThreshold, .z:ScaleRadiusInWorldSpace(0:VS/1:WS), .w:MipBlend
+cb1[11] -> ScreenSpaceAOParams[3]: .xy:TemporalAARandomOffset, .z:StaticFraction, .w: InvTanHalfFov
+cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/Radius, .z:HzbStepMipLevelFactorValue .w: unused
+
+   0: mad r0.xy, v1.xyxx, cb1[9].xyxx, cb1[11].xyxx               TemporalOffset + UV * ViewportUVToRandomUV
+   1: sample_b r0.xyzw, r0.xyxx, t2.xyzw, s1, cb0[5].x            Sample _RandomNormalTex
+   2: mad r0.xyz, r0.xxyx, l(2.0000, 2.0000, 2.0000, 0.0000), l(-1.0000, -1.0000, -1.0000, 0.0000)    -> float2 RandomVec
+
    3: sample_l r1.xyzw, v1.xyxx, t1.xyzw, s0, l(0)
    4: mad r1.xy, -r1.wwww, l(1024.0000, 1024.0000, 0.0000, 0.0000), l(1.0000, 10.0000, 0.0000, 0.0000)
-   5: mul r2.z, r1.w, l(1024.0000)
-   6: mad r1.xy, cb1[10].zzzz, r1.xyxx, r2.zzzz
-   7: mul r0.w, r1.x, cb1[9].z
-   8: mul r1.x, r1.y, l(8.0000)
-   9: mul r0.yzw, r0.wwww, r0.xxyz
+   5: mul r2.z, r1.w, l(1024.0000)                                float SceneDepth = GetDepthFromAOInput(UV)
+   6: mad r1.xy, cb1[10].zzzz, r1.xyxx, r2.zzzz                   lerp(SceneDepth, 1, ScaleRadiusInWorldSpace)  -> 还是 SceneDepth
+                                                                  lerp(SceneDepth, 10, ScaleRadiusInWorldSpace)
+
+   7: mul r0.w, r1.x, cb1[9].z                        float ActualAORadius = AORadiusInShader * lerp(...)
+   8: mul r1.x, r1.y, l(8.0000)                       8 * lerp(...)
+
+   9: mul r0.yzw, r0.wwww, r0.xxyz                    RandomVec *= ActualAORadius;
   10: mov r0.x, -r0.w
+
   11: mov r3.yw, cb1[11].wwww
-  12: div r3.xz, cb1[11].wwww, cb1[9].wwww
+  12: div r3.xz, cb1[11].wwww, cb1[9].wwww            (InvTanHalfFov/Ratio, InvTanHalfFov, InvTanHalfFov/Ratio, InvTanHalfFov)
+
   13: frc r1.yz, v1.xxyx
-  14: sample_l r4.xyzw, r1.yzyy, t1.xyzw, s0, l(0)
+  14: sample_l r4.xyzw, r1.yzyy, t1.xyzw, s0, l(0)          float3 WorldNormal = GetWorldSpaceNormalFromAOInput(UV);
   15: mad r1.yzw, r4.xxyz, l(0.0000, 2.0000, 2.0000, 2.0000), l(0.0000, -1.0000, -1.0000, -1.0000)
+
   16: mul r4.xyz, r1.zzzz, cb1[1].xyzx
   17: mad r4.xyz, cb1[0].xyzx, r1.yyyy, r4.xyzx
   18: mad r1.yzw, cb1[2].xxyz, r1.wwww, r4.xxyz
   19: dp3 r2.w, r1.yzwy, r1.yzwy
   20: rsq r2.w, r2.w
-  21: mul r1.yzw, r1.yyzw, r2.wwww
-  22: mul r4.xy, v0.xyxx, cb1[4].xyxx
+  21: mul r1.yzw, r1.yyzw, r2.wwww                    float3 ViewSpaceNormal = TransformViewToWorldDirOveride(WorldNormal, true);
+
+  22: mul r4.xy, v0.xyxx, cb1[4].xyxx                 float2 ScreenPos = PixelIndexToScreenPosition(i.positionCS.xy);
   23: mad r4.xy, r4.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
-  24: mul r2.xy, r2.zzzz, r4.xyxx
-  25: mul r2.w, r2.z, cb1[8].y
-  26: mul r2.w, r2.w, cb1[10].x
-  27: mad r2.xyz, r2.wwww, r1.yzwy, r2.xyzx
-  28: mul r1.xyz, r1.xxxx, r1.yzwy
-  29: div r1.w, l(1.0000, 1.0000, 1.0000, 1.0000), r2.z
-  30: mul r4.xyzw, r1.wwww, r3.xyzw
-  31: div r3.x, l(1.0000, 1.0000, 1.0000, 1.0000), r3.z
-  32: mul r0.xyzw, r0.xyzw, r4.xyzw
-  33: div r4.xy, r2.xyxx, r2.zzzz
-  34: mad r4.zw, r0.xxxy, l(0.0000, 0.0000, 0.1333, 0.1333), r4.xxxy
-  35: mad r5.xy, r4.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), l(0.5000, 0.5000, 0.0000, 0.0000)
-  36: mul r6.xyzw, cb1[12].zzzz, l(0.0278, 0.0556, 0.0833, 0.1667)
-  37: log r6.xyzw, r6.xyzw
-  38: sample_l r5.xyzw, r5.xyxx, t0.xyzw, s0, r6.y
+
+  24: mul r2.xy, r2.zzzz, r4.xyxx                     float3 ViewSpacePosition = ReconstructCSPos(SceneDepth, ScreenPos)
+
+  25: mul r2.w, r2.z, cb1[8].y                        AmbientOcclusionBias * SceneDepth
+  26: mul r2.w, r2.w, cb1[10].x                       ~ * ScaleFactor
+  27: mad r2.xyz, r2.wwww, r1.yzwy, r2.xyzx     ViewSpacePosition += AmbientOcclusionBias * SceneDepth * ScaleFactor * ViewSpaceNormal;
+
+  28: mul r1.xyz, r1.xxxx, r1.yzwy                    float3 ScaledViewSpaceNormal = 8 * lerp(...) * ViewSpaceNormal
+
+  29: div r1.w, l(1.0000, 1.0000, 1.0000, 1.0000), r2.z     1.0f / ViewSpacePosition.z
+  30: mul r4.xyzw, r1.wwww, r3.xyzw                         float4 FovFixXY = FovFix.xyxy * (1.0f / ViewSpacePosition.z)
+
+  31: div r3.x, l(1.0000, 1.0000, 1.0000, 1.0000), r3.z     1.0f / FovFix.x
+
+  32: mul r0.xyzw, r0.xyzw, r4.xyzw       float4 RandomBase = float4(RandomVec, -RandomVec.y, RandomVec.x) * float4(FovFixXY, FovFixXY);
+
+  33: div r4.xy, r2.xyxx, r2.zzzz         float2 ScreenSpacePos = ViewSpacePosition.xy / ViewSpacePosition.z
+
+                                            0.1333 = (2/3) * 0.2 = Scale * UnrotatedRandom.y -> 也就是当step == 1时的数值 
+  34: mad r4.zw, r0.xxxy, l(0.0000, 0.0000, 0.1333, 0.1333), r4.xxxy    float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;
+  35: mad r5.xy, r4.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), l(0.5000, 0.5000, 0.0000, 0.0000)  ScreenPositionToUV(ScreenSpacePosL)
+  36: mul r6.xyzw, cb1[12].zzzz, l(0.0278, 0.0556, 0.0833, 0.1667) -> 0.0278 = Scale * SamplePos[at step=0 and sampleid=0]
+                                                                   -> 0.1667 = Scale * SamplePos[at step=1 and sampleid=1]
+                                                                   -> 0.0833 = Scale * SamplePos[at step=2 and sampleid=0] and 
+                                                                             = Scale * SamplePos[at step=0 and sampleid=1]
+  37: log r6.xyzw, r6.xyzw          ComputeMipLevel -> for step = 0, 1, 2, 0, 1 and sampleid = 0, 1
+
+  38: sample_l r5.xyzw, r5.xyxx, t0.xyzw, s0, r6.y                因为是 0.1333 所以这里是第二个通道 y -> 对应 step = 1
   39: mad r1.w, cb0[23].z, r5.x, cb0[23].w
-  40: div r5.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
-  41: mul r5.xy, r4.zwzz, r5.zzzz
-  42: add r5.xyz, -r2.xyzx, r5.xyzx
+  40: div r5.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w           SceneDepth at new UV
+  41: mul r5.xy, r4.zwzz, r5.zzzz         ScreenPos * SceneDepth -> float3 SamplePositionL = ReconstructCSPos(AbsL, ScreenSpacePosL);
+
+  42: add r5.xyz, -r2.xyzx, r5.xyzx                   SamplePositionL - ViewSpacePosition
+
   43: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), cb1[11].w
   44: mov r3.z, l(1.0000)
-  45: mul r5.xyz, r3.xyzx, r5.xyzx
-  46: dp3 r1.w, r5.xyzx, r5.xyzx
-  47: dp3 r2.w, r5.xyzx, r1.xyzx
-  48: div_sat r5.x, r2.w, r1.w
-  49: mad r4.zw, -r0.xxxy, l(0.0000, 0.0000, 0.1333, 0.1333), r4.xxxy
-  50: mad r5.zw, r4.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), l(0.0000, 0.0000, 0.5000, 0.5000)
+  45: mul r5.xyz, r3.xyzx, r5.xyzx                    float3 DeltaL = (SamplePositionL - ViewSpacePosition) * InvFovFix;
+
+  46: dp3 r1.w, r5.xyzx, r5.xyzx                      dot(DeltaL, DeltaL)
+  47: dp3 r2.w, r5.xyzx, r1.xyzx                      dot(DeltaL, ScaledViewSpaceNormal)
+  48: div_sat r5.x, r2.w, r1.w                        float InvNormAngleL = saturate(dot(...) / dot(DeltaL, DeltaL))
+
+                                             0.1333 = (2/3) * 0.2 = Scale * UnrotatedRandom.y -> 也就是当step == 1时的数值 
+  49: mad r4.zw, -r0.xxxy, l(0.0000, 0.0000, 0.1333, 0.1333), r4.xxxy   float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
+  50: mad r5.zw, r4.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000), l(0.0000, 0.0000, 0.5000, 0.5000)  ScreenPositionToUV(ScreenSpacePosR)
   51: sample_l r7.xyzw, r5.zwzz, t0.xyzw, s0, r6.y
   52: mad r1.w, cb0[23].z, r7.x, cb0[23].w
   53: div r7.z, l(1.0000, 1.0000, 1.0000, 1.0000), r1.w
@@ -73,8 +109,9 @@ ps_4_0
   56: mul r7.xyz, r3.xyzx, r7.xyzx
   57: dp3 r1.w, r7.xyzx, r7.xyzx
   58: dp3 r2.w, r7.xyzx, r1.xyzx
-  59: div_sat r5.y, r2.w, r1.w
-  60: mad r7.xyzw, r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy
+  59: div_sat r5.y, r2.w, r1.w                        float InvNormAngleR
+
+  60: mad r7.xyzw, r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy        0.0667 = (1/3) * 0.2 = Scale * UnrotatedRandom.y
   61: mad r8.xyzw, r7.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
   62: sample_l r9.xyzw, r8.xyxx, t0.xyzw, s0, r6.x
   63: sample_l r8.xyzw, r8.zwzz, t0.xyzw, s0, r6.z
@@ -91,6 +128,7 @@ ps_4_0
   74: dp3 r1.w, r9.xyzx, r9.xyzx
   75: dp3 r2.w, r9.xyzx, r1.xyzx
   76: div_sat r8.x, r2.w, r1.w
+
   77: mad r9.xyzw, -r0.xyxy, l(0.0667, 0.0667, 0.2000, 0.2000), r4.xyxy
   78: mad r10.xyzw, r9.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
   79: sample_l r11.xyzw, r10.xyxx, t0.xyzw, s0, r6.x
@@ -115,12 +153,15 @@ ps_4_0
   98: dp3 r1.w, r9.xyzx, r9.xyzx
   99: dp3 r2.w, r9.xyzx, r1.xyzx
  100: div_sat r5.y, r2.w, r1.w
+
  101: max r4.zw, r4.zzzw, r5.xxxy
  102: add r4.zw, -r4.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  103: mad r1.w, r4.z, r4.z, l(0.0001)
  104: mad r1.w, r4.w, r4.w, r1.w
+
  105: mul r4.zw, r0.xxxy, l(0.0000, 0.0000, 0.1010, 0.1010)
  106: mad r4.zw, r0.zzzw, l(0.0000, 0.0000, 0.3250, 0.3250), r4.zzzw
+
  107: mad r5.xyzw, r4.zwzw, l(0.3333, 0.3333, 0.6667, 0.6667), r4.xyxy
  108: mad r7.xyzw, r5.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000), l(0.5000, 0.5000, 0.5000, 0.5000)
  109: sample_l r8.xyzw, r7.xyxx, t0.xyzw, s0, r6.z
