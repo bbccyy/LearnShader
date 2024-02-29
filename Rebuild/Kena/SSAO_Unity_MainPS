@@ -37,8 +37,8 @@ cb1[12] -> ScreenSpaceAOParams[4]: .x:M FadeDistance/Radius, .y:A FadeDistance/R
    7: mul r0.w, r1.x, cb1[9].z                        float ActualAORadius = AORadiusInShader * lerp(...)
    8: mul r1.x, r1.y, l(8.0000)                       8 * lerp(...)
 
-   9: mul r0.yzw, r0.wwww, r0.xxyz                    RandomVec *= ActualAORadius;
-  10: mov r0.x, -r0.w
+   9: mul r0.yzw, r0.wwww, r0.xxyz                    RandomVec *= ActualAORadius; -> RandomVec.xxy
+  10: mov r0.x, -r0.w                                 RandomVec.(-y)xxy  ->  RandomBase ~ xy(-y)x  ->  float4(r0.zw, r0.xy) 
 
   11: mov r3.yw, cb1[11].wwww
   12: div r3.xz, cb1[11].wwww, cb1[9].wwww            (InvTanHalfFov/Ratio, InvTanHalfFov, InvTanHalfFov/Ratio, InvTanHalfFov)

@@ -84,26 +84,28 @@ ps_5_0
   31: mul r0.xyzw, r0.xyzw, r2.xyzw
                                           float4 RandomBase = float4(RandomVec, -RandomVec.y, RandomVec.x) * float4(FovFixXY, FovFixXY);
 
+sampleid = 1
   32: mul r2.xyzw, r0.xyzw, l(0.3250, 0.3250, 0.1010, 0.1010)     OcclusionSamplesOffsets -> SAMPLESET_ARRAY_SIZE == 6
+                                                                  -> sampleid = 1
 
-  33: add r2.xy, r2.zwzz, r2.xyxx                                 LocalRandom
+  33: add r2.xy, r2.zwzz, r2.xyxx                                 LocalRandom = xy + zw
 
   34: div r2.zw, r1.yyyz, r1.wwww                                 float2 ScreenSpacePos = ViewSpacePosition.xy / ViewSpacePosition.z;
 
   35: mad r5.xy, r2.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz    Scale * LocalRandom, 其中Scale == 0.5 = (step+1)/SAMPLE_STEPS
                                                                   float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;
+                                                                  -> 说明 SAMPLE_STEPS == 2
 
   36: mad r5.zw, cb0[35].xxxy, r5.xxxy, cb0[35].zzzw              ScreenPosToHZBUV(ScreenSpacePosL)
                                                                   HZBRemapping.xy * In + HZBRemapping.zw
                                                                   cb0_v35 0.46875, -0.2553711, 0.46875, 0.2553711
 
-  37: mul r6.xyzw, cb0[31].zzzz, l(0.0417, 0.0833, 0.1250, 0.2500)
+  37: mul r6.xyzw, cb0[31].zzzz, l(0.0417, 0.0833, 0.1250, 0.2500)-> SAMPLESET_ARRAY_SIZE == 6; 对应了sampleid=0,0,1,1; step=0,1,0,1
                                                                   float HzbStepMipLevelFactorValue = ScreenSpaceAOParams[4].z = cb0[31].z
                                                                   cb0_v31 0.0002, -0.80, 1.00, 9000.00
   38: log r6.xyzw, r6.xyzw                                        float MipLevel = ComputeMipLevel(i, step);
 
   39: sample_l(texture2d)(float,float,float,float) r3.w, r5.zwzz, t1.yzwx, s1, r6.z
-
   40: mad r5.z, r3.w, cb1[65].z, -cb1[65].w
   41: mad r3.w, r3.w, cb1[65].x, cb1[65].y
   42: div r5.z, l(1.0000, 1.0000, 1.0000, 1.0000), r5.z
@@ -118,114 +120,144 @@ ps_5_0
   48: mul r5.xyz, r3.xyzx, r5.xyzx                                float3 DeltaL = (SamplePositionL - ViewSpacePosition) * InvFovFix; 
 
   49: dp3 r3.w, r5.xyzx, r5.xyzx
-  50: mul r7.xyz, r1.xxxx, r4.yzwy
+  50: mul r7.xyz, r1.xxxx, r4.yzwy                                ScaledViewSpaceNormal *= 0.08 * lerp(...)
   51: dp3 r1.x, r5.xyzx, r7.xyzx
-  52: div_sat r5.x, r1.x, r3.w
-  53: mad r5.zw, -r2.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000), r2.zzzw
+  52: div_sat r5.x, r1.x, r3.w                                    float InvNormAngleL
 
-  54: mad r8.xy, cb0[35].xyxx, r5.zwzz, cb0[35].zwzz              ScreenPosToHZBUV
+  53: mad r5.zw, -r2.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000), r2.zzzw   float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
+                                                                  Scale = 0.5 -> step = 0 -> ((0+1)/2)
+
+  54: mad r8.xy, cb0[35].xyxx, r5.zwzz, cb0[35].zwzz              ScreenPosToHZBUV(ScreenSpacePosR)
 
   55: sample_l(texture2d)(float,float,float,float) r1.x, r8.xyxx, t1.xyzw, s1, r6.z 
   56: mad r3.w, r1.x, cb1[65].z, -cb1[65].w
   57: mad r1.x, r1.x, cb1[65].x, cb1[65].y
   58: div r3.w, l(1.0000, 1.0000, 1.0000, 1.0000), r3.w
-  59: add r8.z, r1.x, r3.w                                        ConvertFromDeviceZ
+  59: add r8.z, r1.x, r3.w                                        float AbsR -> for step 0
 
   60: mul r8.xy, r5.zwzz, r8.zzzz
   61: add r8.xyz, -r1.yzwy, r8.xyzx
-  62: mul r8.xyz, r3.xyzx, r8.xyzx
+  62: mul r8.xyz, r3.xyzx, r8.xyzx                                float3 DeltaR for step 0
+
   63: dp3 r1.x, r8.xyzx, r8.xyzx
   64: dp3 r3.w, r8.xyzx, r7.xyzx
-  65: div_sat r5.y, r3.w, r1.x
-  66: add r5.zw, r2.xxxy, r2.zzzw
-  67: add r2.xy, -r2.xyxx, r2.zwzz
+  65: div_sat r5.y, r3.w, r1.x                                    float InvNormAngleR for step 0
+
+  66: add r5.zw, r2.xxxy, r2.zzzw                float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;  for step 1 -> ((1+1)/2)
+  67: add r2.xy, -r2.xyxx, r2.zwzz               float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
+
   68: mad r8.xy, cb0[35].xyxx, r5.zwzz, cb0[35].zwzz
   69: sample_l(texture2d)(float,float,float,float) r1.x, r8.xyxx, t1.xyzw, s1, r6.w
   70: mad r3.w, r1.x, cb1[65].z, -cb1[65].w
   71: mad r1.x, r1.x, cb1[65].x, cb1[65].y
   72: div r3.w, l(1.0000, 1.0000, 1.0000, 1.0000), r3.w
-  73: add r8.z, r1.x, r3.w                                        ConvertFromDeviceZ
+  73: add r8.z, r1.x, r3.w                                        float AbsL = ConvertFromDeviceZ(TexL);  for step 1
 
   74: mul r8.xy, r5.zwzz, r8.zzzz
   75: add r8.xyz, -r1.yzwy, r8.xyzx
-  76: mul r8.xyz, r3.xyzx, r8.xyzx
+  76: mul r8.xyz, r3.xyzx, r8.xyzx                                float3 DeltaL for step 1
+
   77: dp3 r1.x, r8.xyzx, r8.xyzx
   78: dp3 r3.w, r8.xyzx, r7.xyzx
-  79: div_sat r8.x, r3.w, r1.x
+  79: div_sat r8.x, r3.w, r1.x                                    float InvNormAngleL for step 1
+
   80: mad r5.zw, cb0[35].xxxy, r2.xxxy, cb0[35].zzzw
   81: sample_l(texture2d)(float,float,float,float) r1.x, r5.zwzz, t1.xyzw, s1, r6.w
   82: mad r3.w, r1.x, cb1[65].z, -cb1[65].w
   83: mad r1.x, r1.x, cb1[65].x, cb1[65].y
   84: div r3.w, l(1.0000, 1.0000, 1.0000, 1.0000), r3.w
-  85: add r9.z, r1.x, r3.w                                        ConvertFromDeviceZ
+  85: add r9.z, r1.x, r3.w                                        float AbsR = ConvertFromDeviceZ(TexR);  for step 1
 
   86: mul r9.xy, r2.xyxx, r9.zzzz
   87: add r9.xyz, -r1.yzwy, r9.xyzx
   88: mul r9.xyz, r3.xyzx, r9.xyzx
+
   89: dp3 r1.x, r9.xyzx, r9.xyzx
   90: dp3 r2.x, r9.xyzx, r7.xyzx
-  91: div_sat r8.y, r2.x, r1.x
-  92: max r2.xy, r5.xyxx, r8.xyxx
-  93: add r2.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
+  91: div_sat r8.y, r2.x, r1.x                                    float InvNormAngleR for step 1
+
+  92: max r2.xy, r5.xyxx, r8.xyxx         LocalAccumulator = float3(max(LocalAccumulator.xy, StepSample.xy), 1) -> step 1 sampleid 1
+
+  93: add r2.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)            1 - LocalAccumulator.xy
+
+sampleid = 0
   94: mad r5.xyzw, r0.zwzw, l(0.1000, 0.1000, 0.2000, 0.2000), r2.zwzw
+                              ScreenSpacePosCenter.xyxy + RandomBase.zwzw * OcclusionSamplesOffsets[0].yyyy * (0.5,0.5,1,1)
+                              0.1000 = 0.5 * 0.2000 -> 由于OcclusionSamplesOffsets[0].x == 0, 这里直接屏蔽了RandomBase.xy
+
   95: mad r8.xyzw, cb0[35].xyxy, r5.xyzw, cb0[35].zwzw
   96: sample_l(texture2d)(float,float,float,float) r1.x, r8.xyxx, t1.xyzw, s1, r6.x
   97: sample_l(texture2d)(float,float,float,float) r3.w, r8.zwzz, t1.yzwx, s1, r6.y
   98: mad r4.w, r1.x, cb1[65].z, -cb1[65].w
   99: mad r1.x, r1.x, cb1[65].x, cb1[65].y
  100: div r4.w, l(1.0000, 1.0000, 1.0000, 1.0000), r4.w
- 101: add r8.z, r1.x, r4.w                                        ConvertFromDeviceZ
+ 101: add r8.z, r1.x, r4.w                                        float AbsL = ConvertFromDeviceZ(TexL);  for step 0 sampleid 0
 
  102: mul r8.xy, r5.xyxx, r8.zzzz
  103: add r8.xyz, -r1.yzwy, r8.xyzx
  104: mul r8.xyz, r3.xyzx, r8.xyzx
+
  105: dp3 r1.x, r8.xyzx, r8.xyzx
  106: dp3 r4.w, r8.xyzx, r7.xyzx
- 107: div_sat r5.x, r4.w, r1.x
+ 107: div_sat r5.x, r4.w, r1.x                                    float InvNormAngleL for step 0
+
  108: mad r8.xyzw, -r0.zwzw, l(0.1000, 0.1000, 0.2000, 0.2000), r2.zwzw
+                                                                  float2 ScreenSpacePosR = ScreenSpacePosCenter - InLocalRandom;
+                                                                  for step 0 and 1
  109: mad r9.xyzw, cb0[35].xyxy, r8.xyzw, cb0[35].zwzw
  110: sample_l(texture2d)(float,float,float,float) r1.x, r9.xyxx, t1.xyzw, s1, r6.x
  111: sample_l(texture2d)(float,float,float,float) r4.w, r9.zwzz, t1.yzwx, s1, r6.y
  112: mad r6.x, r1.x, cb1[65].z, -cb1[65].w
  113: mad r1.x, r1.x, cb1[65].x, cb1[65].y
  114: div r6.x, l(1.0000, 1.0000, 1.0000, 1.0000), r6.x
- 115: add r6.z, r1.x, r6.x
+ 115: add r6.z, r1.x, r6.x                                        float AbsR = ConvertFromDeviceZ(TexR);  for step 0 sampleid 0
+
  116: mul r6.xy, r6.zzzz, r8.xyxx
  117: add r6.xyz, -r1.yzwy, r6.xyzx
  118: mul r6.xyz, r3.xyzx, r6.xyzx
+
  119: dp3 r1.x, r6.xyzx, r6.xyzx
  120: dp3 r6.x, r6.xyzx, r7.xyzx
- 121: div_sat r5.y, r6.x, r1.x
+ 121: div_sat r5.y, r6.x, r1.x                                    float InvNormAngleR for step 0
+
  122: mad r1.x, r3.w, cb1[65].z, -cb1[65].w
  123: mad r3.w, r3.w, cb1[65].x, cb1[65].y
  124: div r1.x, l(1.0000, 1.0000, 1.0000, 1.0000), r1.x
- 125: add r6.z, r1.x, r3.w
+ 125: add r6.z, r1.x, r3.w                                        float AbsL = ConvertFromDeviceZ(TexL);  for step 1 sampleid 0
+
  126: mul r6.xy, r5.zwzz, r6.zzzz
  127: add r6.xyz, -r1.yzwy, r6.xyzx
  128: mul r6.xyz, r3.xyzx, r6.xyzx
  129: dp3 r1.x, r6.xyzx, r6.xyzx
  130: dp3 r3.w, r6.xyzx, r7.xyzx
- 131: div_sat r6.x, r3.w, r1.x
+ 131: div_sat r6.x, r3.w, r1.x                                    float InvNormAngleL for step 1 sampleid 0
+
  132: mad r1.x, r4.w, cb1[65].z, -cb1[65].w
  133: mad r3.w, r4.w, cb1[65].x, cb1[65].y
  134: div r1.x, l(1.0000, 1.0000, 1.0000, 1.0000), r1.x
- 135: add r9.z, r1.x, r3.w
+ 135: add r9.z, r1.x, r3.w                                        float AbsR for step 1 sampleid 0
+
  136: mul r9.xy, r8.zwzz, r9.zzzz
  137: add r8.xyz, -r1.yzwy, r9.xyzx
  138: mul r8.xyz, r3.xyzx, r8.xyzx
  139: dp3 r1.x, r8.xyzx, r8.xyzx
  140: dp3 r3.w, r8.xyzx, r7.xyzx
- 141: div_sat r6.y, r3.w, r1.x
- 142: max r5.xy, r5.xyxx, r6.xyxx
+ 141: div_sat r6.y, r3.w, r1.x                                    float InvNormAngleR for step 1 sampleid 0
+
+ 142: max r5.xy, r5.xyxx, r6.xyxx                                 max(LocalAccumulator.xy, StepSample.xy) 
+
  143: add r5.xy, -r5.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
  144: mad r1.x, r5.x, r5.x, l(0.0001)
  145: mad r1.x, r5.y, r5.y, r1.x
  146: mad r1.x, r2.x, r2.x, r1.x
- 147: mad r1.x, r2.y, r2.y, r1.x
+ 147: mad r1.x, r2.y, r2.y, r1.x                                  WeightAccumulator for sampleid 0 and 1
+
+sampleid = 2
  148: mul r5.xyzw, r0.xyzw, l(0.2720, 0.2720, -0.3960, -0.3960)
  149: add r2.xy, r5.zwzz, r5.xyxx
  150: mad r5.xy, r2.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz
  151: mad r5.zw, cb0[35].xxxy, r5.xxxy, cb0[35].zzzw
+
  152: mul r6.xyzw, cb0[31].zzzz, l(0.2083, 0.4167, 0.2917, 0.5833)                  MipLevel
  153: log r6.xyzw, r6.xyzw
 
@@ -240,6 +272,7 @@ ps_5_0
  162: dp3 r3.w, r5.xyzx, r5.xyzx
  163: dp3 r4.w, r5.xyzx, r7.xyzx
  164: div_sat r5.x, r4.w, r3.w
+
  165: mad r5.zw, -r2.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000), r2.zzzw
  166: mad r8.xy, cb0[35].xyxx, r5.zwzz, cb0[35].zwzz
  167: sample_l(texture2d)(float,float,float,float) r3.w, r8.xyxx, t1.yzwx, s1, r6.x
@@ -253,6 +286,7 @@ ps_5_0
  175: dp3 r3.w, r8.xyzx, r8.xyzx
  176: dp3 r4.w, r8.xyzx, r7.xyzx
  177: div_sat r5.y, r4.w, r3.w
+
  178: add r5.zw, r2.xxxy, r2.zzzw
  179: add r2.xy, -r2.xyxx, r2.zwzz
  180: mad r8.xy, cb0[35].xyxx, r5.zwzz, cb0[35].zwzz
@@ -267,6 +301,7 @@ ps_5_0
  189: dp3 r3.w, r8.xyzx, r8.xyzx
  190: dp3 r4.w, r8.xyzx, r7.xyzx
  191: div_sat r8.x, r4.w, r3.w
+
  192: mad r5.zw, cb0[35].xxxy, r2.xxxy, cb0[35].zzzw
  193: sample_l(texture2d)(float,float,float,float) r3.w, r5.zwzz, t1.yzwx, s1, r6.y
  194: mad r4.w, r3.w, cb1[65].z, -cb1[65].w
@@ -280,9 +315,12 @@ ps_5_0
  202: dp3 r2.y, r9.xyzx, r7.xyzx
  203: div_sat r8.y, r2.y, r2.x
  204: max r2.xy, r5.xyxx, r8.xyxx
+
  205: add r2.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
  206: mad r1.x, r2.x, r2.x, r1.x
- 207: mad r1.x, r2.y, r2.y, r1.x
+ 207: mad r1.x, r2.y, r2.y, r1.x                            WeightAccumulator up to sampleid 2
+
+sampleid = 3
  208: mul r5.xyzw, r0.xyzw, l(-0.3850, -0.3850, -0.4880, -0.4880)
  209: add r2.xy, r5.zwzz, r5.xyxx
  210: mad r5.xy, r2.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz
@@ -338,17 +376,25 @@ ps_5_0
  260: dp3 r2.y, r8.xyzx, r7.xyzx
  261: div_sat r6.y, r2.y, r2.x
  262: max r2.xy, r5.xyxx, r6.xyxx
+
  263: add r2.xy, -r2.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
  264: mad r1.x, r2.x, r2.x, r1.x
- 265: mad r1.x, r2.y, r2.y, r1.x
+ 265: mad r1.x, r2.y, r2.y, r1.x                            WeightAccumulator up to sampleid 3
+
+sampleid = 4
  266: mul r5.xyzw, r0.xyzw, l(-0.7110, -0.7110, 0.2740, 0.2740)
+sampleid = 5
  267: mul r0.xyzw, r0.xyzw, l(0.0600, 0.0600, 0.9000, 0.9000)
- 268: add r0.xy, r0.zwzz, r0.xyxx
- 269: add r0.zw, r5.zzzw, r5.xxxy
- 270: mad r2.xy, r0.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz
+ 268: add r0.xy, r0.zwzz, r0.xyxx                           LocalRandom for sampleid 5
+
+ 269: add r0.zw, r5.zzzw, r5.xxxy                           LocalRandom for sampleid 4
+ 270: mad r2.xy, r0.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz    float2 ScreenSpacePosL = ScreenSpacePosCenter + InLocalRandom;
+                                                                        for step 0
  271: mad r5.xy, cb0[35].xyxx, r2.xyxx, cb0[35].zwzz
+
  272: mul r6.xyzw, cb0[31].zzzz, l(0.3750, 0.7500, 0.4583, 0.9167)
- 273: log r6.xyzw, r6.xyzw
+ 273: log r6.xyzw, r6.xyzw                                  MipLevel
+
  274: sample_l(texture2d)(float,float,float,float) r3.w, r5.xyxx, t1.yzwx, s1, r6.x
  275: mad r4.w, r3.w, cb1[65].z, -cb1[65].w
  276: mad r3.w, r3.w, cb1[65].x, cb1[65].y
@@ -400,10 +446,13 @@ ps_5_0
  322: dp3 r0.w, r8.xyzx, r7.xyzx
  323: div_sat r5.y, r0.w, r0.z
  324: max r0.zw, r2.xxxy, r5.xxxy
+
  325: add r0.zw, -r0.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000)
  326: mad r0.z, r0.z, r0.z, r1.x
- 327: mad r0.z, r0.w, r0.w, r0.z
- 328: mad r2.xy, r0.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz
+ 327: mad r0.z, r0.w, r0.w, r0.z                            WeightAccumulator up to sampleid 4
+
+sampleid = 5
+ 328: mad r2.xy, r0.xyxx, l(0.5000, 0.5000, 0.0000, 0.0000), r2.zwzz          LocalRandom = r0.xy
  329: mad r5.xy, cb0[35].xyxx, r2.xyxx, cb0[35].zwzz
  330: sample_l(texture2d)(float,float,float,float) r0.w, r5.xyxx, t1.yzwx, s1, r6.z
  331: mad r1.x, r0.w, cb1[65].z, -cb1[65].w
@@ -456,10 +505,15 @@ ps_5_0
  378: dp3 r0.x, r0.xywx, r0.xywx
  379: div_sat r5.y, r1.x, r0.x
  380: max r0.xy, r2.xyxx, r5.xyxx
+
  381: add r0.xy, -r0.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
  382: mad r0.x, r0.x, r0.x, r0.z
- 383: mad r0.x, r0.y, r0.y, r0.x
- 384: mul r4.x, r0.x, l(0.0833)
+ 383: mad r0.x, r0.y, r0.y, r0.x                            WeightAccumulator up to sampleid 5
+
+ 384: mul r4.x, r0.x, l(0.0833)                             WeightAccumulator.x / 12
+
+
+
  385: deriv_rtx_fine r0.xyz, r4.xyzx
  386: ftou r1.xy, v1.xyxx
  387: bfi r1.xy, l(1, 1, 0, 0), l(1, 1, 0, 0), r1.xyxx, l(0, 0, 0, 0)
