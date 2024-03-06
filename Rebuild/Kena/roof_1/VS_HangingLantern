@@ -1,0 +1,82 @@
+VS_HangingLantern
+
+Shader hash d1d376ff-fab136f2-a8b4ce6a-7a020a28
+
+vs_5_0
+      dcl_globalFlags refactoringAllowed
+      dcl_constantbuffer cb0[128], immediateIndexed
+      dcl_constantbuffer cb1[1], immediateIndexed
+      dcl_resource_structured t0, 16
+      dcl_resource_buffer (float,float,float,float) t1
+      dcl_resource_buffer (float,float,float,float) t2
+
+      dcl_input v0.xyz                          OS Pos
+      dcl_input v1.x                            InstanceID
+      dcl_input_sgv v2.x, vertexid              VID
+
+      dcl_output o0.xyzw
+      dcl_output o1.xyzw
+      dcl_output o2.xyzw                        xy -> UV
+      dcl_output o3.x                           InstanceID
+      dcl_output_siv o4.xyzw, position          SV Pos
+      dcl_output_siv o5.x, clipdistance         DeviceZ
+      dcl_temps 9
+
+   0: mov o0.w, l(0)
+   1: iadd r0.x, v2.x, cb1[0].w
+   2: ishl r0.y, r0.x, l(1)
+   3: ld_indexable(buffer)(float,float,float,float) r0.yzw, r0.yyyy, t2.wxyz              Sample some vector A
+   4: bfi r1.x, l(31), l(1), r0.x, l(1)
+   5: imul null, r0.x, r0.x, cb1[0].y
+   6: ld_indexable(buffer)(float,float,float,float) r1.yz, r0.xxxx, t1.zxyw               Sample UV
+   7: mov o2.xy, r1.yzyy
+
+   8: ld_indexable(buffer)(float,float,float,float) r1.xyzw, r1.xxxx, t2.xyzw             Sample some other vector B
+
+   9: mul r2.xyz, r0.yzwy, r1.yzxy
+  10: mad r0.xyz, r1.xyzx, r0.zwyz, -r2.xyzx          cross(A, B) = C
+
+  11: mul r0.xyz, r1.wwww, r0.xyzx                    C * sign=1
+
+  12: mul r2.xyz, r1.yzxy, r0.xyzx
+  13: mad r0.xyz, r0.zxyz, r1.zxyz, -r2.xyzx          cross(B, C) = D
+
+  14: mul r0.xyz, r1.wwww, r0.xyzx                    D * sign=1
+
+  15: imad r2.xyzw, v1.xxxx, l(35, 35, 35, 35), l(1, 2, 4, 3)
+  16: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r3.xyz, r2.x, l(0), t0.xyzx        取矩阵
+  17: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r4.xyzw, r2.z, l(0), t0.xyzw       r4.w = sign
+  18: mul r5.xyz, r3.xyzx, r4.yyyy
+  19: mul r3.xyz, r3.xyzx, v0.yyyy
+  20: mul r6.xyz, r0.yyyy, r5.xyzx
+  21: mul r5.xyz, r1.yyyy, r5.xyzx
+
+  22: imul null, r0.y, v1.x, l(35)
+  23: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r7.xyz, r0.y, l(0), t0.xyzx
+
+  24: mul r8.xyz, r4.xxxx, r7.xyzx
+  25: mad r3.xyz, r7.xyzx, v0.xxxx, r3.xyzx
+  26: mad r0.xyw, r0.xxxx, r8.xyxz, r6.xyxz
+  27: mad r5.xyz, r1.xxxx, r8.xyzx, r5.xyzx
+  28: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r2.xyz, r2.y, l(0), t0.xyzx
+  29: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r6.xyz, r2.w, l(0), t0.xyzx
+
+  30: add r6.xyz, r6.xyzx, cb0[70].xyzx               隐藏平移变化，减少数据精度损失 
+  31: mul r4.xyz, r4.zzzz, r2.xyzx
+  32: mad r2.xyz, r2.xyzx, v0.zzzz, r3.xyzx
+  33: add r2.xyz, r6.xyzx, r2.xyzx
+  34: mul o1.w, r1.w, r4.w
+  35: mad o1.xyz, r1.zzzz, r4.xyzx, r5.xyzx           对r1.xyz应用了矩阵 -> NormalWS
+  36: mad o0.xyz, r0.zzzz, r4.xyzx, r0.xywx           对r0.xyz应用了矩阵 -> TangentWS
+
+  37: mov o2.zw, l(0, 0, 0, 0)                        o2 = (UV.xy,0,0)
+  38: mov o3.x, v1.x
+  
+  39: mul r0.xyzw, r2.yyyy, cb0[1].xyzw
+  40: mad r0.xyzw, r2.xxxx, cb0[0].xyzw, r0.xyzw
+  41: mad r0.xyzw, r2.zzzz, cb0[2].xyzw, r0.xyzw
+  42: add r1.xyz, r2.xyzx, -cb0[70].xyzx
+  43: add o4.xyzw, r0.xyzw, cb0[3].xyzw
+  44: mov r1.w, l(1.0000)
+  45: dp4 o5.x, cb0[127].xyzw, r1.xyzw
+  46: ret

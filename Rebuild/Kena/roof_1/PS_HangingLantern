@@ -145,7 +145,7 @@ ps_5_0
   78: lt r0.w, l(0), cb0[139].x
   79: if_nz r0.w
   80:   mul r4.xyzw, v4.yyyy, cb0[45].xyzw
-  81:   mad r4.xyzw, v4.xxxx, cb0[44].xyzw, r4.xyzw 
+  81:   mad r4.xyzw, v4.xxxx, cb0[44].xyzw, r4.xyzw
   82:   mad r4.xyzw, v4.zzzz, cb0[46].xyzw, r4.xyzw
   83:   add r4.xyzw, r4.xyzw, cb0[47].xyzw
   84:   div r4.xyz, r4.xyzx, r4.wwww
