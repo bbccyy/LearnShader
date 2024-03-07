@@ -10,51 +10,66 @@ ps_5_0
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
       dcl_sampler s3, mode_default
+
       dcl_resource_structured t0, 16
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
+      dcl_resource_texture2d (float,float,float,float) t1         T_THangingLantern_root_N
+      dcl_resource_texture2d (float,float,float,float) t2         T_THangingLantern_root_D
+      dcl_resource_texture2d (float,float,float,float) t3         T_THangingLantern_root_Comp_H_R_AO
+      dcl_resource_texture2d (float,float,float,float) t4         Noise_cloudsmed
+
       dcl_input_ps linear centroid v0.xyz
       dcl_input_ps linear centroid v1.xyzw
       dcl_input_ps linear v2.xy
       dcl_input_ps nointerpolation v3.x
       dcl_input_ps_siv linear noperspective v4.xyz, position
       dcl_input_ps_sgv nointerpolation v5.x, isfrontface
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+
+      dcl_output o0.xyzw                CameraColor
+      dcl_output o1.xyzw                Normal
+      dcl_output o2.xyzw                M_D_R_I
+      dcl_output o3.xyzw                Diffuse
+      dcl_output o4.xyzw                Custom
       dcl_temps 7
+
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
+   2: mul r0.xyz, r0.xyzx, v1.wwww                    BitangentWS = cross(TangentWS, NormalWS) * sign
+
    3: imad r1.xyz, v3.xxxx, l(35, 35, 35, 0), l(4, 27, 20, 0)
    4: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r0.w, r1.x, l(12), t0.xxxx
-   5: mul r0.w, r0.w, cb0[140].w
-   6: movc r1.x, v5.x, l(1.0000), l(-1.0000)
-   7: mul r0.w, r0.w, r1.x
+   5: mul r0.w, r0.w, cb0[140].w                      flag -> dont flip norm -> true -> 1
+
+   6: movc r1.x, v5.x, l(1.0000), l(-1.0000) 
+   7: mul r0.w, r0.w, r1.x                            flip boolean -> signed_dir
+
    8: sample_b(texture2d)(float,float,float,float) r1.xw, v2.xyxx, t1.xzwy, s0, cb0[142].y
    9: mad r2.xy, r1.xwxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
   10: dp2 r1.x, r2.xyxx, r2.xyxx
   11: add r1.x, -r1.x, l(1.0000)
   12: max r1.x, r1.x, l(0)
-  13: sqrt r2.z, r1.x
-  14: mul r2.xyz, r2.xyzx, cb1[2].xyzx
-  15: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx
+  13: sqrt r2.z, r1.x                                 Unpack NormalTS
+
+  14: mul r2.xyz, r2.xyzx, cb1[2].xyzx                NormalTS * (0.5, 0.5, 1)
+
+  15: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * 1 + 0
+
   16: dp3 r1.x, r2.xyzx, r2.xyzx
   17: rsq r1.x, r1.x
-  18: mul r2.xyz, r1.xxxx, r2.xyzx
+  18: mul r2.xyz, r1.xxxx, r2.xyzx                    normalize(NormalTS)
+
   19: mul r0.xyz, r0.xyzx, r2.yyyy
   20: mad r0.xyz, r2.xxxx, v0.xyzx, r0.xyzx
   21: mad r0.xyz, r2.zzzz, v1.xyzx, r0.xyzx
   22: dp3 r1.x, r0.xyzx, r0.xyzx
   23: rsq r1.x, r1.x
-  24: mul r0.xyz, r0.xyzx, r1.xxxx
-  25: mul r0.xyz, r0.wwww, r0.xyzx
-  26: mul r2.xyz, cb1[3].xyzx, cb1[6].xxxx
-  27: sample_b(texture2d)(float,float,float,float) r3.xyzw, v2.xyxx, t2.xyzw, s1, cb0[142].y
+  24: mul r0.xyz, r0.xyzx, r1.xxxx                    nDirWS = normalize(mul(NormalTS, tbn))
+
+  25: mul r0.xyz, r0.wwww, r0.xyzx                    nDirWS = nDirWS * signed_dir
+
+  26: mul r2.xyz, cb1[3].xyzx, cb1[6].xxxx            FinalEmit -> 0 -> Emissive_Color * Emit_Intensity
+
+  27: sample_b(texture2d)(float,float,float,float) r3.xyzw, v2.xyxx, t2.xyzw, s1, cb0[142].y          Sample Diffuse -> dBase
+
   28: dp3 r0.w, l(0.5774, 0.5774, 0.5774, 0.0000), r3.xyzx
   29: mad r3.xyz, -r0.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r3.xyzx
   30: mul r4.xyz, r3.zxyz, l(0.5774, 0.5774, 0.5774, 0.0000)
@@ -62,59 +77,80 @@ ps_5_0
   32: sincos r1.x, r5.x, cb1[6].z
   33: mul r4.xyz, r1.xxxx, r4.xyzx
   34: mad r3.xyz, r3.xyzx, r5.xxxx, r4.xyzx
-  35: mad r3.xyz, r0.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r3.xyzx
+  35: mad r3.xyz, r0.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r3.xyzx         applyHue(dBase, 0)
+
   36: dp3 r0.w, r3.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
   37: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) r1.y, r1.y, l(4), t0.xxxx
-  38: add_sat r1.y, r1.y, cb1[6].w
+  38: add_sat r1.y, r1.y, cb1[6].w                          _Desaturate -> 0
   39: add r4.xyz, -r3.xyzx, r0.wwww
-  40: mad_sat r3.xyz, r1.yyyy, r4.xyzx, r3.xyzx
-  41: sample_b(texture2d)(float,float,float,float) r1.yw, v2.xyxx, t3.xzwy, s2, cb0[142].y
-  42: mul_sat r0.w, r1.w, cb1[7].x
-  43: mul r4.xy, v2.xyxx, cb1[7].wwww
-  44: sample_b(texture2d)(float,float,float,float) r1.w, r4.xyxx, t4.yzwx, s3, cb0[142].y
-  45: add r2.w, -r1.w, cb1[8].x
-  46: lt r2.w, l(0.0000), abs(r2.w)
-  47: ge r1.w, cb1[8].x, r1.w
-  48: movc r1.w, r1.w, l(0), l(1.0000)
-  49: and r1.w, r1.w, r2.w
-  50: lt r2.w, l(0.0000), abs(cb1[8].x)
-  51: ge r4.x, cb1[8].x, l(0)
-  52: movc r1.w, r4.x, r1.w, l(1.0000)
-  53: movc r1.w, r2.w, r1.w, l(1.0000)
-  54: dp3 r2.w, l(0.5774, 0.5774, 0.5774, 0.0000), cb1[5].xyzx
+  40: mad_sat r3.xyz, r1.yyyy, r4.xyzx, r3.xyzx             dBase = lerp(dBase, Luminance(dBase), _Desaturate);
+
+  41: sample_b(texture2d)(float,float,float,float) r1.yw, v2.xyxx, t3.xzwy, s2, cb0[142].y            Sample Comp_H_R_AO (AO,R)
+  42: mul_sat r0.w, r1.w, cb1[7].x                          R * 1
+
+  43: mul r4.xy, v2.xyxx, cb1[7].wwww                       UV * 1 -> Noise_Tiling
+  44: sample_b(texture2d)(float,float,float,float) r1.w, r4.xyxx, t4.yzwx, s3, cb0[142].y             Sample Noise
+  45: add r2.w, -r1.w, cb1[8].x                             0 - n
+  46: lt r2.w, l(0.0000), abs(r2.w)                         0 < abs(-n) ? true -> A
+  47: ge r1.w, cb1[8].x, r1.w                               0 >= n ? false
+  48: movc r1.w, r1.w, l(0), l(1.0000)                      1 ? -> B
+  49: and r1.w, r1.w, r2.w                                  A and B -> X
+
+  50: lt r2.w, l(0.0000), abs(cb1[8].x)                     0 < abs(cb1[8].x = 0) ? false -> C
+  51: ge r4.x, cb1[8].x, l(0)                               cb1[8].x=0 >= 0 ? true -> D
+  52: movc r1.w, r4.x, r1.w, l(1.0000)                      D? X : 1 -> J
+  53: movc r1.w, r2.w, r1.w, l(1.0000)                      C? J : 1 -> K
+
+  54: dp3 r2.w, l(0.5774, 0.5774, 0.5774, 0.0000), cb1[5].xyzx                buffer_col = cb1[5].xyz = 0 -> SSS_Color
   55: mad r4.xyz, -r2.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), cb1[5].xyzx
   56: mul r5.yzw, r4.zzxy, l(0.0000, 0.5774, 0.5774, 0.5774)
   57: mad r5.yzw, r4.zzxy, l(0.0000, 0.5774, 0.5774, 0.5774), -r5.wwyz
   58: mul r5.yzw, r1.xxxx, r5.yyzw
   59: mad r4.xyz, r4.xyzx, r5.xxxx, r5.yzwy
-  60: mad r4.xyz, r2.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r4.xyzx
-  61: dp3 r1.x, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
-  62: add r5.xyz, -r4.xyzx, r1.xxxx
-  63: mad_sat r4.xyz, cb1[6].wwww, r5.xyzx, r4.xyzx
-  64: mad r1.x, r3.w, r1.w, l(-0.3333)
-  65: lt r1.x, r1.x, l(0)
+  60: mad r4.xyz, r2.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r4.xyzx         sssCol = applyHue(buffer_col, 0)
+
+  61: dp3 r1.x, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)                    lum(sssCol) - sssCol
+  62: add r5.xyz, -r4.xyzx, r1.xxxx 
+  63: mad_sat r4.xyz, cb1[6].wwww, r5.xyzx, r4.xyzx                           sssCol = lerp(sssCol, Luminance(sssCol), _Desaturate);
+
+  64: mad r1.x, r3.w, r1.w, l(-0.3333)                dBase.w * K(0 or 1) - 0.3333 -> threshold
+
+  65: lt r1.x, r1.x, l(0)                             if threshold < 0 then discard
   66: discard_nz r1.x
-  67: mov_sat r1.y, r1.y
-  68: mad o2.z, r0.w, cb0[138].y, cb0[138].x
-  69: mov_sat o4.w, cb1[7].y
-  70: mad_sat r4.xyz, r4.xyzx, cb0[135].wwww, cb0[135].xyzx
-  71: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r1.z, l(4), t0.xxxx
-  72: sqrt o4.xyz, r4.xyzx
-  73: mad r1.xzw, r3.xxyz, cb0[135].wwww, cb0[135].xxyz
-  74: mad r4.xyz, cb0[136].wwww, l(0.0400, 0.0400, 0.0400, 0.0000), cb0[136].xyzx
-  75: ne r0.w, l(0, 0, 0, 0), cb0[177].w
+
+  67: mov_sat r1.y, r1.y                              AO
+
+  68: mad o2.z, r0.w, cb0[138].y, cb0[138].x          R * 1 + 0
+
+  69: mov_sat o4.w, cb1[7].y                          0.5 -> CustomData.w -> Spec Intensity
+
+  70: mad_sat r4.xyz, r4.xyzx, cb0[135].wwww, cb0[135].xyzx       sssCol * 1 + 0
+
+  71: ld_structured_indexable(structured_buffer, stride=16)(mixed,mixed,mixed,mixed) o1.w, r1.z, l(4), t0.xxxx    0.333
+
+  72: sqrt o4.xyz, r4.xyzx                            sqrt(sssCol.rgb) -> CustomData.rgb
+
+  73: mad r1.xzw, r3.xxyz, cb0[135].wwww, cb0[135].xxyz                             Diffuse = dBase * 1 + 0
+
+  74: mad r4.xyz, cb0[136].wwww, l(0.0400, 0.0400, 0.0400, 0.0000), cb0[136].xyzx   Specular = 1 * 0.04 + 0
+
+  75: ne r0.w, l(0, 0, 0, 0), cb0[177].w              0 != 0 ? -> false -> not View.RenderingReflectionCaptureMask
+
   76: mad r5.xyz, r4.xyzx, l(0.4500, 0.4500, 0.4500, 0.0000), r1.xzwx
   77: movc r1.xzw, r0.wwww, r5.xxyz, r1.xxzw
-  78: movc r4.xyz, r0.wwww, l(0, 0, 0, 0), r4.xyzx
+  78: movc r4.xyz, r0.wwww, l(0, 0, 0, 0), r4.xyzx                EnvBRDFApproxFullyRough(Diffuse, Specular)
+
   79: dp3 r0.w, r4.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
   80: mad r5.xyz, r0.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
   81: mad r0.w, r1.y, r5.x, r5.y
   82: mad r0.w, r0.w, r1.y, r5.z
   83: mul r0.w, r1.y, r0.w
-  84: max o3.w, r0.w, r1.y
-  85: mad r1.xyz, r4.xyzx, l(0.4500, 0.4500, 0.4500, 0.0000), r1.xzwx
-  86: max r2.xyz, r2.xyzx, l(0, 0, 0, 0)
-  87: lt r0.w, l(0), cb0[139].x
+  84: max o3.w, r0.w, r1.y                            AOMultiBounce(Luminance(Specular), AO)
+
+  85: mad r1.xyz, r4.xyzx, l(0.4500, 0.4500, 0.4500, 0.0000), r1.xzwx EnvBRDFApproxFullyRough(Diffuse, Specular) -> ReflectDiffuse
+  86: max r2.xyz, r2.xyzx, l(0, 0, 0, 0)              FinalEmit = max(FinalEmit, 0)
+
+  87: lt r0.w, l(0), cb0[139].x 
   88: if_nz r0.w
   89:   mul r4.xyzw, v4.yyyy, cb0[45].xyzw
   90:   mad r4.xyzw, v4.xxxx, cb0[44].xyzw, r4.xyzw
@@ -137,10 +173,11 @@ ps_5_0
  107:   movc r4.xyz, r1.wwww, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
  108:   movc r2.xyz, r0.wwww, r4.xyzx, r2.xyzx
  109: endif
- 110: mad r1.xyz, cb0[144].yyyy, r1.xyzx, r2.xyzx
- 111: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 112: mul o0.xyz, r1.xyzx, cb0[134].yyyy
- 113: mov o0.w, l(0)
- 114: mov o2.xyw, l(0.0000, 0.5000, 0.0000, 0.6510)
- 115: mov o3.xyz, r3.xyzx
+
+ 110: mad r1.xyz, cb0[144].yyyy, r1.xyzx, r2.xyzx     0 * ReflectDiffuse + FinalEmit = BaseRTCol
+ 111: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)       nDirWS * 0.5 + 0.5
+ 112: mul o0.xyz, r1.xyzx, cb0[134].yyyy              BaseRTCol * 1
+ 113: mov o0.w, l(0)                                  0
+ 114: mov o2.xyw, l(0.0000, 0.5000, 0.0000, 0.6510)   Metallic = 0, Spec = 0.5, Flag = 166
+ 115: mov o3.xyz, r3.xyzx                             dBase
  116: ret

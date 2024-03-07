@@ -166,9 +166,9 @@ ps_5_0
   99:   movc r2.xyz, r0.wwww, r4.xyzx, r2.xyzx
  100: endif
 
- 101: mad r1.xyz, cb0[144].yyyy, r1.xzwx, r2.xyzx     0 * ReflectDiffuse + Final E
+ 101: mad r1.xyz, cb0[144].yyyy, r1.xzwx, r2.xyzx     0 * ReflectDiffuse + Final E = BaseRTCol
  102: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)       nDirWS * 0.5 + 0.5
- 103: mul o0.xyz, r1.xyzx, cb0[134].yyyy              Final E * 1
+ 103: mul o0.xyz, r1.xyzx, cb0[134].yyyy              BaseRTCol * 1
  104: mov o0.w, l(0)                                  E Intensity = 0
  105: mov o2.xyw, l(0.0000, 0.5000, 0.0000, 0.6941)   Metallic=0, Spec=0.5, Flag=177/255
  106: mov o3.xyz, r3.xyzx                             saturate(Diffuse)
