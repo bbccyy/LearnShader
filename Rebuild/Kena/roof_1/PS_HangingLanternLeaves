@@ -96,7 +96,7 @@ ps_5_0
   48: movc r1.w, r1.w, l(0), l(1.0000)                      1 ? -> B
   49: and r1.w, r1.w, r2.w                                  A and B -> X
 
-  50: lt r2.w, l(0.0000), abs(cb1[8].x)                     0 < abs(cb1[8].x = 0) ? false -> C
+  50: lt r2.w, l(0.0000), abs(cb1[8].x)                     0 < abs(cb1[8].x = 0) ? false -> C   -> DissolveAmount = cb1[8].x
   51: ge r4.x, cb1[8].x, l(0)                               cb1[8].x=0 >= 0 ? true -> D
   52: movc r1.w, r4.x, r1.w, l(1.0000)                      D? X : 1 -> J
   53: movc r1.w, r2.w, r1.w, l(1.0000)                      C? J : 1 -> K
