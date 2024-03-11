@@ -12,60 +12,75 @@ ps_5_0
       dcl_sampler s0, mode_default
       dcl_sampler s1, mode_default
       dcl_sampler s2, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
-      dcl_resource_texture2d (float,float,float,float) t5
-      dcl_input_ps linear centroid v0.xyz
-      dcl_input_ps linear centroid v1.xyzw
+
+      dcl_resource_texture2d (float,float,float,float) t0               hair_DEPTH
+      dcl_resource_texture2d (float,float,float,float) t1               Noise_cloudsmed
+      dcl_resource_texture2d (float,float,float,float) t2               hair_ROOT
+      dcl_resource_texture2d (float,float,float,float) t3               Good64x64TilingNoiseHighFreq
+      dcl_resource_texture2d (float,float,float,float) t4               hair_DEPTH
+      dcl_resource_texture2d (float,float,float,float) t5               hair_ALPHA
+
+      dcl_input_ps linear centroid v0.xyz                               Tangent
+      dcl_input_ps linear centroid v1.xyzw                              Normal + Sign
       dcl_input_ps linear v2.xy
       dcl_input_ps linear v3.xy
       dcl_input_ps linear v4.x
       dcl_input_ps_siv linear noperspective centroid v5.xyzw, position
       dcl_input_ps_sgv nointerpolation v6.x, isfrontface
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+
+      dcl_output o0.xyzw                CameraColor
+      dcl_output o1.xyzw                Normal
+      dcl_output o2.xyzw                M_D_R_I
+      dcl_output o3.xyzw                Diffuse
+      dcl_output o4.xyzw                Custom
       dcl_output oDepthLessEqual
       dcl_temps 10
+
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
+   2: mul r0.xyz, r0.xyzx, v1.wwww                          BitangentWS = cross(TangentWS, NormalWS) * sign
+
    3: mov r1.x, v5.z
-   4: mov r1.y, l(1.0000)
-   5: mul r1.xy, r1.xyxx, v5.wwww
+   4: mov r1.y, l(1.0000)                                   (NDC.z, 1)
+   5: mul r1.xy, r1.xyxx, v5.wwww                           (NDC.z, 1) * EyeDepth -> 对Reflection分支起作用，主体内无效 
+
    6: mul r2.xyzw, v5.yyyy, cb0[45].xyzw
    7: mad r2.xyzw, v5.xxxx, cb0[44].xyzw, r2.xyzw
    8: mad r2.xyzw, v5.zzzz, cb0[46].xyzw, r2.xyzw
    9: add r2.xyzw, r2.xyzw, cb0[47].xyzw
-  10: div r2.xyz, r2.xyzx, r2.wwww
+  10: div r2.xyz, r2.xyzx, r2.wwww                          PosWS' -> 缺少最后的仿射平移 
+
   11: dp3 r0.w, -r2.xyzx, -r2.xyzx
   12: rsq r0.w, r0.w
-  13: mul r3.xyz, r0.wwww, -r2.xyzx
-  14: mul r0.w, cb0[140].w, cb1[4].w
+  13: mul r3.xyz, r0.wwww, -r2.xyzx                         Normalize(PosWS') = viewDirWS 
+
+  14: mul r0.w, cb0[140].w, cb1[4].w                        flag -> dont flip norm -> true -> 1
+
   15: movc r1.z, v6.x, l(1.0000), l(-1.0000)
-  16: mul r0.w, r0.w, r1.z
-  17: sample_b(texture2d)(float,float,float,float) r1.z, v2.xyxx, t0.yzxw, s0, cb4[18].x
-  18: add r4.xyz, cb4[3].xyzx, -cb4[4].xyzx
-  19: mad r4.xyz, r1.zzzz, r4.xyzx, cb4[4].xyzx
-  20: add r4.xyz, r4.xyzx, cb4[6].xyzx
+  16: mul r0.w, r0.w, r1.z                                  flip boolean -> signed_dir
+
+  17: sample_b(texture2d)(float,float,float,float) r1.z, v2.xyxx, t0.yzxw, s0, cb4[18].x              Sample hair_DEPTH
+
+  18: add r4.xyz, cb4[3].xyzx, -cb4[4].xyzx                 TangentB(0,0,-0.3);TangentA(0,0,0.3)
+  19: mad r4.xyz, r1.zzzz, r4.xyzx, cb4[4].xyzx             TangentAB = lerp(TangentA, TangentB, hair_DEPTH)
+
+  20: add r4.xyz, r4.xyzx, cb4[6].xyzx          TangentTS = TangentAB + TangentC(0,-1,0) -> 注意，在UE语境中，y周位于模型空间的水平面上 
   21: dp3 r1.z, r4.xyzx, r4.xyzx
   22: sqrt r1.z, r1.z
-  23: div r4.xyz, r4.xyzx, r1.zzzz
-  24: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx
+  23: div r4.xyz, r4.xyzx, r1.zzzz                          Normalize(TangentTS)
+
+  24: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx     TangentTS * GlobalNormalScaler + GlobalNormalBias
   25: dp3 r1.z, r4.xyzx, r4.xyzx
   26: rsq r1.z, r1.z
-  27: mul r4.xyz, r1.zzzz, r4.xyzx
+  27: mul r4.xyz, r1.zzzz, r4.xyzx                          Normalize(TangentTS)    -> 在Hair计算中，以头发朝向的Tangent替代正常Normal 
+
   28: mul r0.xyz, r0.xyzx, r4.yyyy
   29: mad r0.xyz, r4.xxxx, v0.xyzx, r0.xyzx
   30: mad r0.xyz, r4.zzzz, v1.xyzx, r0.xyzx
   31: dp3 r1.z, r0.xyzx, r0.xyzx
   32: rsq r1.z, r1.z
-  33: mul r0.xyz, r0.xyzx, r1.zzzz
+  33: mul r0.xyz, r0.xyzx, r1.zzzz                          nDirWS = normalize(mul(TangentTS, tbn)) -> 依据习惯，任然记作 nDirWS
+
   34: mul r0.xyz, r0.wwww, r0.xyzx
   35: lt r0.w, l(0.0000), abs(cb4[19].x)
   36: ge r1.z, cb4[19].x, l(0)
@@ -121,7 +136,7 @@ ps_5_0
   86: sample_indexable(texture2d)(float,float,float,float) r1.z, v2.xyxx, t4.yzxw, s0
   87: max r2.w, r1.z, l(0.0000)
   88: mul r4.w, r2.w, r2.w
-  89: dp3 r5.w, r3.xyzx, v1.xyzx
+  89: dp3 r5.w, r3.xyzx, v1.xyzx                      Dot(N, V) in world space
   90: mul r5.w, abs(r5.w), l(1.5000)
   91: add r6.x, -cb4[22].z, cb4[22].y
   92: mad_sat r5.w, r5.w, r6.x, cb4[22].z
