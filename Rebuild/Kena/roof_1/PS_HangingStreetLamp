@@ -132,7 +132,7 @@ ps_5_0
 
 
   77: mul r1.yzw, r0.wwww, r1.xxyz        E_raw * BottomValue = Final_E
-  78: lt r0.w, l(0.0000), abs(cb1[4].x)   0 < 0 ? false
+  78: lt r0.w, l(0.0000), abs(cb1[4].x)   0 < 0 ? false   ->  EmissiveAmount = cb1[4].x
   79: ge r2.w, cb1[4].x, l(0)             0 >= 0 ? true
   80: and r0.w, r0.w, r2.w                false
 

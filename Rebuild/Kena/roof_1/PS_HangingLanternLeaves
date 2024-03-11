@@ -49,9 +49,8 @@ ps_5_0
   12: max r1.x, r1.x, l(0)
   13: sqrt r2.z, r1.x                                 Unpack NormalTS
 
-  14: mul r2.xyz, r2.xyzx, cb1[2].xyzx                NormalTS * (0.5, 0.5, 1)
-
-  15: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * 1 + 0
+  14: mul r2.xyz, r2.xyzx, cb1[2].xyzx                NormalTS * (0.5, 0.5, 1)  ->  NormalMult
+  15: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * GlobalNormalScaler + GlobalNormalBias
 
   16: dp3 r1.x, r2.xyzx, r2.xyzx
   17: rsq r1.x, r1.x

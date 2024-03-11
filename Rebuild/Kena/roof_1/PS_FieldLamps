@@ -42,8 +42,8 @@ ps_5_0
    8: max r0.w, r0.w, l(0)
    9: sqrt r2.z, r0.w                                 Unpack NormalTS
 
-  10: mad r2.xyz, cb1[2].xyzx, r2.xyzx, r2.xyzx
-  11: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx     (NormalTS * half3(0,0,0) + NormalTS) * 1 + half3(0,0,0) -> rotated normTS
+  10: mad r2.xyz, cb1[2].xyzx, r2.xyzx, r2.xyzx             NormalTS = NormalTS * NormalMult + NormalTS 
+  11: mad r2.xyz, r2.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * GlobalNormalScaler + GlobalNormalBias
 
   12: dp3 r0.w, r2.xyzx, r2.xyzx
   13: rsq r0.w, r0.w

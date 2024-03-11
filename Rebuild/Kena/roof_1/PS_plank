@@ -49,8 +49,8 @@ ps_5_0
   11: max r0.w, r0.w, l(0)
   12: sqrt r3.z, r0.w                           Unpack NormalTS RGB in Tangent Space
 
-  13: mad r3.xyz, cb1[2].xyzx, r3.xyzx, r3.xyzx             NormalTS * 0 + NormalTS
-  14: mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * 1 + 0 -> NormalTS
+  13: mad r3.xyz, cb1[2].xyzx, r3.xyzx, r3.xyzx             NormalTS = NormalTS * NormalMult + NormalTS 
+  14: mad r3.xyz, r3.xyzx, cb0[137].wwww, cb0[137].xyzx     NormalTS * GlobalNormalScaler + GlobalNormalBias
 
   15: dp3 r0.w, r3.xyzx, r3.xyzx
   16: rsq r0.w, r0.w 
@@ -63,7 +63,7 @@ ps_5_0
   22: rsq r0.w, r0.w
   23: mul r0.xyz, r0.wwww, r0.xyzx              nDirWS = normalize(mul(NormalTS, tbn))
 
-  24: mul r3.xyz, cb1[3].xyzx, cb1[6].zzzz      _Emissive_Color = 0
+  24: mul r3.xyz, cb1[3].xyzx, cb1[6].zzzz      _Emissive_Color * EmissiveAmount = 0
 
   25: sample_b(texture2d)(float,float,float,float) r4.xyz, r2.xyxx, t2.xyzw, s1, cb0[142].y     Sampel Diffuse
   26: mul r4.xyz, r4.xyzx, cb1[6].wwww          d * 1
@@ -75,8 +75,8 @@ ps_5_0
 
   31: sample_b(texture2d)(float,float,float,float) r2.xyz, r2.xyxx, t3.zxyw, s2, cb0[142].y     Sample Comp_M_R_Ao -> [Ao, M, Rough]
 
-  32: mul_sat r5.x, r2.y, cb1[7].w              Metallic = sat(M * 0)         MetallicScaler = 0
-  33: mul_sat r0.w, r2.z, cb1[8].w              Roughness = sat(Rough * 1)    RoughnessScaler = 1
+  32: mul_sat r5.x, r2.y, cb1[7].w              Metallic = sat(M * 0)         _Metallic = 0
+  33: mul_sat r0.w, r2.z, cb1[8].w              Roughness = sat(Rough * 1)    _Roughness_Intensty = 1
 
   34: add r2.yz, v4.xxyx, -cb0[129].xxyx        利用 VertexInput.xy 构造顶点噪声
   35: add r5.zw, r2.yyyz, cb0[151].xxxx
