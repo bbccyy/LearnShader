@@ -100,7 +100,7 @@ ps_5_0
                                           Emissive = DissolveEmissiveAmount=cb4[20].x=50 * GlowColor' + EmissiveTint=cb4[12].xyz=(0,0,0)
 
   47: add r5.xyz, -r4.xyzx, cb4[13].xyzx
-  48: mad r4.xyz, cb4[20].yyyy, r5.xyzx, r4.xyzx            lerp(Emissive, _Emissive_Color, cb4[20].y=0) -> 0
+  48: mad r4.xyz, cb4[20].yyyy, r5.xyzx, r4.xyzx            lerp(Emissive, _Emissive_Color, cb4[20].y=0) -> 0 -> EmitCol
 
   49: sample_indexable(texture2d)(float,float,float,float) r1.w, v2.xyxx, t2.yzwx, s0           Sample hair_ROOT 
 
@@ -113,7 +113,7 @@ ps_5_0
   54: mad r5.xyz, r5.xyzx, r3.wwww, r5.xyzx                 HairColor * (n64 + 1)
   55: mul r5.xyz, r5.xyzx, cb4[20].wwww                     HairColor * cb4[20].w=0(Brightness)
   56: max r5.xyz, r5.xyzx, l(0.0010, 0.0010, 0.0010, 0.0000)      HairColor = max(HairColor, 0.001)
-  57: min r5.xyz, r5.xyzx, l(0.9990, 0.9990, 0.9990, 0.0000)      HairColor = min(HairColor, 0.999)
+  57: min r5.xyz, r5.xyzx, l(0.9990, 0.9990, 0.9990, 0.0000)      HairColor = min(HairColor, 0.999) -> dBase
 
   58: max r3.w, cb3[0].z, l(0)                              max(cb3[0].z=0, 0)      -> MinWet(0)
   59: min r3.w, r3.w, cb4[21].z                             min(~, cb4[21].z=0.7)   -> MaxWet(0.7)
@@ -216,7 +216,7 @@ ps_5_0
  135: lt r0.w, r0.w, l(0)                                   Threshold < 0 ? true(0xFFFF) or false(0X0000)
  136: discard_nz r0.w                                       如果不为0 则丢弃
 
- 137: mov_sat r6.xy, cb4[21].xyxx                           saturate(Scatter=0.36127, Spec=0.2)
+ 137: mov_sat r6.xy, cb4[21].xyxx                           saturate(Scatter=0.36127, Spec=0.2) -> Scatter对应了Metallic 
 
  138: mad o2.z, r3.w, cb0[138].y, cb0[138].x                R * _GlobalRoughnessScaler + _GlobalRoughnessBias
 
@@ -237,24 +237,30 @@ ps_5_0
  152: add r1.w, -cb4[23].z, cb4[23].y                       OcclusionAmtRootTip=cb4[23].y=0.8; OcclusionAmtRoot=cb4[23].z=0
  153: mad_sat o4.z, r0.w, r1.w, cb4[23].z                   CustomData.z = lerp(OcclusionAmtRoot, OcclusionAmtRootTip, hairRoot)
 
- 154: mul r0.w, r6.y, l(0.0800)
- 155: mad r7.xyz, -r6.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r5.xyzx
- 156: mad r7.xyz, r6.xxxx, r7.xyzx, r0.wwww
- 157: mad r8.xyz, -r5.xyzx, r6.xxxx, r5.xyzx
- 158: mad r8.xyz, r8.xyzx, cb0[135].wwww, cb0[135].xyzx
- 159: mad r7.xyz, r7.xyzx, cb0[136].wwww, cb0[136].xyzx
- 160: ne r0.w, l(0, 0, 0, 0), cb0[177].w
+ 154: mul r0.w, r6.y, l(0.0800)                             Spec = r6.y
+ 155: mad r7.xyz, -r6.yyyy, l(0.08, 0.08, 0.08, 0), r5.xyzx 
+ 156: mad r7.xyz, r6.xxxx, r7.xyzx, r0.wwww                 SpecCol = ComputeF0(Spec, dBase, Scatter)
+
+ 157: mad r8.xyz, -r5.xyzx, r6.xxxx, r5.xyzx                BaseCol = dBase * (1 - Scatter)
+ 158: mad r8.xyz, r8.xyzx, cb0[135].wwww, cb0[135].xyzx     BaseCol * _GlobalBaseColScaler + _GlobalBaseColBias
+ 159: mad r7.xyz, r7.xyzx, cb0[136].wwww, cb0[136].xyzx     SpecCol * _GlobalSpecColScaler + _GlobalSpecColBias
+
+ 160: ne r0.w, l(0, 0, 0, 0), cb0[177].w                    0 != 0 ? -> false -> not View.RenderingReflectionCaptureMask
  161: mad r9.xyz, r7.xyzx, l(0.4500, 0.4500, 0.4500, 0.0000), r8.xyzx
  162: movc r8.xyz, r0.wwww, r9.xyzx, r8.xyzx
- 163: movc r7.xyz, r0.wwww, l(0, 0, 0, 0), r7.xyzx
+ 163: movc r7.xyz, r0.wwww, l(0, 0, 0, 0), r7.xyzx          EnvBRDFApproxFullyRough(BaseCol, SpecCol)
+
  164: dp3 r0.w, r7.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
  165: mad r1.w, r0.w, l(2.0404), l(-0.3324)
  166: mad r1.w, r0.w, l(-4.7951), r1.w
  167: mad r0.w, r0.w, l(2.7552), r1.w
  168: add r0.w, r0.w, l(1.3320)
- 169: max o3.w, r0.w, l(1.0000)
+ 169: max o3.w, r0.w, l(1.0000)                             FinalAO = AOMultiBounce(Luminance(SpecCol), baseAo=1)
+
  170: mad r7.xyz, r7.xyzx, l(0.4500, 0.4500, 0.4500, 0.0000), r8.xyzx
- 171: max r4.xyz, r4.xyzx, l(0, 0, 0, 0)
+                                                            EnvBRDFApproxFullyRough(BaseCol, SpecCol) -> ReflectionCol
+ 171: max r4.xyz, r4.xyzx, l(0, 0, 0, 0)                    FinalEmit = max(EmitCol, 0)
+
  172: lt r0.w, l(0), cb0[139].x
  173: if_nz r0.w
  174:   add r2.xyz, r2.xyzx, -cb0[70].xyzx
@@ -273,14 +279,15 @@ ps_5_0
  187:   movc r1.xyw, r1.xxxx, l(0.0000, 1.0000, 0.0000, 1.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
  188:   movc r4.xyz, r0.wwww, r1.xywx, r4.xyzx
  189: endif
- 190: mad r1.xyw, cb0[144].yyyy, r7.xyxz, r4.xyxz
- 191: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 192: mul o0.xyz, r1.xywx, cb0[134].yyyy
- 193: mov o0.w, l(0)
- 194: mov o1.w, cb1[20].y
- 195: mov o2.w, l(0.6549)
- 196: mov o2.xy, r6.xyxx
- 197: mov o3.xyz, r5.xyzx
- 198: mov o4.w, l(0)
- 199: mov oDepthLessEqual, r1.z
+
+ 190: mad r1.xyw, cb0[144].yyyy, r7.xyxz, r4.xyxz     _GlobalRelectionAmount * ReflectionCol + FinalEmit = BaseRTCol
+ 191: mad o1.xyz, r0.xyzx, l(0.5, 0.5, 0.5, 0), l(0.5, 0.5, 0.5, 0)     nDirWS * 0.5 + 0.5
+ 192: mul o0.xyz, r1.xywx, cb0[134].yyyy              BaseRTCol * _GlobalBouncingColorIntensity
+ 193: mov o0.w, l(0)                                  Intensity = 0
+ 194: mov o1.w, cb1[20].y                             cb1[20].y=0.6667 -> Ao
+ 195: mov o2.w, l(0.6549)                             Flag = 167.0f / 255.0f
+ 196: mov o2.xy, r6.xyxx                              (Scatter, Spec)
+ 197: mov o3.xyz, r5.xyzx                             dBase
+ 198: mov o4.w, l(0)                                  CustomData.w = 0
+ 199: mov oDepthLessEqual, r1.z                       new Depth -> shifted_NDCz
  200: ret
