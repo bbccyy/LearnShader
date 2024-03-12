@@ -141,7 +141,7 @@ ps_5_0
   76: min r4.w, r4.w, l(1.0000)                             min(2, 1) -> 1
 
   77: mul r3.w, abs(r3.w), r4.w                             abs(WetA=-1) * 1 = 1
-  78: mul_sat r3.w, r3.w, cb4[21].w                         saturate(1 * cb4[21].w=0.35) -> Roughness=0.35 -> 0.35
+  78: mul_sat r3.w, r3.w, cb4[21].w                         R = saturate(1 * cb4[21].w=0.35) -> Roughness=cb4[21].w=0.35 
 
   79: add r4.w, -r2.w, cb4[19].x                            cb4[19].x=0 - noise -> RefractionDepthBias = 0?
   80: lt r4.w, l(0.0000), abs(r4.w)                         0 < abs(~) -> 大概率是 0xFFFFFFFF -> BooleanA
@@ -216,23 +216,27 @@ ps_5_0
  135: lt r0.w, r0.w, l(0)                                   Threshold < 0 ? true(0xFFFF) or false(0X0000)
  136: discard_nz r0.w                                       如果不为0 则丢弃
 
- 137: mov_sat r6.xy, cb4[21].xyxx                           saturate(Scatter, Spec)
- 138: mad o2.z, r3.w, cb0[138].y, cb0[138].x
- 139: dp3 r0.w, l(1.0000, 1.0000, 1.0000, 0.0000), abs(r0.xyzx)
- 140: div r6.zw, r0.xxxy, r0.wwww
- 141: ge r0.w, l(0), r0.z
- 142: add r7.xy, -abs(r6.wzww), l(1.0000, 1.0000, 0.0000, 0.0000)
- 143: ge r7.zw, r6.zzzw, l(0, 0, 0, 0)
- 144: movc r7.zw, r7.zzzw, l(0.0000, 0.0000, 1.0000, 1.0000), l(0.0000, 0.0000, -1.0000, -1.0000)
- 145: mul r7.xy, r7.zwzz, r7.xyxx
- 146: movc r6.zw, r0.wwww, r7.xxxy, r6.zzzw
- 147: mad o4.xy, r6.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000), l(0.5000, 0.5000, 0.0000, 0.0000)
- 148: max r0.w, r1.w, l(0.0000)
+ 137: mov_sat r6.xy, cb4[21].xyxx                           saturate(Scatter=0.36127, Spec=0.2)
+
+ 138: mad o2.z, r3.w, cb0[138].y, cb0[138].x                R * _GlobalRoughnessScaler + _GlobalRoughnessBias
+
+ 139: dp3 r0.w, l(1, 1, 1, 0), abs(r0.xyzx)                 dot(nDirWS.xyz, (1,1,1)) -> sum(nDirWS.xyz)
+ 140: div r6.zw, r0.xxxy, r0.wwww                           nXY = nDirWS.xy / sum(nDirWS.xyz)
+ 141: ge r0.w, l(0), r0.z                                   0 >= nDirWS.z (注意，在Unity中使用y分量，代表Vertical) -> ConditionIsDownword
+ 142: add r7.xy, -abs(r6.wzww), l(1.0000, 1.0000, 0, 0)     1 - nXY.yx
+ 143: ge r7.zw, r6.zzzw, l(0, 0, 0, 0)                      nXY.xy > 0 ? -> ConditionXY
+ 144: movc r7.zw, r7.zzzw, l(0, 0, 1, 1), l(0, 0, -1, -1)   ConditionXY.xy ? 1 : -1 -> SignXY
+ 145: mul r7.xy, r7.zwzz, r7.xyxx                           SignXY.xy * (1 - nXY.yx) -> (SignXY.x*(1-nXY.y), SignXY.y*(1-nXY.x)) -> FixXY
+ 146: movc r6.zw, r0.wwww, r7.xxxy, r6.zzzw                 ConditionIsDownword ? FixXY : nXY -> FinalNormXY
+ 147: mad o4.xy, r6.zwzz, l(0.5, 0.5, 0, 0), l(0.5, 0.5, 0, 0)    CustomData.xy = FinalNormXY * 0.5 + 0.5
+
+ 148: max r0.w, r1.w, l(0.0000)                             hairRoot = max(hair_ROOT.x, 0.00001)
  149: log r0.w, r0.w
- 150: mul r0.w, r0.w, cb4[23].x
- 151: exp r0.w, r0.w
- 152: add r1.w, -cb4[23].z, cb4[23].y
- 153: mad_sat o4.z, r0.w, r1.w, cb4[23].z
+ 150: mul r0.w, r0.w, cb4[23].x                             推测 TipPower = cb4[23].x = 1
+ 151: exp r0.w, r0.w                                        hairRoot = pow(hairRoot, 1)
+ 152: add r1.w, -cb4[23].z, cb4[23].y                       OcclusionAmtRootTip=cb4[23].y=0.8; OcclusionAmtRoot=cb4[23].z=0
+ 153: mad_sat o4.z, r0.w, r1.w, cb4[23].z                   CustomData.z = lerp(OcclusionAmtRoot, OcclusionAmtRootTip, hairRoot)
+
  154: mul r0.w, r6.y, l(0.0800)
  155: mad r7.xyz, -r6.yyyy, l(0.0800, 0.0800, 0.0800, 0.0000), r5.xyzx
  156: mad r7.xyz, r6.xxxx, r7.xyzx, r0.wwww
