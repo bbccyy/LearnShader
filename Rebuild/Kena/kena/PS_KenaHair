@@ -42,7 +42,7 @@ ps_5_0
 
    3: mov r1.x, v5.z
    4: mov r1.y, l(1.0000)                                   (NDC.z, 1)
-   5: mul r1.xy, r1.xyxx, v5.wwww                           (NDC.z, 1) * EyeDepth -> 对Reflection分支起作用，主体内无效 
+   5: mul r1.xy, r1.xyxx, v5.wwww                           (NDC.z, 1) * EyeDepth 
 
    6: mul r2.xyzw, v5.yyyy, cb0[45].xyzw
    7: mad r2.xyzw, v5.xxxx, cb0[44].xyzw, r2.xyzw
@@ -52,8 +52,9 @@ ps_5_0
 
   11: dp3 r0.w, -r2.xyzx, -r2.xyzx
   12: rsq r0.w, r0.w
-  13: mul r3.xyz, r0.wwww, -r2.xyzx                         Normalize(PosWS') = viewDirWS 
+  13: mul r3.xyz, r0.wwww, -r2.xyzx                         Normalize(PosWS') = viewDirWS
 
+//Normal
   14: mul r0.w, cb0[140].w, cb1[4].w                        flag -> dont flip norm -> true -> 1
 
   15: movc r1.z, v6.x, l(1.0000), l(-1.0000)
@@ -83,15 +84,16 @@ ps_5_0
 
   34: mul r0.xyz, r0.wwww, r0.xyzx                          nDirWS *= Sign
 
-  35: lt r0.w, l(0.0000), abs(cb4[19].x)                    0 < cb4[19].x=0 ? -> false -> ConditionD
-  36: ge r1.z, cb4[19].x, l(0)                              0 >= 0 ? -> true -> 0xFFFFFFFF -> ConditionC
-  37: and r1.w, r1.z, cb4[19].z                             0xFFFFFFFF & cb4[19].z=0.02 -> 0.02
-  38: and r1.w, r0.w, r1.w                                  0.02 & 0x00000000 -> 0 -> noise_base
+//Emission
+  35: lt r0.w, l(0.0000), abs(cb4[19].x)                    0 < cb4[19].x=0 ? -> false -> ConditionD -> RandomValueVariation=0
+  36: ge r1.z, cb4[19].x, l(0)                              RandomValueVariation=0 >= 0 ? -> true -> 0xFFFFFFFF -> ConditionC
+  37: and r1.w, r1.z, cb4[19].z                             ConditionC=0xFFFFFFFF & cb4[19].z=0.02 -> 0.02
+  38: and r1.w, r0.w, r1.w                                  0.02 & ConditionD=0x00000000 -> 0 -> noise_base
 
   39: mul r4.xy, v2.xyxx, cb4[19].wwww                      UV * 1
   40: sample_b(texture2d)(float,float,float,float) r2.w, r4.xyxx, t1.yzwx, s1, cb0[142].y       Sample Noise_cloudsmed
   41: add r3.w, r1.w, -r2.w                                 noise_base - noise
-  42: lt r3.w, l(0.0000), abs(r3.w)                         0 < abs(~)  -> 除非等于0，不然都是true -> 0xFFFFFFFF -> ConditionA
+  42: lt r3.w, l(0.0000), abs(r3.w)                         0 < abs(~)  -> 除非等于0 (2个noise相似度100%)，不然都是true -> 0xFFFFFFFF -> ConditionA
 
   43: ge r1.w, r1.w, r2.w                       noise_base >= noise -> 在noise_base=0的情况下，基本都是 false -> 0x00000000 -> ConditionB
   44: and r4.xyz, r1.wwww, cb4[11].xyzx                     
@@ -102,6 +104,7 @@ ps_5_0
   47: add r5.xyz, -r4.xyzx, cb4[13].xyzx
   48: mad r4.xyz, cb4[20].yyyy, r5.xyzx, r4.xyzx            lerp(Emissive, _Emissive_Color, cb4[20].y=0) -> 0 -> EmitCol
 
+//dBase -> HairColor
   49: sample_indexable(texture2d)(float,float,float,float) r1.w, v2.xyxx, t2.yzwx, s0           Sample hair_ROOT 
 
   50: add r5.xyz, cb4[16].xyzx, -cb4[17].xyzx               TipColor(0.020897, 0.028864, 0.045139) - RootColor(0.011024, 0.012202, 0.020833)
@@ -115,13 +118,14 @@ ps_5_0
   56: max r5.xyz, r5.xyzx, l(0.0010, 0.0010, 0.0010, 0.0000)      HairColor = max(HairColor, 0.001)
   57: min r5.xyz, r5.xyzx, l(0.9990, 0.9990, 0.9990, 0.0000)      HairColor = min(HairColor, 0.999) -> dBase
 
-  58: max r3.w, cb3[0].z, l(0)                              max(cb3[0].z=0, 0)      -> MinWet(0)
+//Roughness
+  58: max r3.w, cb3[0].z, l(0)                              max(cb3[0].z=0, 0)      -> Wet(0)
   59: min r3.w, r3.w, cb4[21].z                             min(~, cb4[21].z=0.7)   -> MaxWet(0.7)
-  60: add r3.w, r3.w, l(-1.0000)                            WetA - 1 = -1
+  60: add r3.w, r3.w, l(-1.0000)                            wet_A = WetA - 1 = -1
 
-  61: max r6.xy, cb3[1].xyxx, l(0,0,0,0)                    max((0,0), (0,0.00001)) -> (0, 0.00001)
+  61: max r6.xy, cb3[1].xyxx, l(0,0,0,0)                    max((0,0), (0,0.00001)) -> (0, 0.00001)  -> cb3[1].y 应该是某种距离单位
   62: min r4.w, r6.x, cb4[21].z                             min(0, MaxWet) -> 0
-  63: add r4.w, r4.w, l(-1.0000)                            WetB - 1 = -1
+  63: add r4.w, r4.w, l(-1.0000)                            wet_B = WetB - 1 = -1
 
   64: mul r6.xzw, v3.yyyy, cb1[1].xxyz
   65: mad r6.xzw, v3.xxxx, cb1[0].xxyz, r6.xxzw
@@ -130,28 +134,31 @@ ps_5_0
 
   68: add r6.xzw, r6.xxzw, -cb3[4].xxyz                     PosWS - CameraPosWS = -V
   69: dp3 r5.w, r6.xzwx, r6.xzwx
-  70: sqrt r5.w, r5.w                                       Distance(V)
+  70: sqrt r5.w, r5.w                                       Distance(V) -> Dist
 
   71: div r6.x, l(1.0000, 1.0000, 1.0000, 1.0000), r6.y     1 / 0.00001 = 100000
-  72: mad r5.w, -r5.w, r6.x, l(1.0000)                      1 - Dist * 100000
-  73: mul_sat r5.w, r5.w, l(6.6667)                         saturate(-1.0E+7 * 6.667) -> 0
+  72: mad r5.w, -r5.w, r6.x, l(1.0000)                      1 - Dist * 100000   -> 注意 UE 和 Unity 长度计量单位的区别 
+  73: mul_sat r5.w, r5.w, l(6.6667)                         saturate((~) * 6.667) -> 0 -> DistFactor
 
-  74: add r4.w, abs(r4.w), -r5.w                            abs(WetB=-1) - 0 = 1
-  75: add r4.w, r4.w, l(1.0000)                             1 + 1 = 2
-  76: min r4.w, r4.w, l(1.0000)                             min(2, 1) -> 1
+  74: add r4.w, abs(r4.w), -r5.w                            abs(wet_B=-1) - DistFactor = 1 -> 
+  75: add r4.w, r4.w, l(1.0000)                             (~) += 1
+  76: min r4.w, r4.w, l(1.0000)                             min((~), 1) -> 1
 
-  77: mul r3.w, abs(r3.w), r4.w                             abs(WetA=-1) * 1 = 1
-  78: mul_sat r3.w, r3.w, cb4[21].w                         R = saturate(1 * cb4[21].w=0.35) -> Roughness=cb4[21].w=0.35 
+  77: mul r3.w, abs(r3.w), r4.w                             abs(wet_A=-1) * (~) = 1
+  78: mul_sat r3.w, r3.w, cb4[21].w                         R = saturate((~) * cb4[21].w=0.35) -> Roughness=cb4[21].w=0.35 
 
-  79: add r4.w, -r2.w, cb4[19].x                            cb4[19].x=0 - noise -> RefractionDepthBias = 0?
+
+//与Dissolve有关 
+  79: add r4.w, -r2.w, cb4[19].x                            cb4[19].x=0 - noise -> RandomValueVariation = 0?
   80: lt r4.w, l(0.0000), abs(r4.w)                         0 < abs(~) -> 大概率是 0xFFFFFFFF -> BooleanA
-  81: ge r2.w, cb4[19].x, r2.w                              RefractionDepthBias >= noise -> 大概率是 0x00000000 -> BooleanB
+  81: ge r2.w, cb4[19].x, r2.w                              RandomValueVariation >= noise -> 大概率是 0x00000000 -> BooleanB
   82: movc r2.w, r2.w, l(0), l(1.0000)                      BooleanB ? 0 : 1 -> ValA(非0既1) -> 大概率1
   83: and r2.w, r2.w, r4.w                                  ValA & BooleanA -> 大概率还是ValA(非0既1) -> 大概率1
   84: movc r1.z, r1.z, r2.w, l(1.0000)                      ConditionC ? (~) : 1 -> 大概率(~) -> 1
   85: movc r0.w, r0.w, r1.z, l(1.0000)                      ConditionD ? (~) : 1 -> 大概率1 -> 1 -> ConditionValA
 
-  86: sample_indexable(texture2d)(float,float,float,float) r1.z, v2.xyxx, t4.yzxw, s0     Sampel hair_DEPTH
+//Hair Alpha -> Conditional Discard Pixel part#1
+  86: sample_indexable(texture2d)(float,float,float,float) r1.z, v2.xyxx, t4.yzxw, s0     Sampel hair_DEPTH -> Unique Hair Value
   87: max r2.w, r1.z, l(0.0000)                             max(hair_DEPTH.x, 0) -> 确保Depth不小于0
   88: mul r4.w, r2.w, r2.w                                  pow2(hair_DEPTH)
 
@@ -178,7 +185,7 @@ ps_5_0
  105: utof r4.w, r4.w                                       float(mod) -> mod_val -> range form 0 ~ 4
 
  106: ge r5.w, cb0[141].z, -cb0[141].z                      cb0[141].z=14.6236 >= 0 ? true -> 0xFFFFFFFF -> ConditionE
- 107: frc r6.z, abs(cb0[141].z)                             frac(cb0[141].z)  -> 推测为Time.x
+ 107: frc r6.z, abs(cb0[141].z)                             frac(cb0[141].z)  -> 断定为Time.x
  108: movc r5.w, r5.w, r6.z, -r6.z                          ConditionE ? time_frc : -time_frc
  109: mul r5.w, r5.w, l(0.1000)                             time_frc * 0.1
 
@@ -216,6 +223,7 @@ ps_5_0
  135: lt r0.w, r0.w, l(0)                                   Threshold < 0 ? true(0xFFFF) or false(0X0000)
  136: discard_nz r0.w                                       如果不为0 则丢弃
 
+//Comp_M_D_R_F
  137: mov_sat r6.xy, cb4[21].xyxx                           saturate(Scatter=0.36127, Spec=0.2) -> Scatter对应了Metallic 
 
  138: mad o2.z, r3.w, cb0[138].y, cb0[138].x                R * _GlobalRoughnessScaler + _GlobalRoughnessBias
@@ -237,6 +245,7 @@ ps_5_0
  152: add r1.w, -cb4[23].z, cb4[23].y                       OcclusionAmtRootTip=cb4[23].y=0.8; OcclusionAmtRoot=cb4[23].z=0
  153: mad_sat o4.z, r0.w, r1.w, cb4[23].z                   CustomData.z = lerp(OcclusionAmtRoot, OcclusionAmtRootTip, hairRoot)
 
+//Final AO
  154: mul r0.w, r6.y, l(0.0800)                             Spec = r6.y
  155: mad r7.xyz, -r6.yyyy, l(0.08, 0.08, 0.08, 0), r5.xyzx 
  156: mad r7.xyz, r6.xxxx, r7.xyzx, r0.wwww                 SpecCol = ComputeF0(Spec, dBase, Scatter)
