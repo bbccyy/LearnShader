@@ -130,10 +130,11 @@ ps_5_0
   70: mul r3.xyw, r3.xyxw, cb3[15].wwww                                 -> (~) * cb3[15].w=1.4 
   71: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz                             -> albedo = saturate((~) * cb3[11].xyz=[0.76769, 0.89215, 1.10]) 
 
+//Spec
   72: add r0.w, -cb3[16].y, cb3[16].x                                   -> cb3[16].xy=[1.2, 0.01] -> 1.2 - 0.01 
-  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 + 0.01) 
+  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 + 0.01)  -> lerp(SpecMin, SpecMax, albedo.z)
 
-//todo
+//Roughness
   74: max r0.w, cb2[0].z, l(0)                                          -> max(cb2[0].z=0, 0) -> 0 
   75: min r0.w, r0.w, cb3[16].z                                         -> min(~, cb3[16].z=0.6) -> 0 
   76: add r0.w, r0.w, l(-1.0000)                                        -> (~) - 1 -> -1 
@@ -159,6 +160,7 @@ ps_5_0
   94: mul r0.w, r0.w, cb3[16].w                                         -> cb3[16].w=1.1 * (~) -> 1.1 
   95: mul r0.w, r0.w, r2.w                                              -> (~) * Comp.g -> roughness 
 
+//Skin Scatter
   96: sample_b(texture2d)(float,float,float,float) r1.w, r2.xyxx, t8.xyzw, s7, cb0[142].y       -> sample Noise_2.a -> noise2_a 
   97: mad r0.w, r1.w, cb3[12].y, r0.w                                   -> noise2_a * cb3[12].y=0.6 + 1.1*Comp.g 
   98: add_sat r0.w, r0.w, l(-0.1000)                                    -> saturate((~) - 0.1) -> neo_roughness 
@@ -167,15 +169,20 @@ ps_5_0
  100: add r2.x, -cb3[17].y, cb3[17].x                                   -> cb3[17].xy=[1.5, 0.5] -> 1.5 - 0.5 -> 1 
  101: mad_sat r2.y, r1.w, r2.x, cb3[17].y                               -> neo_strength = saturate(Strength * 1 + 0.5) 
 
+//AO
  102: mov_sat r2.z, r2.z                                                -> saturate(raw_AO) 
+
+//Final Roughness
  103: mad r4.y, r0.w, cb0[138].y, cb0[138].x                            -> scaled_rough = neo_roughness * 1 + 0
 
+// if Scatter > 0.1 
  104: lt r0.w, l(0.1000), r2.y                                          -> 0.1 < 0.5+ -> true 
  105: if_nz r0.w                                                        -> 必然进入的分支 
  106:   mad r0.w, cb3[17].z, l(255.0000), l(0.5000)                     -> cb3[17].z=0.01569 * 255 + 0.5 -> 4.5 
  107:   ftou r5.y, r0.w                                                 -> 4 
  108:   mov r5.xzw, l(5, 0, 0, 0)                                       -> r5 = [5,4,0,0] 
- 109:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw     -> sample SSProfileTex -> Duel_specular_data.a -> MaterialRoughnessToAverage 
+ 109:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw     
+                                                                        -> sample SSProfileTex -> Duel_specular_data.a -> MaterialRoughnessToAverage 
  110:   add r1.w, r2.y, l(-0.1000)                                      -> neo_strength - 0.1 
  111:   mul_sat r1.w, r1.w, l(10.0000)                                  -> neo_str_10times = saturate(~ * 10) 
  112:   mad r0.w, r0.w, l(2.0000), l(-1.0000)                           -> average_Roughness * 2 - 1 -> decode ave roughness 
@@ -188,7 +195,9 @@ ps_5_0
  119:   mov r0.w, l(1)
  120: endif
 
+//AO?
  121: mul r1.w, r4.x, l(0.0800)                                         -> blue * 0.08 
+
  122: ftou r5.xy, v5.xyxx                                               -> (uint)pos_CS -> pos_CS.xy 存放像素偏移格子数 + 0.5 
  123: ftou r2.w, cb0[151].x                                             -> 3 
  124: iadd r3.z, r5.y, r5.x 
@@ -207,8 +216,9 @@ ps_5_0
  136: movc r2.w, r5.z, r2.w, r1.w                                       -> r2.w = r2.w 
  137: movc r6.xyz, r3.zzzz, r6.xyzx, r3.xywx                            -> r6.xyz = r6.xyz 
  138: movc r1.w, r3.z, r2.w, r1.w                                       -> r1.w = r2.w 
- 139: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx                 -> r6.xyz = r6.xyz * cb0[135].w=1 + cb0[135].xyz=0 
- 140: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz                 -> r7.xzw = r1.www * cb0[136].w=1 + cb0[136].xyz=0 
+
+ 139: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx                 -> r6.xyz = r6.xyz * cb0[135].w=1 + cb0[135].xyz=0 -> BaseCol
+ 140: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz                 -> r7.xzw = r1.www * cb0[136].w=1 + cb0[136].xyz=0 -> SpecCol
 
  141: ne r1.w, l(0, 0, 0, 0), cb0[177].w                                -> 0 != cb0[177].w=0 ? false 
  142: mad r8.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx   -> r8.xyz = 0.45 * r7.xzw + r6.xyz 
@@ -257,7 +267,7 @@ ps_5_0
  183: mov o0.w, l(0)                                                    -> Emission.a = 0 
  184: mov o1.w, cb1[20].y                                               -> World_Normal.a = 0.66667 
  185: mov r4.w, l(0) 
- 186: mov o2.xyzw, r4.wxyz                                              -> Comp_M_D_R_F.xyzw = [0, blue, scaled_rough, 0.6435]  where blue=saturate(raw_albedo.z * 1.19 - 0.01) 
+ 186: mov o2.xyzw, r4.wxyz                  -> Comp_M_D_R_F.xyzw = [0, blue, scaled_rough, 0.6435]  where blue=saturate(raw_albedo.z * 1.19 - 0.01) 
  187: mov o3.xyz, r3.xywx                                               -> Albedo.rgb = albedo 
  188: mov o4.xw, r2.xxxy                                                -> Custom.xw = [0.01569, neo_strength]   
  189: mov o4.yz, l(0, 0, 0, 0)
