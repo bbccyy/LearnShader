@@ -13,23 +13,27 @@ ps_5_0
       dcl_sampler s2, mode_default
       dcl_sampler s3, mode_default
       dcl_sampler s4, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
-      dcl_resource_texture2d (float,float,float,float) t5
-      dcl_resource_texturecube (float,float,float,float) t6
-      dcl_input_ps linear centroid v0.xyz
-      dcl_input_ps linear centroid v1.xyzw
-      dcl_input_ps linear v2.xy
+
+      dcl_resource_texture2d (float,float,float,float) t0               T_Eye_Wet_Normal
+      dcl_resource_texture2d (float,float,float,float) t1               S_EyeScleraBaseColor
+      dcl_resource_texture2d (float,float,float,float) t2               EYE_NORMALS
+      dcl_resource_texture2d (float,float,float,float) t3               EyeMidPlaneDisplacement_Example
+      dcl_resource_texture2d (float,float,float,float) t4               kena_eyes_DIFFUSE
+      dcl_resource_texture2d (float,float,float,float) t5               Noise_cloudsmed
+      dcl_resource_texturecube (float,float,float,float) t6             EpicQuadPanorama_CC -> TexCube
+
+      dcl_input_ps linear centroid v0.xyz                               Tangent
+      dcl_input_ps linear centroid v1.xyzw                              Norm + Sign
+      dcl_input_ps linear v2.xy                                         UV
       dcl_input_ps_siv linear noperspective v3.xyz, position
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+
+      dcl_output o0.xyzw                CameraColor
+      dcl_output o1.xyzw                Normal
+      dcl_output o2.xyzw                M_D_R_I
+      dcl_output o3.xyzw                Diffuse
+      dcl_output o4.xyzw                Custom
       dcl_temps 11
+
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
    2: mul r0.xyz, r0.xyzx, v1.wwww
