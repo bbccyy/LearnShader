@@ -250,10 +250,12 @@ ps_5_0
  160: mad r0.w, -r1.w, l(2.0000), l(1.0000)                 1 - 2 * Dist(neoUV) -> distNeo
  161: mul_sat r0.w, r0.w, cb3[30].x                         distNeo = sat(distNeo * cb3[30].x=1)
  162: mad r2.zw, r0.wwww, -r2.zzzw, r2.zzzw                 neoUV = neoUV - neoUV * distNeo
+
  163: add r7.xy, r2.zwzz, l(0.5000, 0.5000, 0, 0)           neoUV + 0.5 -> DiffuseUV
  164: sample_indexable(texture2d)(float,float,float,float) r7.xyz, r7.xyxx, t4.xyzw, s0   Sample kena_eyes_DIFFUSE using DiffuseUV
                                                             -> rawDiffuse
- 165: mul r8.xyz, r7.xyzx, cb3[30].yyyy
+ 165: mul r8.xyz, r7.xyzx, cb3[30].yyyy                     dBase = rawDiffuse * IrisBRightness=0.409524
+
  166: dp3 r0.w, l(0.5774, 0.5774, 0.5774, 0), r8.xyzx
  167: mul r1.w, r0.w, l(0.5774)
  168: mad r7.xyz, r7.xyzx, cb3[30].yyyy, -r1.wwww
@@ -262,25 +264,32 @@ ps_5_0
  171: sincos r9.x, r10.x, cb3[28].x
  172: mul r8.xyz, r8.xyzx, r9.xxxx
  173: mad r7.xyz, r7.xyzx, r10.xxxx, r8.xyzx
- 174: mad r7.xyz, r0.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r7.xyzx
+ 174: mad r7.xyz, r0.wwww, l(0.5774, 0.5774, 0.5774, 0.0000), r7.xyzx         dBase = applyHue(dBase, cb3[28].x=0=IrisHueShift)
+
  175: dp3 r0.w, r7.xyzx, l(0.3000, 0.5900, 0.1100, 0.0000)
  176: add r8.xyz, -r7.xyzx, r0.wwww
- 177: mad r7.xyz, cb3[30].zzzz, r8.xyzx, r7.xyzx
- 178: mul r2.zw, r2.zzzw, cb3[30].wwww
+ 177: mad r7.xyz, cb3[30].zzzz, r8.xyzx, r7.xyzx            lerp(dBase, Luminance(dBase), IrisDesaturation=0) -> dBase
+
+ 178: mul r2.zw, r2.zzzw, cb3[30].wwww                      neoUV = neoUV * cb3[30].w=1.9299999
  179: dp2 r0.w, r2.zwzz, r2.zwzz
- 180: sqrt r0.w, r0.w
- 181: min r0.w, r0.w, l(1.0000)
- 182: max r0.w, r0.w, l(0.0000)
+ 180: sqrt r0.w, r0.w                                       Distance(neoUV) -> d_limb
+
+ 181: min r0.w, r0.w, l(1.0000)                             d_limb = min(d_limb, 1)
+ 182: max r0.w, r0.w, l(0.0000)                             d_limb = max(d_limb, 0.00001)
  183: log r0.w, r0.w
  184: mul r0.w, r0.w, cb3[31].x
- 185: exp r0.w, r0.w
+ 185: exp r0.w, r0.w                                        limbus = pow(d_limb, LimbusPow=8)
+
  186: add r0.w, -r0.w, l(1.0000)
- 187: mad r7.xyz, r7.xyzx, r0.wwww, -r6.xyzx
- 188: mad_sat r6.xyz, r3.xxxx, r7.xyzx, r6.xyzx
+ 187: mad r7.xyz, r7.xyzx, r0.wwww, -r6.xyzx                dBase = (1 - limbus) * dBase - ScleraCol
+ 188: mad_sat r6.xyz, r3.xxxx, r7.xyzx, r6.xyzx             ScleraCol = sat(UV.x * dBase + ScleraCol)
+
  189: add r0.w, -cb3[31].z, cb3[31].y
- 190: mad_sat r0.w, r3.x, r0.w, cb3[31].z
+ 190: mad_sat r0.w, r3.x, r0.w, cb3[31].z                   Spec = lerp(SpecularityScelera=0.1, SpecularityIris=0.1, UV.x)
+
  191: add r1.w, cb3[31].w, -cb3[32].x
- 192: mad_sat r1.w, r3.x, r1.w, cb3[32].x
+ 192: mad_sat r1.w, r3.x, r1.w, cb3[32].x                   R = lerp(ScleraRougness=0, IrisRoughness=0.1, UV.x)
+
  193: mul r2.zw, v2.xxxy, cb3[32].zzzz
  194: sample_b(texture2d)(float,float,float,float) r2.z, r2.zwzz, t5.yzxw, s3, cb0[142].y
  195: add r2.w, -r2.z, cb3[32].w
@@ -296,7 +305,7 @@ ps_5_0
  205: and r2.z, r2.z, r2.w
  206: discard_nz r2.z
  207: mov_sat r2.z, cb3[33].w
- 208: mad o2.z, r1.w, cb0[138].y, cb0[138].x
+ 208: mad o2.z, r1.w, cb0[138].y, cb0[138].x                R * _GlobalRoughnessScaler + _GlobalRoughnessBias
  209: min r1.w, r3.y, l(1.0000)
  210: add o4.w, -r1.w, l(1.0000)
  211: mad r2.xy, r3.xxxx, r2.xyxx, r3.zwzz
