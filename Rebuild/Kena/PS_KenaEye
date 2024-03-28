@@ -131,10 +131,13 @@ ps_5_0
   74: mul r0.w, r0.w, cb3[23].x
   75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower)
 
-  76: mul r0.w, r0.w, cb3[23].y
-  77: mul r0.w, r0.w, cb3[24].x
-  78: mad r0.w, r4.w, r6.y, r0.w
-  79: dp3 r4.w, cb3[8].xyzx, r5.xyzx
+  76: mul r0.w, r0.w, cb3[23].y                             powed_NoVr_2 * FakeHighligtBrighness -> Brightness_2
+  77: mul r0.w, r0.w, cb3[24].x                             Brightness_2 * SecondHighlightMultiplier=0
+
+  78: mad r0.w, r4.w, r6.y, r0.w                            powed_NoVr * FakeHighligtBrighness -> Brightness_1 + (~) -> Brightness
+
+  79: dp3 r4.w, cb3[8].xyzx, r5.xyzx                        SecondaryEnvRotationAxis=[0,0,1] dot ReflectDir -> 注意UE和Unity区别 
+                                                            -> AoR
   80: mad r5.xyz, -cb3[8].xyzx, r4.wwww, r5.xyzx
   81: mul r6.xyz, r5.yzxy, cb3[8].zxyz
   82: mad r6.xyz, cb3[8].yzxy, r5.zxyz, -r6.xyzx
