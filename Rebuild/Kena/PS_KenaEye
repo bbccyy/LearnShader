@@ -86,12 +86,12 @@ ps_5_0
   40: mad r4.xyz, r4.zzzz, v1.xyzx, r4.xywx
   41: dp3 r2.w, r4.xyzx, r4.xyzx
   42: rsq r2.w, r2.w
-  43: mul r4.xyz, r2.wwww, r4.xyzx                          nDirWS = normalize(mul(wetNormTS, tbn))
+  43: mul r4.xyz, r2.wwww, r4.xyzx                          nWetDirWS = normalize(mul(wetNormTS, tbn))
 
   44: dp3 r2.w, r4.xyzx, r2.xyzx                            NoV
 
   45: mul r5.xyz, r2.wwww, r4.xyzx
-  46: mad r5.xyz, r5.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), -r2.xyzx        2 * NoV * nDirWS - V -> ReflectDir
+  46: mad r5.xyz, r5.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), -r2.xyzx        2 * NoV * nWetDirWS - V -> ReflectDir
 
   47: add r6.xyz, cb2[5].xyzx, cb3[3].xyzx                  [0] + FakeHighlightRotationAxis=[-4.5102582, 2.5374241, -1]
   48: dp3 r4.w, r6.xyzx, r6.xyzx
@@ -107,7 +107,7 @@ ps_5_0
   56: sqrt r4.w, r4.w
   57: div r6.xyz, r6.xyzx, r4.wwww                          normalize(RotViewDirWS)
 
-  58: dp3_sat r4.w, r6.xyzx, r4.xyzx                        sat(NoVr) -> sat(nDirWS dot RotViewDirWS)
+  58: dp3_sat r4.w, r6.xyzx, r4.xyzx                        sat(NoVr) -> sat(nWetDirWS dot RotViewDirWS)
 
   59: add r6.xy, cb2[2].yzyy, cb3[23].xyxx                  [0] + [FakeHighlightPower=1204.189, FakeHighligtBrighness=0.8]
 
@@ -138,93 +138,123 @@ ps_5_0
 
   79: dp3 r4.w, cb3[8].xyzx, r5.xyzx                        SecondaryEnvRotationAxis=[0,0,1] dot ReflectDir -> 注意UE和Unity区别 
                                                             -> AoR
-  80: mad r5.xyz, -cb3[8].xyzx, r4.wwww, r5.xyzx
+  80: mad r5.xyz, -cb3[8].xyzx, r4.wwww, r5.xyzx            RefDir = ReflectDir - SecondaryEnvRotationAxis * AoR
+
   81: mul r6.xyz, r5.yzxy, cb3[8].zxyz
-  82: mad r6.xyz, cb3[8].yzxy, r5.zxyz, -r6.xyzx
-  83: sincos r7.x, r8.x, cb3[24].w
-  84: mul r6.xyz, r6.xyzx, r7.xxxx
-  85: mad r5.xyz, r5.xyzx, r8.xxxx, r6.xyzx
-  86: mad r5.xyz, cb3[8].xyzx, r4.wwww, r5.xyzx
+  82: mad r6.xyz, cb3[8].yzxy, r5.zxyz, -r6.xyzx            cross(RefDir, SecondaryEnvRotationAxis) -> SecondaryEnvTangent
+
+  83: sincos r7.x, r8.x, cb3[24].w                          sin=0, cos=1 -> cb3[24].w=0=SecondaryEnvRotation
+  84: mul r6.xyz, r6.xyzx, r7.xxxx                          SecondaryEnvTangent * sin(SecondaryEnvRotation)
+  85: mad r5.xyz, r5.xyzx, r8.xxxx, r6.xyzx                 RefDir * cos(SecondaryEnvRotation) + SecondaryEnvTangent
+  86: mad r5.xyz, cb3[8].xyzx, r4.wwww, r5.xyzx             SecondaryEnvRotationAxis * AoR + (~) -> EyeRefDir
   87: dp3 r4.w, r5.xyzx, r5.xyzx
   88: sqrt r4.w, r4.w
-  89: div r5.xyz, r5.xyzx, r4.wwww
-  90: sample_indexable(texturecube)(float,float,float,float) r5.xyz, r5.xyzx, t6.xyzw, s4
-  91: mad r5.xyz, r5.xyzx, cb3[10].xyzx, r0.wwww
-  92: add r5.xyz, r5.xyzx, cb3[13].xyzx
-  93: add r6.xyz, -r5.xyzx, cb3[14].xyzx
-  94: mad r5.xyz, cb3[25].yyyy, r6.xyzx, r5.xyzx
-  95: mad r0.w, -r1.w, cb3[26].x, l(1.0000)
-  96: mul_sat r0.w, r0.w, cb3[27].x
-  97: add r6.xyz, -cb3[16].xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  98: mad r6.xyz, r0.wwww, r6.xyzx, cb3[16].xyzx
-  99: add r7.xyz, cb3[18].xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
- 100: mad r7.xyz, r0.wwww, r7.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
+  89: div r5.xyz, r5.xyzx, r4.wwww                          normalize(EyeRefDir)
+
+  90: sample_indexable(texturecube)(float,float,float,float) r5.xyz, r5.xyzx, t6.xyzw, s4       Sample TexCube using EyeRefDir -> EnvCol
+  91: mad r5.xyz, r5.xyzx, cb3[10].xyzx, r0.wwww            EnvCol = EnvCol * SecondaryEnvBalance=[0.010417] + Brightness
+  92: add r5.xyz, r5.xyzx, cb3[13].xyzx                     EnvCol + [0]
+  93: add r6.xyz, -r5.xyzx, cb3[14].xyzx                    
+  94: mad r5.xyz, cb3[25].yyyy, r6.xyzx, r5.xyzx            lerp(EnvCol, SecondaryEnvTint=0, 0) -> EnvCol
+
+  95: mad r0.w, -r1.w, cb3[26].x, l(1.0000)                 uvDist = 1 - DistanceUV * 1.5384616
+  96: mul_sat r0.w, r0.w, cb3[27].x                         uvDist = uvDist * 1.1111112
+  97: add r6.xyz, -cb3[16].xyzx, l(1, 1, 1, 0)              
+  98: mad r6.xyz, r0.wwww, r6.xyzx, cb3[16].xyzx            lerp(ScleraInnerColor=[1,1,1], 1, uvDist) -> ScleraInCol
+
+  99: add r7.xyz, cb3[18].xyzx, l(-1, -1, -1, 0)
+ 100: mad r7.xyz, r0.wwww, r7.xyzx, l(1, 1, 1, 0)           lerp(1, ScleraOuterColor=[1,1,1], uvDist) -> ScleraOutCol
+
  101: add r7.xyz, -r6.xyzx, r7.xyzx
- 102: mad r6.xyz, r0.wwww, r7.xyzx, r6.xyzx
- 103: sample_indexable(texture2d)(float,float,float,float) r7.xyz, v2.xyxx, t1.xyzw, s0
- 104: add r7.xyz, r7.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
- 105: mad r7.xyz, cb3[27].yyyy, r7.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
- 106: mul r7.xyz, r7.xyzx, cb3[27].zzzz
- 107: mul r6.xyz, r6.xyzx, r7.xyzx
- 108: dp3 r0.w, v0.xyzx, v0.xyzx
+ 102: mad r6.xyz, r0.wwww, r7.xyzx, r6.xyzx                 lerp(ScleraInCol, ScleraOutCol, uvDist) -> ScleraCol
+
+ 103: sample_indexable(texture2d)(float,float,float,float) r7.xyz, v2.xyxx, t1.xyzw, s0   Sample S_EyeScleraBaseColor using rawUV 
+                                                            -> ScleraBaseCol
+ 104: add r7.xyz, r7.xyzx, l(-1, -1, -1, 0)
+ 105: mad r7.xyz, cb3[27].yyyy, r7.xyzx, l(1, 1, 1, 0)      lerp(1, ScleraBaseCol, ScleraRougness=0) -> ScleraBaseCol
+
+ 106: mul r7.xyz, r7.xyzx, cb3[27].zzzz                     ScleraBaseCol = ScleraBaseCol * ScleraBrightness=0.5
+ 107: mul r6.xyz, r6.xyzx, r7.xyzx                          ScleraCol *= ScleraBaseCol
+
+ 108: dp3 r0.w, v0.xyzx, v0.xyzx                            
  109: sqrt r0.w, r0.w
- 110: div r7.xyz, v0.zxyz, r0.wwww
- 111: sample_b(texture2d)(float,float,float,float) r8.xy, v2.xyxx, t2.xyzw, s1, cb0[142].y
- 112: mad r8.xy, r8.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
+ 110: div r7.xyz, v0.zxyz, r0.wwww                          normalize(TangentWS) -> TangentWS
+
+ 111: sample_b(texture2d)(float,float,float,float) r8.xy, v2.xyxx, t2.xyzw, s1, cb0[142].y      Sample EYE_NORMALS
+ 112: mad r8.xy, r8.xyxx, l(2,2,0,0), l(-1,-1,0,0)
  113: dp2 r0.w, r8.xyxx, r8.xyxx
  114: add r0.w, -r0.w, l(1.0000)
  115: max r0.w, r0.w, l(0)
- 116: sqrt r0.w, r0.w
+ 116: sqrt r0.w, r0.w                                       Unpack NormalTS -> r8.xy + r0.w
+
  117: mul r0.xyz, r0.xyzx, r8.yyyy
  118: mad r0.xyz, r8.xxxx, v0.xyzx, r0.xyzx
- 119: mad r0.xyz, r0.wwww, v1.xyzx, r0.xyzx
- 120: dp3 r0.w, r7.yzxy, r0.xyzx
- 121: mad r7.xyz, -r0.wwww, r0.zxyz, r7.xyzx
+ 119: mad r0.xyz, r0.wwww, v1.xyzx, r0.xyzx                 mul(NormalTS, tbn) -> RawNormWS
+
+ 120: dp3 r0.w, r7.yzxy, r0.xyzx                            dot(TangentWS.yzx, RawNormWS.xyz)
+ 121: mad r7.xyz, -r0.wwww, r0.zxyz, r7.xyzx                TangentWS - (~) * RawNormWS -> NewTanWS
+
  122: dp3 r0.w, r7.xyzx, r7.xyzx
  123: sqrt r0.w, r0.w
- 124: div r7.xyz, r7.xyzx, r0.wwww
- 125: div r0.w, l(1.0003), cb3[28].y
- 126: mad r1.w, r0.w, r2.w, -r0.w
- 127: mad r4.w, r0.w, r2.w, r0.w
- 128: mad r1.w, r1.w, r4.w, l(1.0000)
- 129: sqrt r1.w, r1.w
- 130: mad r1.w, r0.w, r2.w, -r1.w
- 131: mul r8.xyz, r2.xyzx, r0.wwww
- 132: mad r8.xyz, r1.wwww, r4.xyzx, -r8.xyzx
+ 124: div r7.xyz, r7.xyzx, r0.wwww                          NewTanWS = normalize(NewTanWS)
+
+ 125: div r0.w, l(1.0003), cb3[28].y                        1.0003 / IoR=1.336 -> InvIoR
+ 126: mad r1.w, r0.w, r2.w, -r0.w                           IoR_A = NoV * InvIoR - InvIoR
+ 127: mad r4.w, r0.w, r2.w, r0.w                            IoR_B = NoV * InvIoR + InvIoR
+ 128: mad r1.w, r1.w, r4.w, l(1.0000)                       IoR_A * IoR_B + 1 -> IoR_AB
+ 129: sqrt r1.w, r1.w                                       
+ 130: mad r1.w, r0.w, r2.w, -r1.w                           NoV * InvIoR - sqrt(IoR_AB) -> IoR_Factor
+
+ 131: mul r8.xyz, r2.xyzx, r0.wwww 
+ 132: mad r8.xyz, r1.wwww, r4.xyzx, -r8.xyzx                BiasDir = nWetDirWS * IoR_Factor - ViewDirWS * InvIoR
  133: dp3 r0.w, r8.xyzx, r8.xyzx
  134: rsq r0.w, r0.w
- 135: mul r8.xyz, r0.wwww, r8.xyzx
- 136: sample_b(texture2d)(float,float,float,float) r9.xyz, v2.xyxx, t3.xyzw, s2, cb0[142].y
- 137: sample_b(texture2d)(float,float,float,float) r0.w, cb3[19].xyxx, t3.yzwx, s2, cb0[142].y
- 138: add r9.xyz, -r0.wwww, r9.xyzx
- 139: max r9.xyz, r9.xyzx, l(0, 0, 0, 0)
- 140: mul r9.xyz, r9.xyzx, cb3[29].xxxx
- 141: dp3 r0.w, r2.xyzx, r0.xyzx
+ 135: mul r8.xyz, r0.wwww, r8.xyzx                          BiasDir = normalize(BiasDir)
+
+ 136: sample_b(texture2d)(float,float,float,float) r9.xyz, v2.xyxx, t3.xyzw, s2, cb0[142].y     Sample EyeMidPlaneDisplacement_Example
+                                                            -> EyeMidPlaneDisp_Cur
+ 137: sample_b(texture2d)(float,float,float,float) r0.w, cb3[19].xyxx, t3.yzwx, s2, cb0[142].y  cUV=[0.665, 0.5] -> Setup by C++
+                                                            -> EyeMidPlaneDisp_Center
+
+ 138: add r9.xyz, -r0.wwww, r9.xyzx                         EyeMidPlaneDisp = EyeMidPlaneDisp_Cur - EyeMidPlaneDisp_Center
+ 139: max r9.xyz, r9.xyzx, l(0, 0, 0, 0)                    max(EyeMidPlaneDisp, 0)
+ 140: mul r9.xyz, r9.xyzx, cb3[29].xxxx                     EyeMidPlaneDisp = EyeMidPlaneDisp * DepthScale=1.1
+
+ 141: dp3 r0.w, r2.xyzx, r0.xyzx                            ViewDirWS dot RawNormWS -> NoV' -> NoV
+
  142: mul r0.w, r0.w, r0.w
- 143: mad r0.w, r0.w, l(0.6750), l(0.3250)
- 144: div r2.xyz, r9.xyzx, r0.wwww
- 145: mul r2.xyz, r2.xyzx, -r8.xyzx
- 146: dp3 r8.x, r7.yzxy, r2.xyzx
- 147: mul r9.xyz, r0.yzxy, r7.xyzx
- 148: mad r7.xyz, r7.zxyz, r0.zxyz, -r9.xyzx
- 149: dp3 r8.y, r7.xyzx, r2.xyzx
- 150: mul r2.xy, r8.xyxx, cb3[20].xyxx
- 151: mul r2.zw, r2.xxxy, r3.xxxx
- 152: mad r2.zw, cb3[29].yyyy, r2.zzzw, r3.zzzw
- 153: add r2.zw, r2.zzzw, l(0.0000, 0.0000, -0.5000, -0.5000)
- 154: mul r2.zw, r2.zzzw, cb3[29].wwww
+ 143: mad r0.w, r0.w, l(0.6750), l(0.3250)                  NoV = NoV * NoV * 0.675 + 0.325
+
+ 144: div r2.xyz, r9.xyzx, r0.wwww 
+ 145: mul r2.xyz, r2.xyzx, -r8.xyzx                         EyeMidPlaneDisp / NoV * (-BiasDir) -> PlaneNorm
+
+ 146: dp3 r8.x, r7.yzxy, r2.xyzx                            dot(NewTanWS.yzx, PlaneNorm) -> ToP
+
+ 147: mul r9.xyz, r0.yzxy, r7.xyzx                          
+ 148: mad r7.xyz, r7.zxyz, r0.zxyz, -r9.xyzx                cross(RawNormWS, NewTanWS) -> BiNewTangentWS
+
+ 149: dp3 r8.y, r7.xyzx, r2.xyzx                            dot(BiNewTangentWS, PlaneNorm) -> BoP
+
+ 150: mul r2.xy, r8.xyxx, cb3[20].xyxx                      [ToP, BoP] * [-0.1, 0.1]
+ 151: mul r2.zw, r2.xxxy, r3.xxxx                           [-0.1*ToP, 0.1*BoP] * UV.x -> neoUV.xy
+
+ 152: mad r2.zw, cb3[29].yyyy, r2.zzzw, r3.zzzw             cb3[29].y=1=PupilScale * neoUV + UV.zw -> neoUV
+ 153: add r2.zw, r2.zzzw, l(0, 0, -0.5000, -0.5000)         neoUV = neoUV - 0.5
+ 154: mul r2.zw, r2.zzzw, cb3[29].wwww                      neoUV *= cb3[29].w=5
  155: dp2 r0.w, r2.zwzz, r2.zwzz
- 156: sqrt r1.w, r0.w
+ 156: sqrt r1.w, r0.w                                       Dist(neoUV)
  157: rsq r0.w, r0.w
- 158: mul r2.zw, r0.wwww, r2.zzzw
- 159: mul r2.zw, r2.zzzw, l(0.0000, 0.0000, 0.5000, 0.5000)
- 160: mad r0.w, -r1.w, l(2.0000), l(1.0000)
- 161: mul_sat r0.w, r0.w, cb3[30].x
- 162: mad r2.zw, r0.wwww, -r2.zzzw, r2.zzzw
- 163: add r7.xy, r2.zwzz, l(0.5000, 0.5000, 0.0000, 0.0000)
- 164: sample_indexable(texture2d)(float,float,float,float) r7.xyz, r7.xyxx, t4.xyzw, s0
+ 158: mul r2.zw, r0.wwww, r2.zzzw                           neoUV = normalize(neoUV)
+ 159: mul r2.zw, r2.zzzw, l(0, 0, 0.5000, 0.5000)           neoUV *= 0.5
+
+ 160: mad r0.w, -r1.w, l(2.0000), l(1.0000)                 1 - 2 * Dist(neoUV) -> distNeo
+ 161: mul_sat r0.w, r0.w, cb3[30].x                         distNeo = sat(distNeo * cb3[30].x=1)
+ 162: mad r2.zw, r0.wwww, -r2.zzzw, r2.zzzw                 neoUV = neoUV - neoUV * distNeo
+ 163: add r7.xy, r2.zwzz, l(0.5000, 0.5000, 0, 0)           neoUV + 0.5 -> DiffuseUV
+ 164: sample_indexable(texture2d)(float,float,float,float) r7.xyz, r7.xyxx, t4.xyzw, s0   Sample kena_eyes_DIFFUSE using DiffuseUV
+                                                            -> rawDiffuse
  165: mul r8.xyz, r7.xyzx, cb3[30].yyyy
- 166: dp3 r0.w, l(0.5774, 0.5774, 0.5774, 0.0000), r8.xyzx
+ 166: dp3 r0.w, l(0.5774, 0.5774, 0.5774, 0), r8.xyzx
  167: mul r1.w, r0.w, l(0.5774)
  168: mad r7.xyz, r7.xyzx, cb3[30].yyyy, -r1.wwww
  169: mul r8.xyz, r7.zxyz, l(0.5774, 0.5774, 0.5774, 0.0000)
