@@ -76,7 +76,7 @@ ps_5_0
   32: add r5.xyz, -r4.xyzx, l(0, 0, 1.0000, 0) 
   33: mad r4.xyz, r2.wwww, r5.xyzx, r4.xyzx                 lerp(wetNormTS, (0,0,1), flatN) -> 注意UE和Unity坐标空间的不同 
 
-  34: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx     wetNormTS * GlobalNormalScaler + GlobalNormalBias 
+  34: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx     wetNormTS * GlobalNormalScaler + GlobalNormalBias
   35: dp3 r2.w, r4.xyzx, r4.xyzx
   36: rsq r2.w, r2.w
   37: mul r4.xyz, r2.wwww, r4.xyzx                          normalize(wetNormTS)
@@ -236,7 +236,7 @@ ps_5_0
  149: dp3 r8.y, r7.xyzx, r2.xyzx                            dot(BiNewTangentWS, PlaneNorm) -> BoP
 
  150: mul r2.xy, r8.xyxx, cb3[20].xyxx                      [ToP, BoP] * [-0.1, 0.1]
- 151: mul r2.zw, r2.xxxy, r3.xxxx                           [-0.1*ToP, 0.1*BoP] * UV.x -> neoUV.xy
+ 151: mul r2.zw, r2.xxxy, r3.xxxx                           [-0.1*ToP, 0.1*BoP] * UV.x -> rawNeoUV.xy -> neoUV.xy
 
  152: mad r2.zw, cb3[29].yyyy, r2.zzzw, r3.zzzw             cb3[29].y=1=PupilScale * neoUV + UV.zw -> neoUV
  153: add r2.zw, r2.zzzw, l(0, 0, -0.5000, -0.5000)         neoUV = neoUV - 0.5
@@ -293,74 +293,92 @@ ps_5_0
  193: mul r2.zw, v2.xxxy, cb3[32].zzzz                      rawUV * 1
  194: sample_b(texture2d)(float,float,float,float) r2.z, r2.zwzz, t5.yzxw, s3, cb0[142].y       Sample Noise_cloudsmed
  195: add r2.w, -r2.z, cb3[32].w                            cb3[32].w=0
- 196: lt r2.w, l(0.0000), abs(r2.w)                         0 < abs(0 - noise)      -> C
- 197: ge r2.z, cb3[32].w, r2.z                              cb3[32].w=0 >= noise    -> D
+ 196: lt r2.w, l(0.0000), abs(r2.w)                         0 < abs(0 - noise)
+ 197: ge r2.z, cb3[32].w, r2.z                              cb3[32].w=0 >= noise
  198: movc r2.z, r2.z, l(0), l(1.0000)
- 199: and r2.z, r2.z, r2.w                                  X
- 200: lt r2.w, l(0.0000), abs(cb3[32].w)                    A
- 201: ge r4.w, cb3[32].w, l(0)                              B
+ 199: and r2.z, r2.z, r2.w                                  
+ 200: lt r2.w, l(0.0000), abs(cb3[32].w)                    
+ 201: ge r4.w, cb3[32].w, l(0)                              
  202: add r2.z, r2.z, l(-0.3333)                            
- 203: lt r2.z, r2.z, l(0)                                   (X -0.3333) < 0 -> E
- 204: and r2.z, r2.z, r4.w                                  E & B
- 205: and r2.z, r2.z, r2.w                                  dissolveVal = DissolveMix(noise, DissolveAmount=0)
+ 203: lt r2.z, r2.z, l(0)                                   
+ 204: and r2.z, r2.z, r4.w                                  
+ 205: and r2.z, r2.z, r2.w                                  dissolveVal = DissolveMix(noise, DissolveAmount=0) -> todo
  206: discard_nz r2.z                                       clip(dissolveVal - 0.33333);
 
- 207: mov_sat r2.z, cb3[33].w
+ 207: mov_sat r2.z, cb3[33].w                               baseAo = 0.45
+
  208: mad o2.z, r1.w, cb0[138].y, cb0[138].x                R * _GlobalRoughnessScaler + _GlobalRoughnessBias
+
  209: min r1.w, r3.y, l(1.0000)
- 210: add o4.w, -r1.w, l(1.0000)
- 211: mad r2.xy, r3.xxxx, r2.xyxx, r3.zwzz
- 212: add r2.xy, r2.xyxx, l(-0.5000, -0.5000, 0, 0) 
+ 210: add o4.w, -r1.w, l(1.0000)                            CustomData.w = 1 - min(UV.y, 1)
+
+ 211: mad r2.xy, r3.xxxx, r2.xyxx, r3.zwzz                  neoUV = rawNeoUV.xy + UV.zw
+ 212: add r2.xy, r2.xyxx, l(-0.5000, -0.5000, 0, 0)         neoUV -= 0.5
  213: dp2 r1.w, r2.xyxx, r2.xyxx
- 214: sqrt r1.w, r1.w
- 215: div r1.w, r1.w, cb3[22].z
- 216: mul r1.w, r1.w, cb3[33].y
- 217: max r1.w, r1.w, l(0.0000)
+ 214: sqrt r1.w, r1.w                                       Distance(neoUV) -> d_limb_2
+
+ 215: div r1.w, r1.w, cb3[22].z                             d_limb_2 / [Iris UV Radius=0.1] -> IrisConcavity
+ 216: mul r1.w, r1.w, cb3[33].y                             IrisConcavity *= [Iris Concavity Scale=0.111628]
+ 217: max r1.w, r1.w, l(0.0000)                             max(IrisConcavity, 0.00001)
  218: log r1.w, r1.w
  219: mul r1.w, r1.w, cb3[33].z
- 220: exp r1.w, r1.w
- 221: min o2.x, r1.w, l(1.0000)
+ 220: exp r1.w, r1.w                                        pow(IrisConcavity, [Iris Concavity Power=0.276744])
+
+ 221: min o2.x, r1.w, l(1.0000)                             M_D_R_I.x = min(powed_IrisConcavity, 1) -> Metalic
+
  222: dp3 r1.w, r0.xyzx, r0.xyzx
  223: rsq r1.w, r1.w
- 224: mul r0.xyz, r0.xyzx, r1.wwww
- 225: dp3 r1.w, l(1.0000, 1.0000, 1.0000, 0.0000), abs(r0.xyzx)
- 226: div r0.xy, r0.xyxx, r1.wwww
- 227: ge r0.z, l(0), r0.z
- 228: add r2.xy, -abs(r0.yxyy), l(1.0000, 1.0000, 0.0000, 0.0000)
- 229: ge r3.xy, r0.xyxx, l(0, 0, 0, 0)
- 230: movc r3.xy, r3.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
- 231: mul r2.xy, r2.xyxx, r3.xyxx
- 232: movc r0.xy, r0.zzzz, r2.xyxx, r0.xyxx
- 233: mad o4.yz, r0.xxyx, l(0.0000, 0.5000, 0.5000, 0.0000), l(0.0000, 0.5000, 0.5000, 0.0000)
- 234: mul r0.x, r0.w, l(0.0800)
+ 224: mul r0.xyz, r0.xyzx, r1.wwww                          normalize(RawNormWS) -> NormWS
+
+ 225: dp3 r1.w, l(1,1,1,0), abs(r0.xyzx)                    dot((1,1,1), abs(NormWS)) -> sum(NormWS.xyz)
+ 226: div r0.xy, r0.xyxx, r1.wwww                           NormWS.xy /= sum(NormWS.xyz)
+ 227: ge r0.z, l(0), r0.z                                   0 >= NormWS.z -> 世界坐标空间中法线在垂直方向的分量是否朝下 -> A
+ 228: add r2.xy, -abs(r0.yxyy), l(1,1,0,0)                  1 - abs(NormWS.yx)
+ 229: ge r3.xy, r0.xyxx, l(0, 0, 0, 0)                      NormWS.xy >= 0 ? -> B
+ 230: movc r3.xy, r3.xyxx, l(1,1,0,0), l(-1,-1,0,0)         B ? (1,1) : (-1,-1) -> NormWS_XY
+ 231: mul r2.xy, r2.xyxx, r3.xyxx                           (1 - abs(NormWS.yx)) * NormWS_XY -> ComplementNormWS_YX
+ 232: movc r0.xy, r0.zzzz, r2.xyxx, r0.xyxx                 A ? ComplementNormWS_YX : NormWS.xy -> CustomedNormWS_XY
+ 233: mad o4.yz, r0.xxyx, l(0,0.5,0.5,0), l(0,0.5,0.5,0)    CustomData.yz = CustomedNormWS_XY * 0.5 + 0.5
+
+ 234: mul r0.x, r0.w, l(0.0800)                             F0 = DielectricSpecularToF0(Spec)
+
  235: ftou r0.yz, v3.xxyx
  236: ftou r1.w, cb0[151].x
  237: iadd r0.y, r0.z, r0.y
  238: iadd r0.y, r1.w, r0.y
- 239: and r0.y, r0.y, l(1)
- 240: lt r0.z, l(0), cb0[155].x
- 241: lt r1.w, l(0), cb0[200].z
- 242: and r0.z, r0.z, r1.w
- 243: ne r1.w, l(0, 0, 0, 0), cb0[155].x
- 244: movc r2.xyw, r1.wwww, l(1.0000, 1.0000, 0.0000, 1.0000), r6.xyxz
- 245: movc r3.xy, r0.yyyy, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
- 246: mul r0.y, r0.x, r3.y
- 247: movc r2.xyw, r0.zzzz, r3.xxxx, r2.xyxw
- 248: movc r0.x, r0.z, r0.y, r0.x
- 249: mad r2.xyw, r2.xyxw, cb0[135].wwww, cb0[135].xyxz
- 250: mad r3.xzw, r0.xxxx, cb0[136].wwww, cb0[136].xxyz
- 251: ne r0.x, l(0, 0, 0, 0), cb0[177].w
- 252: mad r7.xyz, r3.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r2.xywx
+ 239: and r0.y, r0.y, l(1)                                  bool bCheck = CheckerFromSceneColorUV(i.vertex.xy);
+
+ 240: lt r0.z, l(0), cb0[155].x                             useSSMode5 -> true 
+ 241: lt r1.w, l(0), cb0[200].z                             useSeperate -> true
+
+ 242: and r0.z, r0.z, r1.w                                  useSSMode5 and useSeperate -> true
+
+ 243: ne r1.w, l(0, 0, 0, 0), cb0[155].x                    encodeDiffuse -> true
+
+ 244: movc r2.xyw, r1.wwww, l(1,1,0,1), r6.xyxz             eDiffuse = encodeDiffuse ? (1,1,1) : ScleraCol
+ 245: movc r3.xy, r0.yyyy, l(1,0,0,0), l(0,1,0,0)           half2 checkboard = bCheck ? half2(1, 0) : half2(0, 1);
+ 246: mul r0.y, r0.x, r3.y                                  encodedEmiSpec = F0 * checkboard.y;
+ 247: movc r2.xyw, r0.zzzz, r3.xxxx, r2.xyxw                eDiffuse = (useSSMode5 and useSeperate) ? checkboard.xxx : eDiffuse
+ 248: movc r0.x, r0.z, r0.y, r0.x                           eSpec = (useSSMode5 and useSeperate) ? encodedEmiSpec : F0
+
+ 249: mad r2.xyw, r2.xyxw, cb0[135].wwww, cb0[135].xyxz     BaseCol = eDiffuse * _GlobalBaseColorScaler + _GlobalBaseColorBias;
+ 250: mad r3.xzw, r0.xxxx, cb0[136].wwww, cb0[136].xxyz     SpecCol = eSpec.xxx * _GlobalSpecularColorScaler + _GlobalSpecularColorBias;
+
+ 251: ne r0.x, l(0, 0, 0, 0), cb0[177].w                    0 != 0 ? -> false -> not View.RenderingReflectionCaptureMask
+ 252: mad r7.xyz, r3.xzwx, l(0.4500, 0.4500, 0.4500, 0), r2.xywx
  253: movc r2.xyw, r0.xxxx, r7.xyxz, r2.xyxw
- 254: movc r3.xzw, r0.xxxx, l(0, 0, 0, 0), r3.xxzw
+ 254: movc r3.xzw, r0.xxxx, l(0, 0, 0, 0), r3.xxzw          EnvBRDFApproxFullyRough(BaseCol, SpecCol)
+
  255: dp3 r0.x, r3.xzwx, l(0.3000, 0.5900, 0.1100, 0.0000)
- 256: mad r7.xyz, r0.xxxx, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
+ 256: mad r7.xyz, r0.xxxx, l(2.0404, -4.7951, 2.7552, 0), l(-0.3324, 0.6417, 0.6903, 0)
  257: mad r0.x, r2.z, r7.x, r7.y
  258: mad r0.x, r0.x, r2.z, r7.z
  259: mul r0.x, r2.z, r0.x
- 260: max o3.w, r0.x, r2.z
- 261: mad r2.xyz, r3.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r2.xywx
- 262: max r3.xzw, r5.xxyz, l(0, 0, 0, 0)
+ 260: max o3.w, r0.x, r2.z                                  FinalAO = AOMultiBounce(Luminance(SpecCol), baseAo)
+
+ 261: mad r2.xyz, r3.xzwx, l(0.45, 0.45, 0.45, 0), r2.xywx  EnvBRDFApproxFullyRough(BaseCol, SpecCol) -> ReflectionCol
+ 262: max r3.xzw, r5.xxyz, l(0, 0, 0, 0)                    FinalEmit = max(EnvCol, 0)
+
  263: lt r0.x, l(0), cb0[139].x
  264: if_nz r0.x
  265:   add r1.xyz, r1.xyzx, -cb0[70].xyzx
@@ -376,15 +394,16 @@ ps_5_0
  275:   movc r1.xyz, r0.yyyy, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
  276:   movc r3.xzw, r0.xxxx, r1.xxyz, r3.xxzw
  277: endif
- 278: mad r1.xyz, cb0[144].yyyy, r2.xyzx, r3.xzwx
- 279: mul r2.xyz, r3.yyyy, r1.xyzx
- 280: movc r0.xyz, r0.zzzz, r2.xyzx, r1.xyzx
- 281: mad o1.xyz, r4.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 282: mul o0.xyz, r0.xyzx, cb0[134].yyyy
- 283: mov o0.w, l(0)
- 284: mov o1.w, cb1[20].y
- 285: mov o2.w, l(0.6627)
- 286: mov o2.y, r0.w
- 287: mov o3.xyz, r6.xyzx
- 288: mov o4.x, cb3[33].x
+
+ 278: mad r1.xyz, cb0[144].yyyy, r2.xyzx, r3.xzwx           _GlobalRelectionAmount * ReflectionCol + FinalEmit = BaseRTCol
+ 279: mul r2.xyz, r3.yyyy, r1.xyzx                          checkboard.y * BaseRTCol
+ 280: movc r0.xyz, r0.zzzz, r2.xyzx, r1.xyzx                (useSSMode5 and useSeperate) ? (~) : BaseRTCol -> FinalBaseRTCol
+ 281: mad o1.xyz, r4.xyzx, l(0.5,0.5,0.5,0), l(0.5,0.5,0.5,0)    Normal.xyz =  nWetDirWS * 0.5 + 0.5
+ 282: mul o0.xyz, r0.xyzx, cb0[134].yyyy                    CameraColor.xyz = FinalBaseRTCol * _GlobalBouncingColorIntensity
+ 283: mov o0.w, l(0)                                        CameraColor.w = 0
+ 284: mov o1.w, cb1[20].y                                   Normal.w = 2/3
+ 285: mov o2.w, l(0.6627)                                   M_D_R_I.w = 0.6627 = 169 / 255
+ 286: mov o2.y, r0.w                                        M_D_R_I.y = Spec
+ 287: mov o3.xyz, r6.xyzx                                   Diffuse.xyz = ScleraCol
+ 288: mov o4.x, cb3[33].x                                   CustomData.x = 0.0039216
  289: ret
