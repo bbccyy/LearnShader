@@ -36,80 +36,101 @@ ps_5_0
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
+   2: mul r0.xyz, r0.xyzx, v1.wwww                          BitangentWS = cross(TangentWS, NormalWS) * sign
+
    3: mul r1.xyzw, v3.yyyy, cb0[45].xyzw
    4: mad r1.xyzw, v3.xxxx, cb0[44].xyzw, r1.xyzw
    5: mad r1.xyzw, v3.zzzz, cb0[46].xyzw, r1.xyzw
    6: add r1.xyzw, r1.xyzw, cb0[47].xyzw
-   7: div r1.xyz, r1.xyzx, r1.wwww
+   7: div r1.xyz, r1.xyzx, r1.wwww                          变换到 ViewSpace 中 -> 没有归一化的 Eye2ShadingPointDir
+
    8: dp3 r0.w, -r1.xyzx, -r1.xyzx
    9: rsq r0.w, r0.w
-  10: mul r2.xyz, r0.wwww, -r1.xyzx
-  11: div r3.xyzw, v2.xyxy, cb3[21].xxzz
-  12: add r3.xyzw, r3.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000)
-  13: add r3.xyzw, r3.xyzw, -cb3[21].yyww
-  14: sample_indexable(texture2d)(float,float,float,float) r3.xy, r3.xyxx, t0.xyzw, s0
+  10: mul r2.xyz, r0.wwww, -r1.xyzx                         归一化的 ViewDirWS
+
+  11: div r3.xyzw, v2.xyxy, cb3[21].xxzz                    UV / cb3[21].x=2.4=NormalUVScale    UV / cb3[21].z=1.65=ScaleByCenter
+  12: add r3.xyzw, r3.xyzw, l(0.5000, 0.5000, 0.5000, 0.5000)     UV + 0.5
+  13: add r3.xyzw, r3.xyzw, -cb3[21].yyww                   UV - [0.2083333, 0.3030303]
+  14: sample_indexable(texture2d)(float,float,float,float) r3.xy, r3.xyxx, t0.xyzw, s0          Sampel T_Eye_Wet_Normal using UV.xy
   15: mad r4.xy, r3.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
   16: dp2 r1.w, r4.xyxx, r4.xyxx
   17: add r1.w, -r1.w, l(1.0000)
   18: max r1.w, r1.w, l(0)
-  19: sqrt r4.z, r1.w
-  20: add r3.xy, r3.zwzz, l(-0.5000, -0.5000, 0.0000, 0.0000)
+  19: sqrt r4.z, r1.w                                       Unpack Eye_Wet_NormalTS -> r4.xyz
+
+  20: add r3.xy, r3.zwzz, l(-0.5000, -0.5000, 0.0000, 0.0000)     UV.zw - 0.5
+
   21: dp2 r1.w, r3.xyxx, r3.xyxx
-  22: sqrt r1.w, r1.w
-  23: add r3.xy, -cb3[1].xyxx, cb3[22].zzzz
-  24: add r3.xy, r1.wwww, -r3.xyxx
-  25: div r3.xy, r3.xyxx, cb3[1].xyxx
-  26: add_sat r3.xy, -r3.xyxx, l(1.0000, 1.0000, 0.0000, 0.0000)
-  27: mad r5.xy, r3.xyxx, l(-2.0000, -2.0000, 0.0000, 0.0000), l(3.0000, 3.0000, 0.0000, 0.0000)
+  22: sqrt r1.w, r1.w                                       Distance(UV.zw)
+
+  23: add r3.xy, -cb3[1].xyxx, cb3[22].zzzz           UV = [Iris UV Radius=0.1] - [LimbusUVWidthColor=0.01, LimbusUVWidthShading=0.045]
+  24: add r3.xy, r1.wwww, -r3.xyxx                          DistanceUV - UV
+  25: div r3.xy, r3.xyxx, cb3[1].xyxx                       UV / [LimbusUV].xy -> UV ->?
+  26: add_sat r3.xy, -r3.xyxx, l(1.0000, 1.0000, 0, 0)      sat(1 - UV)
+  27: mad r5.xy, r3.xyxx, l(-2, -2, 0, 0), l(3, 3, 0, 0)    3 - 2 * UV -> UV2
   28: mul r3.xy, r3.xyxx, r3.xyxx
-  29: mul r3.xy, r3.xyxx, r5.xyxx
-  30: add r2.w, -cb3[22].w, l(1.0000)
-  31: mad r2.w, r3.x, r2.w, cb3[22].w
-  32: add r5.xyz, -r4.xyzx, l(0.0000, 0.0000, 1.0000, 0.0000)
-  33: mad r4.xyz, r2.wwww, r5.xyzx, r4.xyzx
-  34: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx
+  29: mul r3.xy, r3.xyxx, r5.xyxx                           UV * UV * UV2 -> UV
+  30: add r2.w, -cb3[22].w, l(1.0000) 
+  31: mad r2.w, r3.x, r2.w, cb3[22].w                       lerp(FlattenNormal=0.95, 1, UV.x) -> flatN
+
+  32: add r5.xyz, -r4.xyzx, l(0, 0, 1.0000, 0) 
+  33: mad r4.xyz, r2.wwww, r5.xyzx, r4.xyzx                 lerp(wetNormTS, (0,0,1), flatN) -> 注意UE和Unity坐标空间的不同 
+
+  34: mad r4.xyz, r4.xyzx, cb0[137].wwww, cb0[137].xyzx     wetNormTS * GlobalNormalScaler + GlobalNormalBias 
   35: dp3 r2.w, r4.xyzx, r4.xyzx
   36: rsq r2.w, r2.w
-  37: mul r4.xyz, r2.wwww, r4.xyzx
+  37: mul r4.xyz, r2.wwww, r4.xyzx                          normalize(wetNormTS)
+
   38: mul r5.xyz, r0.xyzx, r4.yyyy
   39: mad r4.xyw, r4.xxxx, v0.xyxz, r5.xyxz
   40: mad r4.xyz, r4.zzzz, v1.xyzx, r4.xywx
   41: dp3 r2.w, r4.xyzx, r4.xyzx
   42: rsq r2.w, r2.w
-  43: mul r4.xyz, r2.wwww, r4.xyzx
-  44: dp3 r2.w, r4.xyzx, r2.xyzx
+  43: mul r4.xyz, r2.wwww, r4.xyzx                          nDirWS = normalize(mul(wetNormTS, tbn))
+
+  44: dp3 r2.w, r4.xyzx, r2.xyzx                            NoV
+
   45: mul r5.xyz, r2.wwww, r4.xyzx
-  46: mad r5.xyz, r5.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), -r2.xyzx
-  47: add r6.xyz, cb2[5].xyzx, cb3[3].xyzx
+  46: mad r5.xyz, r5.xyzx, l(2.0000, 2.0000, 2.0000, 0.0000), -r2.xyzx        2 * NoV * nDirWS - V -> ReflectDir
+
+  47: add r6.xyz, cb2[5].xyzx, cb3[3].xyzx                  [0] + FakeHighlightRotationAxis=[-4.5102582, 2.5374241, -1]
   48: dp3 r4.w, r6.xyzx, r6.xyzx
   49: sqrt r4.w, r4.w
-  50: div r6.xyz, r6.xyzx, r4.wwww
+  50: div r6.xyz, r6.xyzx, r4.wwww                          normalize(FakeRotAxis)
+
   51: mul r7.xyz, r6.yyyy, cb0[17].xyzx
   52: mad r6.xyw, r6.xxxx, cb0[16].xyxz, r7.xyxz
-  53: mad r6.xyz, r6.zzzz, cb0[18].xyzx, r6.xywx
-  54: mad r6.xyz, -r1.xyzx, r0.wwww, r6.xyzx
+  53: mad r6.xyz, r6.zzzz, cb0[18].xyzx, r6.xywx            FakeRotAxisWS
+
+  54: mad r6.xyz, -r1.xyzx, r0.wwww, r6.xyzx                ViewDirWS * FakeRotAxisWS -> RotViewDirWS
   55: dp3 r4.w, r6.xyzx, r6.xyzx
   56: sqrt r4.w, r4.w
-  57: div r6.xyz, r6.xyzx, r4.wwww
-  58: dp3_sat r4.w, r6.xyzx, r4.xyzx
-  59: add r6.xy, cb2[2].yzyy, cb3[23].xyxx
-  60: max r4.w, r4.w, l(0.0000)
+  57: div r6.xyz, r6.xyzx, r4.wwww                          normalize(RotViewDirWS)
+
+  58: dp3_sat r4.w, r6.xyzx, r4.xyzx                        sat(NoVr) -> sat(nDirWS dot RotViewDirWS)
+
+  59: add r6.xy, cb2[2].yzyy, cb3[23].xyxx                  [0] + [FakeHighlightPower=1204.189, FakeHighligtBrighness=0.8]
+
+  60: max r4.w, r4.w, l(0.00001)                            max(NoVr, 0.00001)
   61: log r4.w, r4.w
   62: mul r4.w, r4.w, r6.x
-  63: exp r4.w, r4.w
-  64: mul r6.xzw, cb0[17].xxyz, cb3[6].yyyy
+  63: exp r4.w, r4.w                                        pow(NoVr, FakeHighlightPower)
+
+  64: mul r6.xzw, cb0[17].xxyz, cb3[6].yyyy                 cb3[6].xyz = [0.6607623, 0.5187197, -0.5425155] -> LightDir?
   65: mad r6.xzw, cb3[6].xxxx, cb0[16].xxyz, r6.xxzw
-  66: mad r6.xzw, cb3[6].zzzz, cb0[18].xxyz, r6.xxzw
-  67: mad r6.xzw, -r1.xxyz, r0.wwww, r6.xxzw
+  66: mad r6.xzw, cb3[6].zzzz, cb0[18].xxyz, r6.xxzw        LitDirWS
+
+  67: mad r6.xzw, -r1.xxyz, r0.wwww, r6.xxzw                ViewDirWS * LitDirWS -> RotViewDirWS_2
   68: dp3 r0.w, r6.xzwx, r6.xzwx
   69: sqrt r0.w, r0.w
-  70: div r6.xzw, r6.xxzw, r0.wwww
-  71: dp3_sat r0.w, r6.xzwx, r4.xyzx
-  72: max r0.w, r0.w, l(0.0000)
+  70: div r6.xzw, r6.xxzw, r0.wwww                          normalize(RotViewDirWS_2)
+
+  71: dp3_sat r0.w, r6.xzwx, r4.xyzx                        sat(NoVr_2)
+  72: max r0.w, r0.w, l(0.0000)                             max(NoVr_2, 0.00001)
   73: log r0.w, r0.w
   74: mul r0.w, r0.w, cb3[23].x
-  75: exp r0.w, r0.w
+  75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower)
+
   76: mul r0.w, r0.w, cb3[23].y
   77: mul r0.w, r0.w, cb3[24].x
   78: mad r0.w, r4.w, r6.y, r0.w
