@@ -120,7 +120,7 @@ ps_5_0
   65: mad r6.xzw, cb3[6].xxxx, cb0[16].xxyz, r6.xxzw
   66: mad r6.xzw, cb3[6].zzzz, cb0[18].xxyz, r6.xxzw        LitDirWS
 
-  67: mad r6.xzw, -r1.xxyz, r0.wwww, r6.xxzw                ViewDirWS * LitDirWS -> RotViewDirWS_2
+  67: mad r6.xzw, -r1.xxyz, r0.wwww, r6.xxzw                ViewDirWS * LitDirWS -> RotViewDirWS_2 
   68: dp3 r0.w, r6.xzwx, r6.xzwx
   69: sqrt r0.w, r0.w
   70: div r6.xzw, r6.xxzw, r0.wwww                          normalize(RotViewDirWS_2)
@@ -129,7 +129,7 @@ ps_5_0
   72: max r0.w, r0.w, l(0.0000)                             max(NoVr_2, 0.00001)
   73: log r0.w, r0.w
   74: mul r0.w, r0.w, cb3[23].x
-  75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower)
+  75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower) 
 
   76: mul r0.w, r0.w, cb3[23].y                             powed_NoVr_2 * FakeHighligtBrighness -> Brightness_2
   77: mul r0.w, r0.w, cb3[24].x                             Brightness_2 * SecondHighlightMultiplier=0
