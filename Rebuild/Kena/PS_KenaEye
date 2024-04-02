@@ -114,7 +114,7 @@ ps_5_0
   60: max r4.w, r4.w, l(0.00001)                            max(NoVr, 0.00001)
   61: log r4.w, r4.w
   62: mul r4.w, r4.w, r6.x
-  63: exp r4.w, r4.w                                        pow(NoVr, FakeHighlightPower)
+  63: exp r4.w, r4.w                                        powed_NoVr = pow(NoVr, FakeHighlightPower)
 
   64: mul r6.xzw, cb0[17].xxyz, cb3[6].yyyy                 cb3[6].xyz = [0.6607623, 0.5187197, -0.5425155] -> LightDir?
   65: mad r6.xzw, cb3[6].xxxx, cb0[16].xxyz, r6.xxzw
@@ -125,11 +125,12 @@ ps_5_0
   69: sqrt r0.w, r0.w
   70: div r6.xzw, r6.xxzw, r0.wwww                          normalize(RotViewDirWS_2)
 
+
   71: dp3_sat r0.w, r6.xzwx, r4.xyzx                        sat(NoVr_2)
   72: max r0.w, r0.w, l(0.0000)                             max(NoVr_2, 0.00001)
   73: log r0.w, r0.w
   74: mul r0.w, r0.w, cb3[23].x
-  75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower) 
+  75: exp r0.w, r0.w                                        pow(NoVr_2, FakeHighlightPower)
 
   76: mul r0.w, r0.w, cb3[23].y                             powed_NoVr_2 * FakeHighligtBrighness -> Brightness_2
   77: mul r0.w, r0.w, cb3[24].x                             Brightness_2 * SecondHighlightMultiplier=0
@@ -138,14 +139,14 @@ ps_5_0
 
   79: dp3 r4.w, cb3[8].xyzx, r5.xyzx                        SecondaryEnvRotationAxis=[0,0,1] dot ReflectDir -> 注意UE和Unity区别 
                                                             -> AoR
-  80: mad r5.xyz, -cb3[8].xyzx, r4.wwww, r5.xyzx            RefDir = ReflectDir - SecondaryEnvRotationAxis * AoR
+  80: mad r5.xyz, -cb3[8].xyzx, r4.wwww, r5.xyzx            rotatedRefDir = ReflectDir - SecondaryEnvRotationAxis * AoR
 
   81: mul r6.xyz, r5.yzxy, cb3[8].zxyz
-  82: mad r6.xyz, cb3[8].yzxy, r5.zxyz, -r6.xyzx            cross(RefDir, SecondaryEnvRotationAxis) -> SecondaryEnvTangent
+  82: mad r6.xyz, cb3[8].yzxy, r5.zxyz, -r6.xyzx            cross(rotatedRefDir, SecondaryEnvRotationAxis) -> SecondaryEnvTangent
 
   83: sincos r7.x, r8.x, cb3[24].w                          sin=0, cos=1 -> cb3[24].w=0=SecondaryEnvRotation
   84: mul r6.xyz, r6.xyzx, r7.xxxx                          SecondaryEnvTangent * sin(SecondaryEnvRotation)
-  85: mad r5.xyz, r5.xyzx, r8.xxxx, r6.xyzx                 RefDir * cos(SecondaryEnvRotation) + SecondaryEnvTangent
+  85: mad r5.xyz, r5.xyzx, r8.xxxx, r6.xyzx                 rotatedRefDir * cos(SecondaryEnvRotation) + SecondaryEnvTangent
   86: mad r5.xyz, cb3[8].xyzx, r4.wwww, r5.xyzx             SecondaryEnvRotationAxis * AoR + (~) -> EyeRefDir
   87: dp3 r4.w, r5.xyzx, r5.xyzx
   88: sqrt r4.w, r4.w
@@ -157,6 +158,7 @@ ps_5_0
   93: add r6.xyz, -r5.xyzx, cb3[14].xyzx                    
   94: mad r5.xyz, cb3[25].yyyy, r6.xyzx, r5.xyzx            lerp(EnvCol, SecondaryEnvTint=0, 0) -> EnvCol
 
+
   95: mad r0.w, -r1.w, cb3[26].x, l(1.0000)                 uvDist = 1 - DistanceUV * 1.5384616
   96: mul_sat r0.w, r0.w, cb3[27].x                         uvDist = uvDist * 1.1111112
   97: add r6.xyz, -cb3[16].xyzx, l(1, 1, 1, 0)              
@@ -167,6 +169,8 @@ ps_5_0
 
  101: add r7.xyz, -r6.xyzx, r7.xyzx
  102: mad r6.xyz, r0.wwww, r7.xyzx, r6.xyzx                 lerp(ScleraInCol, ScleraOutCol, uvDist) -> ScleraCol
+
+
 
  103: sample_indexable(texture2d)(float,float,float,float) r7.xyz, v2.xyxx, t1.xyzw, s0   Sample S_EyeScleraBaseColor using rawUV 
                                                             -> ScleraBaseCol
@@ -211,6 +215,7 @@ ps_5_0
  134: rsq r0.w, r0.w
  135: mul r8.xyz, r0.wwww, r8.xyzx                          BiasDir = normalize(BiasDir)
 
+
  136: sample_b(texture2d)(float,float,float,float) r9.xyz, v2.xyxx, t3.xyzw, s2, cb0[142].y     Sample EyeMidPlaneDisplacement_Example
                                                             -> EyeMidPlaneDisp_Cur
  137: sample_b(texture2d)(float,float,float,float) r0.w, cb3[19].xyxx, t3.yzwx, s2, cb0[142].y  cUV=[0.665, 0.5] -> Setup by C++
@@ -231,9 +236,11 @@ ps_5_0
  146: dp3 r8.x, r7.yzxy, r2.xyzx                            dot(NewTanWS.yzx, PlaneNorm) -> ToP
 
  147: mul r9.xyz, r0.yzxy, r7.xyzx                          
- 148: mad r7.xyz, r7.zxyz, r0.zxyz, -r9.xyzx                cross(RawNormWS, NewTanWS) -> BiNewTangentWS
+ 148: mad r7.xyz, r7.zxyz, r0.zxyz, -r9.xyzx                cross(RawNormWS, NewTanWS) -> NewBiTangentWS
 
- 149: dp3 r8.y, r7.xyzx, r2.xyzx                            dot(BiNewTangentWS, PlaneNorm) -> BoP
+ 149: dp3 r8.y, r7.xyzx, r2.xyzx                            dot(NewBiTangentWS, PlaneNorm) -> BoP
+
+
 
  150: mul r2.xy, r8.xyxx, cb3[20].xyxx                      [ToP, BoP] * [-0.1, 0.1]
  151: mul r2.zw, r2.xxxy, r3.xxxx                           [-0.1*ToP, 0.1*BoP] * UV.x -> rawNeoUV.xy -> neoUV.xy
@@ -303,7 +310,7 @@ ps_5_0
  203: lt r2.z, r2.z, l(0)                                   
  204: and r2.z, r2.z, r4.w                                  
  205: and r2.z, r2.z, r2.w                                  dissolveVal = DissolveMix(noise, DissolveAmount=0) -> todo
- 206: discard_nz r2.z                                       clip(dissolveVal - 0.33333);
+ 206: discard_nz r2.z                                       clip(dissolveVal - 0.3333);
 
  207: mov_sat r2.z, cb3[33].w                               baseAo = 0.45
 
