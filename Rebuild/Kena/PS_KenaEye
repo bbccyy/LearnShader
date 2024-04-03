@@ -344,7 +344,7 @@ ps_5_0
  229: ge r3.xy, r0.xyxx, l(0, 0, 0, 0)                      NormWS.xy >= 0 ? -> B
  230: movc r3.xy, r3.xyxx, l(1,1,0,0), l(-1,-1,0,0)         B ? (1,1) : (-1,-1) -> NormWS_XY
  231: mul r2.xy, r2.xyxx, r3.xyxx                           (1 - abs(NormWS.yx)) * NormWS_XY -> ComplementNormWS_YX
- 232: movc r0.xy, r0.zzzz, r2.xyxx, r0.xyxx                 A ? ComplementNormWS_YX : NormWS.xy -> CustomedNormWS_XY
+ 232: movc r0.xy, r0.zzzz, r2.xyxx, r0.xyxx                 A ? ComplementNormWS_YX : NormWS.xy -> CustomedNormWS_XY  
  233: mad o4.yz, r0.xxyx, l(0,0.5,0.5,0), l(0,0.5,0.5,0)    CustomData.yz = CustomedNormWS_XY * 0.5 + 0.5
 
  234: mul r0.x, r0.w, l(0.0800)                             F0 = DielectricSpecularToF0(Spec)
