@@ -89,7 +89,7 @@ ps_5_0
   38: mul r0.xyz, r0.wwww, r0.xyzx                          half3 nDirWS = normalize(mul(nTS, tbn));
 
 //Emissive
-  39: lt r0.w, l(0.0000), abs(cb3[13].x)                    -> flase
+  39: lt r0.w, l(0.0000), abs(cb3[13].x)                    -> flase : cb3[13].x=0
   40: ge r1.x, cb3[13].x, l(0)                              -> true
   41: and r1.x, r1.x, cb3[13].z                             -> true & 0.02 -> 0.02
   42: and r0.w, r0.w, r1.x                                  -> false & (~) -> 0 -> emitThresould
@@ -100,19 +100,19 @@ ps_5_0
   47: ge r0.w, r0.w, r1.x                                   -> enableGlowColor = emitThresould >= noise ? true : false
   48: and r1.xzw, r0.wwww, cb3[2].xxyz                      -> enableGlowColor & GlowColor=[0,0.5,1] -> glowCol
   49: and r1.xyz, r1.xzwx, r1.yyyy                          -> glowCol = thresould & glowCol
-  
-  50: mad r0.w, cb3[14].z, cb2[0].y, cb3[14].w              -> cb2[0].y=0(???) * cb3[14].z=1(scale) + cb3[14].w=0(offset) 
+
+  50: mad r0.w, cb3[14].z, cb2[0].y, cb3[14].w        -> emiScale = cb2[0].y=0(GlowAmount) * cb3[14].z=1(scale) + cb3[14].w=0(offset) 
   51: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t4.xyzw, s3, cb0[142].y     Sample kena_cloth_EMISSIVE_MASK
-  52: mul r3.xyz, r3.xyzx, cb2[0].yyyy
-  53: mul r3.xyz, r3.xyzx, cb3[15].xxxx
-  54: mad r3.xyz, r3.xyzx, cb3[4].xyzx, cb3[5].xyzx
-  55: mul r3.xyz, r0.wwww, r3.xyzx
-  56: mul r3.xyz, r3.xyzx, cb3[4].xyzx
-  57: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx
+  52: mul r3.xyz, r3.xyzx, cb2[0].yyyy                      -> emissiveMsk *= GlowAmount
+  53: mul r3.xyz, r3.xyzx, cb3[15].xxxx                     -> emissiveMsk *= cb3[15].x=1(EmissiveIntensity)
+  54: mad r3.xyz, r3.xyzx, cb3[4].xyzx, cb3[5].xyzx         -> emissiveMsk = emissiveMsk * cb3[4].xyz=[0,1,2](EmissiveTint) + [0,0,0]
+  55: mul r3.xyz, r0.wwww, r3.xyzx                          -> emissiveMsk *= emiScale
+  56: mul r3.xyz, r3.xyzx, cb3[4].xyzx                      -> emiCol = emissiveMsk * EmissiveTint
+  57: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx            -> emiCol = glowCol * cb3[14].x=50(DissolveEmissiveAmount) + emiCol
   58: add r3.xyz, -r1.xyzx, cb3[6].xyzx
-  59: mad r1.xyz, cb3[15].yyyy, r3.xyzx, r1.xyzx
+  59: mad r1.xyz, cb3[15].yyyy, r3.xyzx, r1.xyzx      -> emiCol = lerp(emiCol, cb3[6].xyz=0(EmissiveColor), cb3[15].y=0(EmissiveScale))
 
-
+//Mix Albedo with Ink
   60: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y
   61: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y
   62: dp3 r0.w, r4.xyzx, cb3[8].xyzx
