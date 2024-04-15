@@ -42,17 +42,19 @@ ps_5_0
       dcl_temps 10
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
-   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
-   3: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t1.xyzw, s0, cb0[142].y
+   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx                            -> cross(v1, v0) -> tangent X normal 
+   2: mul r0.xyz, r0.xyzx, v1.wwww                                      -> bitangent = cross(tangent, normal) * tangent.w 
+
+   3: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t1.xyzw, s0, cb0[142].y      -> Sampele kena_cloth_NORMAL_v2
    4: mad r1.xy, r1.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
    5: dp2 r0.w, r1.xyxx, r1.xyxx
    6: add r0.w, -r0.w, l(1.0000)
    7: max r0.w, r0.w, l(0)
    8: sqrt r0.w, r0.w
-   9: add r1.z, r0.w, l(1.0000)
-  10: mul r2.xy, v2.xyxx, cb3[12].xxxx
-  11: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t2.zwxy, s1, cb0[142].y
+   9: add r1.z, r0.w, l(1.0000)                 Unpack NormalTS 其中 p_norm.z = z + 1 -> 取值范围 [0, 2]
+
+  10: mul r2.xy, v2.xyxx, cb3[12].xxxx                                  -> uv * cb3[12].x=52.0f 
+  11: sample_b(texture2d)(float,float,float,float) r2.zw, r2.xyxx, t2.zwxy, s1, cb0[142].y      -> Sample skin_n
   12: add r3.xy, r2.zwzz, r2.zwzz
   13: mad r2.zw, r2.zzzw, l(0.0000, 0.0000, 2.0000, 2.0000), l(0.0000, 0.0000, -1.0000, -1.0000)
   14: dp2 r0.w, r2.zwzz, r2.zwzz
@@ -60,16 +62,19 @@ ps_5_0
   16: max r0.w, r0.w, l(0)
   17: sqrt r3.z, r0.w
   18: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0.0000, 0.0000, 1.0000, 0.0000)
+  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0.0000, 0.0000, 1.0000, 0.0000)    -> d_norm = cb3[12].y=0.5 * d_norm + float3(0,0,1)
+                                                                              -> DetailAmount = 0.5
   20: mul r3.xyw, r3.xyxz, l(-2.0000, -2.0000, 0.0000, 2.0000)
   21: mad r3.xyz, r3.zzzz, l(0.0000, 0.0000, 4.0000, 0.0000), -r3.xywx
-  22: mul r3.xyz, r3.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)
-  23: dp3 r0.w, r1.xyzx, r3.xyzx
-  24: mul r3.xyz, r1.zzzz, r3.xyzx
-  25: mad r1.xyz, r1.xyzx, r0.wwww, -r3.xyzx
+  22: mul r3.xyz, r3.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)                -> d_norm *= float3(-1, -1, 1)
+
+  23: dp3 r0.w, r1.xyzx, r3.xyzx                            -> pod = dot(p_norm, d_norm)
+  24: mul r3.xyz, r1.zzzz, r3.xyzx                          -> d_norm *= p_norm.z 
+  25: mad r1.xyz, r1.xyzx, r0.wwww, -r3.xyzx                -> p_norm = p_norm * pod - d_norm -> MixWithDetailNormal
   26: dp3 r0.w, r1.xyzx, r1.xyzx
   27: sqrt r0.w, r0.w
-  28: div r1.xyz, r1.xyzx, r0.wwww
+  28: div r1.xyz, r1.xyzx, r0.wwww                          -> norm = normalize(p_norm)
+
   29: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx
   30: dp3 r0.w, r1.xyzx, r1.xyzx
   31: rsq r0.w, r0.w

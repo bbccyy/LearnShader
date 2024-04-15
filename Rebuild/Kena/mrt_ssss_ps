@@ -45,7 +45,7 @@ ps_5_0
 
 //Normal
    0: mul r0.xyz, v0.yzxy, v1.zxyz
-   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx                            -> cross(v1, v0) -> tangent X normal phhhghjbyzh 
+   1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx                            -> cross(v1, v0) -> tangent X normal 
    2: mul r0.xyz, r0.xyzx, v1.wwww                                      -> bitangent = cross(tangent, normal) * tangent.w 
 
    3: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t1.xyzw, s0, cb0[142].y      -> Sampele kena_head_NORMAL
@@ -68,6 +68,7 @@ ps_5_0
 
   18: add r3.xyz, r3.xyzx, l(-1, -1, -1, 0)                             -> d_norm -= 1 -> 区间xy[-1, 1]  区间z[-1, 0] 
   19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0, 0, 1, 0)                  -> d_norm = 0.6 * d_norm + float3(0,0,1) -> 区间xy[-0.6, 0.6] 区间z[0,0.6] 
+                                                                        -> DetailAmount = 0.6
   20: mul r3.xyw, r3.xyxz, l(-2, -2, 0, 2)                              -> tmp.xyz = d_norm.xyz * float3(-2,-2, 2) 
   21: mad r3.xyz, r3.zzzz, l(0, 0, 4, 0), -r3.xywx                      -> d_norm = d_norm.z * 4 - tmp.xyz 
   22: mul r3.xyz, r3.xyzx, l(-1, -1, 1, 0)                              -> d_norm *= float3(-1, -1, 1) 
