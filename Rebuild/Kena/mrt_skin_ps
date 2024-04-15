@@ -133,7 +133,7 @@ ps_5_0
 
 //Spec
   74: add r0.w, -cb3[16].z, cb3[16].y 
-  75: mad_sat r4.x, r3.z, r0.w, cb3[16].z       -> Spec = saturate(lerp(cb3[16].z=0(SpecularMin), cb3[16].y=2.2(SpecularMax), RawAlbedo.z))
+  75: mad_sat r4.x, r3.z, r0.w, cb3[16].z    -> Specular = saturate(lerp(cb3[16].z=0(SpecularMin), cb3[16].y=2.2(SpecularMax), RawAlbedo.z))
 
 //Roughness
   76: max r0.w, cb2[0].z, l(0)                              -> RoughnessAmount = max(cb2[0].z=0(MinWet), 0)
@@ -175,18 +175,21 @@ ps_5_0
  104:   mov r0.w, l(1)
  105: endif
 
- 
- 106: mul r1.w, r4.x, l(0.0800)
+//Final AO
+ 106: mul r1.w, r4.x, l(0.0800)                             -> F0 = DielectricSpecularToF0(Specular)
+
  107: ftou r5.xy, v3.xyxx
  108: ftou r2.w, cb0[151].x
  109: iadd r3.z, r5.y, r5.x
  110: iadd r2.w, r2.w, r3.z
- 111: and r2.w, r2.w, l(1)
- 112: ieq r3.z, r0.w, l(5)
- 113: lt r5.x, l(0), cb0[155].x
- 114: lt r5.y, l(0), cb0[200].z
- 115: and r5.z, r5.y, r5.x
- 116: ne r5.w, l(0, 0, 0, 0), cb0[155].x
+ 111: and r2.w, r2.w, l(1)                                  -> bool bCheck = CheckerFromSceneColorUV(i.vertex.xy);
+
+ 112: ieq r3.z, r0.w, l(5)                                  -> bool useSSMode5 = SubsurfaceProfileShadingMode == 5;
+ 113: lt r5.x, l(0), cb0[155].x                             -> bool value A -> true 
+ 114: lt r5.y, l(0), cb0[200].z                             -> bool value B -> true
+ 115: and r5.z, r5.y, r5.x                                  -> bool useSeperate = true
+
+ 116: ne r5.w, l(0, 0, 0, 0), cb0[155].x                    -> bool value C -> true
  117: movc r6.xyz, r5.wwww, l(1.0000, 1.0000, 1.0000, 0.0000), r3.xywx
  118: movc r7.xy, r2.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
  119: mul r2.w, r1.w, r7.y
@@ -194,8 +197,19 @@ ps_5_0
  121: movc r2.w, r5.z, r2.w, r1.w
  122: movc r6.xyz, r3.zzzz, r6.xyzx, r3.xywx
  123: movc r1.w, r3.z, r2.w, r1.w
- 124: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx
- 125: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz
+ 124: mad r6.xyz, r6.xyzx, cb0[135].wwww, cb0[135].xyzx           -> BaseCol * _GlobalBaseColScaler + _GlobalBaseColBias
+ 125: mad r7.xzw, r1.wwww, cb0[136].wwww, cb0[136].xxyz           -> SpecCol * _GlobalSpecColScaler + _GlobalSpecColBias
+
+      half2 checkboard = bCheck ? half2(1, 0) : half2(0, 1); 
+      half F0 = DielectricSpecularToF0(Specular);
+      half encodedEmiSpec = F0 * checkboard.y;
+      half3 encodedDiffuse = useSeperate ? checkboard.xxx : dBase;
+      encodedEmiSpec = useSeperate ? encodedEmiSpec : F0;
+      encodedDiffuse = useSSMode5 ? encodedDiffuse : dBase;
+      encodedEmiSpec = useSSMode5 ? encodedEmiSpec : F0;
+      half3 BaseCol = encodedDiffuse * _GlobalBaseColorScaler + _GlobalBaseColorBias;
+      half3 SpecCol = encodedEmiSpec.xxx * _GlobalSpecularColorScaler + _GlobalSpecularColorBias;
+
  126: ne r1.w, l(0, 0, 0, 0), cb0[177].w
  127: mad r8.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
  128: movc r6.xyz, r1.wwww, r8.xyzx, r6.xyzx
@@ -205,10 +219,23 @@ ps_5_0
  132: mad r1.w, r2.z, r8.x, r8.y
  133: mad r1.w, r1.w, r2.z, r8.z
  134: mul r1.w, r2.z, r1.w
- 135: max o3.w, r1.w, r2.z
+ 135: max o3.w, r1.w, r2.z                -> FinalAO
+
+      bool RenderingReflectionCaptureMask = _RenderingReflectionCaptureMask > 0;
+      [branch]
+      if (RenderingReflectionCaptureMask)
+      {
+            EnvBRDFApproxFullyRough(BaseCol, SpecCol);
+      }
+      half FinalAO = AOMultiBounce(Luminance(SpecCol), AO).r;
+
+
  136: mad r6.xyz, r7.xzwx, l(0.4500, 0.4500, 0.4500, 0.0000), r6.xyzx
  137: max r1.xyz, r1.xyzx, l(0, 0, 0, 0)
- 138: lt r1.w, l(0), cb0[139].x
+
+      EnvBRDFApproxFullyRough(BaseCol, SpecCol);
+
+ 138: lt r1.w, l(0), cb0[139].x  
  139: if_nz r1.w
  140:   mul r8.xyzw, v3.yyyy, cb0[45].xyzw
  141:   mad r8.xyzw, v3.xxxx, cb0[44].xyzw, r8.xyzw
@@ -228,18 +255,21 @@ ps_5_0
  155:   movc r7.xzw, r2.zzzz, l(0.0000, 0.0000, 1.0000, 1.0000), l(1.0000, 0.0000, 1.0000, 0.0000)
  156:   movc r1.xyz, r1.wwww, r7.xzwx, r1.xyzx
  157: endif
+
+      half3 ReflectCol = BaseCol * _GlobalRelectionAmount;
+      half3 BaseRTCol = ReflectCol + max(EmitCol.rgb, 0);
  158: mad r1.xyz, cb0[144].yyyy, r6.xyzx, r1.xyzx
  159: and r1.w, r3.z, r5.x
  160: and r1.w, r5.y, r1.w
  161: mul r5.xyz, r7.yyyy, r1.xyzx
  162: movc r1.xyz, r1.wwww, r5.xyzx, r1.xyzx
  163: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 164: or r0.x, r0.w, l(161)
+ 164: or r0.x, r0.w, l(161)               -> half Flag = (half)(SubsurfaceProfileShadingMode | 161);
  165: utof r0.x, r0.x
  166: mul r4.z, r0.x, l(0.0039)
  167: mul o0.xyz, r1.xyzx, cb0[134].yyyy
  168: mov o0.w, l(0)
- 169: mov o1.w, cb1[20].y
+ 169: mov o1.w, cb1[20].y                 -> cb1[20].y=2/3
  170: mov r4.w, l(0)
  171: mov o2.xyzw, r4.wxyz
  172: mov o3.xyz, r3.xywx
