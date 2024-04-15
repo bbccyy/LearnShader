@@ -41,6 +41,7 @@ ps_5_0
       dcl_output o4.xyzw                                                -> Custom 
       dcl_temps 10
 
+//Normal
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx                            -> cross(v1, v0) -> tangent X normal 
    2: mul r0.xyz, r0.xyzx, v1.wwww                                      -> bitangent = cross(tangent, normal) * tangent.w 
@@ -75,29 +76,33 @@ ps_5_0
   27: sqrt r0.w, r0.w
   28: div r1.xyz, r1.xyzx, r0.wwww                          -> norm = normalize(p_norm)
 
-  29: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx
+  29: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx     -> norm = norm * 1 + 0 -> scale and offset 
   30: dp3 r0.w, r1.xyzx, r1.xyzx
   31: rsq r0.w, r0.w
-  32: mul r1.xyz, r0.wwww, r1.xyzx
+  32: mul r1.xyz, r0.wwww, r1.xyzx                          -> nTS = normalize(norm)
+
   33: mul r0.xyz, r0.xyzx, r1.yyyy
   34: mad r0.xyz, r1.xxxx, v0.xyzx, r0.xyzx
   35: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx
   36: dp3 r0.w, r0.xyzx, r0.xyzx
   37: rsq r0.w, r0.w
-  38: mul r0.xyz, r0.wwww, r0.xyzx
-  39: lt r0.w, l(0.0000), abs(cb3[13].x)
-  40: ge r1.x, cb3[13].x, l(0)
-  41: and r1.x, r1.x, cb3[13].z
-  42: and r0.w, r0.w, r1.x
-  43: mul r1.xy, v2.xyxx, cb3[13].wwww
-  44: sample_b(texture2d)(float,float,float,float) r1.x, r1.xyxx, t3.xyzw, s2, cb0[142].y
-  45: add r1.y, r0.w, -r1.x
-  46: lt r1.y, l(0.0000), abs(r1.y)
-  47: ge r0.w, r0.w, r1.x
-  48: and r1.xzw, r0.wwww, cb3[2].xxyz
-  49: and r1.xyz, r1.xzwx, r1.yyyy
-  50: mad r0.w, cb3[14].z, cb2[0].y, cb3[14].w
-  51: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t4.xyzw, s3, cb0[142].y
+  38: mul r0.xyz, r0.wwww, r0.xyzx                          half3 nDirWS = normalize(mul(nTS, tbn));
+
+//Emissive
+  39: lt r0.w, l(0.0000), abs(cb3[13].x)                    -> flase
+  40: ge r1.x, cb3[13].x, l(0)                              -> true
+  41: and r1.x, r1.x, cb3[13].z                             -> true & 0.02 -> 0.02
+  42: and r0.w, r0.w, r1.x                                  -> false & (~) -> 0 -> emitThresould
+  43: mul r1.xy, v2.xyxx, cb3[13].wwww                      -> uv * cb3[13].w=1
+  44: sample_b(texture2d)(float,float,float,float) r1.x, r1.xyxx, t3.xyzw, s2, cb0[142].y       Sample Noise_cloudsmed
+  45: add r1.y, r0.w, -r1.x                                 -> thresould = emitThresould - noise
+  46: lt r1.y, l(0.0000), abs(r1.y)                         -> 0 < abs(thresould) ? true : false
+  47: ge r0.w, r0.w, r1.x                                   -> enableGlowColor = emitThresould >= noise ? true : false
+  48: and r1.xzw, r0.wwww, cb3[2].xxyz                      -> enableGlowColor & GlowColor=[0,0.5,1] -> glowCol
+  49: and r1.xyz, r1.xzwx, r1.yyyy                          -> glowCol = thresould & glowCol
+  
+  50: mad r0.w, cb3[14].z, cb2[0].y, cb3[14].w              -> cb2[0].y=0(???) * cb3[14].z=1(scale) + cb3[14].w=0(offset) 
+  51: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t4.xyzw, s3, cb0[142].y     Sample kena_cloth_EMISSIVE_MASK
   52: mul r3.xyz, r3.xyzx, cb2[0].yyyy
   53: mul r3.xyz, r3.xyzx, cb3[15].xxxx
   54: mad r3.xyz, r3.xyzx, cb3[4].xyzx, cb3[5].xyzx
@@ -106,6 +111,8 @@ ps_5_0
   57: mad r1.xyz, r1.xyzx, cb3[14].xxxx, r3.xyzx
   58: add r3.xyz, -r1.xyzx, cb3[6].xyzx
   59: mad r1.xyz, cb3[15].yyyy, r3.xyzx, r1.xyzx
+
+
   60: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y
   61: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y
   62: dp3 r0.w, r4.xyzx, cb3[8].xyzx
