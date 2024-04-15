@@ -156,23 +156,26 @@ ps_5_0
 //Roughness
   88: mad r4.y, r0.w, cb0[138].y, cb0[138].x                -> R = R * _GlobalRoughnessScaler + _GlobalRoughnessBias
 
+//if Scatter > 0.1
   89: lt r0.w, l(0.1000), r2.y
   90: if_nz r0.w
-  91:   mad r0.w, cb3[17].w, l(255.0000), l(0.5000)
-  92:   ftou r5.y, r0.w
-  93:   mov r5.xzw, l(5, 0, 0, 0)
-  94:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw
-  95:   add r1.w, r2.y, l(-0.1000)
+  91:   mad r0.w, cb3[17].w, l(255.0000), l(0.5000)         -> cb3[17].w=0.0117647(ScatterRadius) * 255 + 0.5 = 3.4999
+  92:   ftou r5.y, r0.w                                     -> 3 -> Row Index for SSProfileTex
+  93:   mov r5.xzw, l(5, 0, 0, 0)                           -> r5.xyzw = [5, 3, 0, 0] -> 5 -> Shading mode id
+  94:   ld_indexable(texture2d)(float,float,float,float) r0.w, r5.xyzw, t0.xyzw     Load SSProfileTex from [5, 64-3, 0] -> averageR
+  95:   add r1.w, r2.y, l(-0.1000) 
   96:   mul_sat r1.w, r1.w, l(10.0000)
   97:   mad r0.w, r0.w, l(2.0000), l(-1.0000)
   98:   mad r0.w, r1.w, r0.w, l(1.0000)
-  99:   mul_sat r4.y, r0.w, r4.y
- 100:   mov r2.x, cb3[17].w
- 101:   mov r0.w, l(5)
+  99:   mul_sat r4.y, r0.w, r4.y                -> half sssR = saturate((saturate((Scatter - 0.1) * 10) * (averageR * 2 - 1) + 1) * R);
+ 100:   mov r2.x, cb3[17].w                                 -> CustomData.x = ScatterRadius
+ 101:   mov r0.w, l(5)                                      -> Shading mode id = 5
  102: else
  103:   mov r2.xy, l(0, 0, 0, 0)
  104:   mov r0.w, l(1)
  105: endif
+
+ 
  106: mul r1.w, r4.x, l(0.0800)
  107: ftou r5.xy, v3.xyxx
  108: ftou r2.w, cb0[151].x
