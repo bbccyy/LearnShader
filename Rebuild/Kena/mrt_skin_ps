@@ -63,7 +63,7 @@ ps_5_0
   16: max r0.w, r0.w, l(0)
   17: sqrt r3.z, r0.w
   18: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0.0000, 0.0000, 1.0000, 0.0000)    -> d_norm = cb3[12].y=0.5 * d_norm + float3(0,0,1)
+  19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0, 0, 1.0000, 0)             -> d_norm = cb3[12].y=0.5(DetailAmount) * d_norm + float3(0,0,1)
                                                                               -> DetailAmount = 0.5
   20: mul r3.xyw, r3.xyxz, l(-2.0000, -2.0000, 0.0000, 2.0000)
   21: mad r3.xyz, r3.zzzz, l(0.0000, 0.0000, 4.0000, 0.0000), -r3.xywx
@@ -112,36 +112,50 @@ ps_5_0
   58: add r3.xyz, -r1.xyzx, cb3[6].xyzx
   59: mad r1.xyz, cb3[15].yyyy, r3.xyzx, r1.xyzx      -> emiCol = lerp(emiCol, cb3[6].xyz=0(EmissiveColor), cb3[15].y=0(EmissiveScale))
 
-//Mix Albedo with Ink
-  60: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y
-  61: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y
-  62: dp3 r0.w, r4.xyzx, cb3[8].xyzx
-  63: add r4.xyz, r0.wwww, cb3[10].xyzx
+//Mix Albedo with Dirt
+  60: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s4, cb0[142].y     Sample kena_cloth_BASECOLOR
+                                                            -> RawAlbedo.xyz
+  61: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y     Sample Kena_Dirt_MASKS
+  62: dp3 r0.w, r4.xyzx, cb3[8].xyzx                        -> DirtChan = dot(Dirt.rgb, cb3[8].xyz=[0,1,0](DirtChannel))
+  63: add r4.xyz, r0.wwww, cb3[10].xyzx                     -> DirCol = cb3[10].xyz=[0.100694, 0.061721, 0.038809](DirtColor) * DirtChan
   64: add r4.xyz, r4.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  65: mad r4.xyz, cb2[0].wwww, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  66: mul r3.xyw, r3.xyxz, r4.xyxz
-  67: sample_b(texture2d)(float,float,float,float) r2.zw, v2.xyxx, t7.zwxy, s6, cb0[142].y
-  68: add r0.w, r2.z, cb3[15].z
-  69: max r0.w, r0.w, cb3[15].w
-  70: min r0.w, r0.w, l(1.0000)
-  71: mul r3.xyw, r0.wwww, r3.xyxw
-  72: mul r3.xyw, r3.xyxw, cb3[16].xxxx
-  73: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz
-  74: add r0.w, -cb3[16].z, cb3[16].y
-  75: mad_sat r4.x, r3.z, r0.w, cb3[16].z
-  76: max r0.w, cb2[0].z, l(0)
-  77: min r0.w, r0.w, cb3[16].w
-  78: add r0.w, r0.w, l(-1.0000)
-  79: mul r0.w, abs(r0.w), cb3[17].x
-  80: mul r0.w, r0.w, r2.w
-  81: sample_b(texture2d)(float,float,float,float) r1.w, r2.xyxx, t8.xyzw, s7, cb0[142].y
-  82: mad r0.w, r1.w, cb3[12].y, r0.w
-  83: add_sat r0.w, r0.w, l(-0.1000)
-  84: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t9.xzwy, s8, cb0[142].y
-  85: add r2.x, -cb3[17].z, cb3[17].y
-  86: mad_sat r2.y, r1.w, r2.x, cb3[17].z
-  87: mov_sat r2.z, r2.z
-  88: mad r4.y, r0.w, cb0[138].y, cb0[138].x
+  65: mad r4.xyz, cb2[0].wwww, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)     -> DirCol = lerp(1, DirCol, cb2[0].w=0(DirtAmount))
+  66: mul r3.xyw, r3.xyxz, r4.xyxz                          -> Albedo = RawAlbedo * DirCol
+
+//Apply direct AO to Albedo
+  67: sample_b(texture2d)(float,float,float,float) r2.zw, v2.xyxx, t7.zwxy, s6, cb0[142].y      Sample kena_cloth_AO_R_M -> AO_R
+  68: add r0.w, r2.z, cb3[15].z                             -> DirectAO = AO * cb3[15].z=0.4(AO_Ammount)
+  69: max r0.w, r0.w, cb3[15].w                             -> DirectAO = max(DirectAO, cb3[15].w=0(AO_Min))
+  70: min r0.w, r0.w, l(1.0000)                             -> DirectAO = min(DirectAO, 1)
+  71: mul r3.xyw, r0.wwww, r3.xyxw                          -> Albedo *= DirectAO
+  72: mul r3.xyw, r3.xyxw, cb3[16].xxxx                     -> Albedo *= cb3[16].x=1.50(BaseColorBrightness)
+  73: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz                 -> Albedo = saturate(Albedo * cb3[11].xyz=[0.99,1.00259,1.1](BaseColortint))
+
+//Spec
+  74: add r0.w, -cb3[16].z, cb3[16].y 
+  75: mad_sat r4.x, r3.z, r0.w, cb3[16].z       -> Spec = saturate(lerp(cb3[16].z=0(SpecularMin), cb3[16].y=2.2(SpecularMax), RawAlbedo.z))
+
+//Roughness
+  76: max r0.w, cb2[0].z, l(0)                              -> RoughnessAmount = max(cb2[0].z=0(MinWet), 0)
+  77: min r0.w, r0.w, cb3[16].w                             -> RoughnessAmount = min(RoughnessAmount, cb3[16].w]=0.5(MaxWet))
+  78: add r0.w, r0.w, l(-1.0000)                            -> RoughnessAmount -= 1
+  79: mul r0.w, abs(r0.w), cb3[17].x                        -> RoughnessAmount = abs(RoughnessAmount) * cb3[17].x=1(Roughness)
+  80: mul r0.w, r0.w, r2.w                                  -> R = R * RoughnessAmount
+  81: sample_b(texture2d)(float,float,float,float) r1.w, r2.xyxx, t8.xyzw, s7, cb0[142].y             Sample skin_h
+  82: mad r0.w, r1.w, cb3[12].y, r0.w                       -> R = skin_h * cb3[12].y=0.5(DetailAmount) + R
+  83: add_sat r0.w, r0.w, l(-0.1000)                        -> R = saturate(R - 0.1)
+
+//Skin Scatter
+  84: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t9.xzwy, s8, cb0[142].y             Sample kena_cloth_SSS_MASK
+  85: add r2.x, -cb3[17].z, cb3[17].y 
+  86: mad_sat r2.y, r1.w, r2.x, cb3[17].z       -> Scatter = saturate(lerp(cb3[17].z=0.5(ScatterMin), cb3[17].y=1(ScatterMax), sssMsk))
+
+//AO
+  87: mov_sat r2.z, r2.z                                    -> AO = saturate(AO)
+
+//Roughness
+  88: mad r4.y, r0.w, cb0[138].y, cb0[138].x                -> R = R * _GlobalRoughnessScaler + _GlobalRoughnessBias
+
   89: lt r0.w, l(0.1000), r2.y
   90: if_nz r0.w
   91:   mad r0.w, cb3[17].w, l(255.0000), l(0.5000)

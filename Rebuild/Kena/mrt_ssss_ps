@@ -133,7 +133,7 @@ ps_5_0
 
 //Spec
   72: add r0.w, -cb3[16].y, cb3[16].x                                   -> cb3[16].xy=[1.2, 0.01] -> 1.2 - 0.01 
-  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                               -> blue = saturate(raw_albedo.z * 1.19 + 0.01)  -> lerp(SpecMin, SpecMax, albedo.z)
+  73: mad_sat r4.x, r3.z, r0.w, cb3[16].y                     -> blue = saturate(raw_albedo.z * 1.19 + 0.01)  -> lerp(SpecMin, SpecMax, albedo.z)
 
 //Roughness
   74: max r0.w, cb2[0].z, l(0)                                          -> max(cb2[0].z=0, 0) -> 0 
@@ -147,7 +147,7 @@ ps_5_0
   81: mad r5.xzw, v3.xxxx, cb1[0].xxyz, r5.xxzw
   82: mad r5.xzw, v4.xxxx, cb1[2].xxyz, r5.xxzw
   83: add r5.xzw, r5.xxzw, cb1[3].xxyz
-  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz                                 -> 先假设是模型空间向量 -> 方法：先localToWorld，在减去世界坐标中的偏移，保留旋转和缩放 
+  84: add r5.xzw, r5.xxzw, -cb2[4].xxyz                           -> 先假设是模型空间向量 -> 方法：先localToWorld，在减去世界坐标中的偏移，保留旋转和缩放 
 
   85: dp3 r3.z, r5.xzwx, r5.xzwx 
   86: sqrt r3.z, r3.z                                                   -> [向量长度] 
