@@ -17,27 +17,28 @@ ps_5_0
       dcl_sampler s6, mode_default
       dcl_sampler s7, mode_default
       dcl_sampler s8, mode_default
-      
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
-      dcl_resource_texture2d (float,float,float,float) t5
-      dcl_resource_texture2d (float,float,float,float) t6
-      dcl_resource_texture2d (float,float,float,float) t7
-      dcl_resource_texture2d (float,float,float,float) t8
-      dcl_resource_texture2d (float,float,float,float) t9
-      dcl_input_ps linear centroid v0.xyz
-      dcl_input_ps linear centroid v1.xyzw
-      dcl_input_ps linear v2.xy
-      dcl_input_ps_siv linear noperspective v3.xyz, position
 
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+      dcl_resource_texture2d (float,float,float,float) t0               -> SSProfileTex
+      dcl_resource_texture2d (float,float,float,float) t1               -> kena_cloth_NORMAL_v2
+      dcl_resource_texture2d (float,float,float,float) t2               -> skin_n
+      dcl_resource_texture2d (float,float,float,float) t3               -> Noise_cloudsmed
+      dcl_resource_texture2d (float,float,float,float) t4               -> kena_cloth_EMISSIVE_MASK
+      dcl_resource_texture2d (float,float,float,float) t5               -> kena_cloth_BASECOLOR : Albedo
+      dcl_resource_texture2d (float,float,float,float) t6               -> Kena_Dirt_MASKS
+      dcl_resource_texture2d (float,float,float,float) t7               -> kena_cloth_AO_R_M
+      dcl_resource_texture2d (float,float,float,float) t8               -> skin_h : skin noise
+      dcl_resource_texture2d (float,float,float,float) t9               -> kena_cloth_SSS_MASK
+
+      dcl_input_ps linear centroid v0.xyz                               -> normal -> tangent
+      dcl_input_ps linear centroid v1.xyzw                              -> tangent -> normal + sign
+      dcl_input_ps linear v2.xy                                         -> uv 
+      dcl_input_ps_siv linear noperspective v3.xyz, position            -> SV Position 
+
+      dcl_output o0.xyzw                                                -> Emission 
+      dcl_output o1.xyzw                                                -> World_Normal 
+      dcl_output o2.xyzw                                                -> Comp_M_D_R_F 
+      dcl_output o3.xyzw                                                -> Albedo 
+      dcl_output o4.xyzw                                                -> Custom 
       dcl_temps 10
 
    0: mul r0.xyz, v0.yzxy, v1.zxyz
