@@ -353,7 +353,7 @@ ps_5_0
  236: ftou r1.w, cb0[151].x
  237: iadd r0.y, r0.z, r0.y
  238: iadd r0.y, r1.w, r0.y
- 239: and r0.y, r0.y, l(1)                                  bool bCheck = CheckerFromSceneColorUV(i.vertex.xy);
+ 239: and r0.y, r0.y, l(1)                                  bool bCheck = CheckerFromSceneColorUV(i.vertex.xy);   
 
  240: lt r0.z, l(0), cb0[155].x                             useSSMode5 -> true 
  241: lt r1.w, l(0), cb0[200].z                             useSeperate -> true
