@@ -64,10 +64,10 @@ ps_5_0
   17: sqrt r3.z, r0.w
   18: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
   19: mad r3.xyz, cb3[12].yyyy, r3.xyzx, l(0, 0, 1.0000, 0)             -> d_norm = cb3[12].y=0.5(DetailAmount) * d_norm + float3(0,0,1)
-                                                                              -> DetailAmount = 0.5
+                                                                        -> DetailAmount = 0.5
   20: mul r3.xyw, r3.xyxz, l(-2.0000, -2.0000, 0.0000, 2.0000)
   21: mad r3.xyz, r3.zzzz, l(0.0000, 0.0000, 4.0000, 0.0000), -r3.xywx
-  22: mul r3.xyz, r3.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)                -> d_norm *= float3(-1, -1, 1)
+  22: mul r3.xyz, r3.xyzx, l(-1.0000, -1.0000, 1.0000, 0.0000)          -> d_norm *= float3(-1, -1, 1)
 
   23: dp3 r0.w, r1.xyzx, r3.xyzx                            -> pod = dot(p_norm, d_norm)
   24: mul r3.xyz, r1.zzzz, r3.xyzx                          -> d_norm *= p_norm.z 
@@ -117,8 +117,8 @@ ps_5_0
                                                             -> RawAlbedo.xyz
   61: sample_b(texture2d)(float,float,float,float) r4.xyz, v2.xyxx, t6.xyzw, s5, cb0[142].y     Sample Kena_Dirt_MASKS
   62: dp3 r0.w, r4.xyzx, cb3[8].xyzx                        -> DirtChan = dot(Dirt.rgb, cb3[8].xyz=[0,1,0](DirtChannel))
-  63: add r4.xyz, r0.wwww, cb3[10].xyzx                     -> DirCol = cb3[10].xyz=[0.100694, 0.061721, 0.038809](DirtColor) * DirtChan
-  64: add r4.xyz, r4.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
+  63: add r4.xyz, r0.wwww, cb3[10].xyzx                     -> DirCol = cb3[10].xyz=[0.100694, 0.061721, 0.038809](DirtColor) + DirtChan
+  64: add r4.xyz, r4.xyzx, l(-1, -1, -1, 0)
   65: mad r4.xyz, cb2[0].wwww, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)     -> DirCol = lerp(1, DirCol, cb2[0].w=0(DirtAmount))
   66: mul r3.xyw, r3.xyxz, r4.xyxz                          -> Albedo = RawAlbedo * DirCol
 
@@ -132,7 +132,7 @@ ps_5_0
   73: mul_sat r3.xyw, r3.xyxw, cb3[11].xyxz                 -> Albedo = saturate(Albedo * cb3[11].xyz=[0.99,1.00259,1.1](BaseColortint))
 
 //Spec
-  74: add r0.w, -cb3[16].z, cb3[16].y 
+  74: add r0.w, -cb3[16].z, cb3[16].y
   75: mad_sat r4.x, r3.z, r0.w, cb3[16].z    -> Specular = saturate(lerp(cb3[16].z=0(SpecularMin), cb3[16].y=2.2(SpecularMax), RawAlbedo.z))
 
 //Roughness
