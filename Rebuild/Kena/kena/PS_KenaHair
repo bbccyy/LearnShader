@@ -23,8 +23,8 @@ ps_5_0
       dcl_input_ps linear centroid v0.xyz                               Tangent
       dcl_input_ps linear centroid v1.xyzw                              Normal + Sign
       dcl_input_ps linear v2.xy                                         UV
-      dcl_input_ps linear v3.xy
-      dcl_input_ps linear v4.x
+      dcl_input_ps linear v3.xy                                         PosOS.xy
+      dcl_input_ps linear v4.x                                          PosOS.z
       dcl_input_ps_siv linear noperspective centroid v5.xyzw, position
       dcl_input_ps_sgv nointerpolation v6.x, isfrontface
 

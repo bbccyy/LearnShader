@@ -17,69 +17,83 @@ ps_5_0
       dcl_sampler s5, mode_default
       dcl_sampler s6, mode_default
       dcl_sampler s7, mode_default
-      dcl_resource_texture2d (float,float,float,float) t0
-      dcl_resource_texture2d (float,float,float,float) t1
-      dcl_resource_texture2d (float,float,float,float) t2
-      dcl_resource_texture2d (float,float,float,float) t3
-      dcl_resource_texture2d (float,float,float,float) t4
-      dcl_resource_texture2d (float,float,float,float) t5
-      dcl_resource_texture2d (float,float,float,float) t6
-      dcl_resource_texture2d (float,float,float,float) t7
-      dcl_input_ps linear centroid v0.xyz
-      dcl_input_ps linear centroid v1.xyzw
-      dcl_input_ps linear v2.xy
-      dcl_input_ps linear v3.xy
-      dcl_input_ps linear v4.x
+
+      dcl_resource_texture2d (float,float,float,float) t0                     kena_cloth_NORMAL
+      dcl_resource_texture2d (float,float,float,float) t1                     T_FabricDetailNormal
+      dcl_resource_texture2d (float,float,float,float) t2                     kena_cloth_sprint_EMISSIVE
+      dcl_resource_texture2d (float,float,float,float) t3                     kena_cloth_BASECOLOR
+      dcl_resource_texture2d (float,float,float,float) t4                     Kena_Dirt_MASKS
+      dcl_resource_texture2d (float,float,float,float) t5                     T_Ice_Noise
+      dcl_resource_texture2d (float,float,float,float) t6                     kena_cloth_AO_R_M
+      dcl_resource_texture2d (float,float,float,float) t7                     kena_cloth_MASK
+
+      dcl_input_ps linear centroid v0.xyz                               -> normal -> tangent
+      dcl_input_ps linear centroid v1.xyzw                              -> tangent -> normal + sign
+      dcl_input_ps linear v2.xy                                         -> uv 
+      dcl_input_ps linear v3.xy                                         -> PosOS.xy
+      dcl_input_ps linear v4.x                                          -> PosOS.z
       dcl_input_ps_siv linear noperspective v5.xyz, position
       dcl_input_ps_sgv nointerpolation v6.x, isfrontface
+
       dcl_output o0.xyzw
       dcl_output o1.xyzw
       dcl_output o2.xyzw
       dcl_output o3.xyzw
       dcl_output o4.xyzw
       dcl_temps 7
+
+//Normal
    0: mul r0.xyz, v0.yzxy, v1.zxyz
    1: mad r0.xyz, v1.yzxy, v0.zxyz, -r0.xyzx
-   2: mul r0.xyz, r0.xyzx, v1.wwww
-   3: mul r0.w, cb0[140].w, cb1[4].w
+   2: mul r0.xyz, r0.xyzx, v1.wwww                    BitangentWS = cross(TangentWS, NormalWS) * sign
+
+   3: mul r0.w, cb0[140].w, cb1[4].w                  flag -> dont flip norm -> true -> 1
    4: movc r1.x, v6.x, l(1.0000), l(-1.0000)
-   5: mul r0.w, r0.w, r1.x
-   6: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t0.xyzw, s0, cb0[142].y
+   5: mul r0.w, r0.w, r1.x                            flip boolean -> signed_dir
+
+   6: sample_b(texture2d)(float,float,float,float) r1.xy, v2.xyxx, t0.xyzw, s0, cb0[142].y                  Sample kena_cloth_NORMAL
    7: mad r1.xy, r1.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
    8: dp2 r1.w, r1.xyxx, r1.xyxx
    9: add r1.w, -r1.w, l(1.0000)
   10: max r1.w, r1.w, l(0)
-  11: sqrt r1.z, r1.w
-  12: mul r2.xyz, r1.xyzx, cb4[13].xxxx
-  13: mad r1.xyz, r2.xyzx, l(-0.5000, -0.5000, 0.0000, 0.0000), r1.xyzx
-  14: add r2.x, r1.z, l(1.0000)
-  15: mul r2.yz, v2.xxyx, cb4[13].yyyy
-  16: sample_b(texture2d)(float,float,float,float) r2.yz, r2.yzyy, t1.zxyw, s1, cb0[142].y
+  11: sqrt r1.z, r1.w                                                   Unpack NormalTS
+
+  12: mul r2.xyz, r1.xyzx, cb4[13].xxxx                                 cb4[13].x=1(BaseNormalPower)
+  13: mad r1.xyz, r2.xyzx, l(-0.5000, -0.5000, 0, 0), r1.xyzx           NormalTS = (NormalTS * BaseNormalPower).xyz * (-0.5,-0.5,0) + NormalTS.xyz
+  14: add r2.x, r1.z, l(1.0000)                                         //zTS = NormalTS.z + 1
+
+  15: mul r2.yz, v2.xxyx, cb4[13].yyyy                                  uv * cb4[13].y=38(DetailScale)
+  16: sample_b(texture2d)(float,float,float,float) r2.yz, r2.yzyy, t1.zxyw, s1, cb0[142].y                  Sample T_FabricDetailNormal -> rawDetailNormXY
   17: add r3.xy, r2.yzyy, r2.yzyy
   18: mad r2.yz, r2.yyzy, l(0.0000, 2.0000, 2.0000, 0.0000), l(0.0000, -1.0000, -1.0000, 0.0000)
   19: dp2 r2.y, r2.yzyy, r2.yzyy
   20: add r2.y, -r2.y, l(1.0000)
   21: max r2.y, r2.y, l(0)
-  22: sqrt r3.z, r2.y
-  23: add r2.yzw, r3.xxyz, l(0.0000, -1.0000, -1.0000, -1.0000)
-  24: mad r2.yzw, cb4[13].zzzz, r2.yyzw, l(0.0000, 0.0000, 0.0000, 1.0000)
-  25: add r1.w, r1.z, l(1.0000)
-  26: mul r2.yzw, r2.yyzw, l(0.0000, -1.0000, -1.0000, 1.0000)
-  27: dp3 r1.z, r1.xywx, r2.yzwy
-  28: mul r2.xyz, r2.yzwy, r2.xxxx
-  29: mad r1.xyz, r1.xywx, r1.zzzz, -r2.xyzx
-  30: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx
+  22: sqrt r3.z, r2.y                                                   nDetailTS = UE_UnpackNormalNoNormalize_Fix(float4(rawDetailNormXY.xy,0,0));
+                                                                        nDetailTS.xy = rawDetailNormXY.xy + rawDetailNormXY.xy;
+
+  23: add r2.yzw, r3.xxyz, l(0.0000, -1.0000, -1.0000, -1.0000)         nDetailTS -= 1;
+  24: mad r2.yzw, cb4[13].zzzz, r2.yyzw, l(0, 0, 0, 1.0000)             nDetailTS = nDetailTS * cb4[13].z=0.5(DetailAmount) + half3(0, 0, 1);
+  25: add r1.w, r1.z, l(1.0000)                                         NormalTS.z += 1;
+  26: mul r2.yzw, r2.yyzw, l(0.0000, -1.0000, -1.0000, 1.0000)          nDetailTS *= half3(-1, -1, 1);
+  27: dp3 r1.z, r1.xywx, r2.yzwy                                        //dot(NormalTS, nDetailTS)
+  28: mul r2.xyz, r2.yzwy, r2.xxxx                                      //nDetailTS * NormalTS.z
+  29: mad r1.xyz, r1.xywx, r1.zzzz, -r2.xyzx                            half3 nTS = NormalTS * dot(NormalTS, nDetailTS) - nDetailTS * NormalTS.z;
+  30: mad r1.xyz, r1.xyzx, cb0[137].wwww, cb0[137].xyzx                 nTS = nTS * _GlobalNormalScaler + _GlobalNormalBias;
   31: dp3 r1.w, r1.xyzx, r1.xyzx
   32: rsq r1.w, r1.w
-  33: mul r1.xyz, r1.wwww, r1.xyzx
+  33: mul r1.xyz, r1.wwww, r1.xyzx                                      nTS = normalize(nTS);
+
   34: mul r0.xyz, r0.xyzx, r1.yyyy
   35: mad r0.xyz, r1.xxxx, v0.xyzx, r0.xyzx
   36: mad r0.xyz, r1.zzzz, v1.xyzx, r0.xyzx
   37: dp3 r1.x, r0.xyzx, r0.xyzx
   38: rsq r1.x, r1.x
   39: mul r0.xyz, r0.xyzx, r1.xxxx
-  40: mul r0.xyz, r0.wwww, r0.xyzx
-  41: sample_b(texture2d)(float,float,float,float) r1.xyz, v2.xyxx, t2.xyzw, s2, cb0[142].y
+  40: mul r0.xyz, r0.wwww, r0.xyzx                                      half3 nDirWS = normalize(mul(nTS, tbn)) * signed_dir;
+
+//Emissive
+  41: sample_b(texture2d)(float,float,float,float) r1.xyz, v2.xyxx, t2.xyzw, s2, cb0[142].y           Sample kena_cloth_sprint_EMISSIVE
   42: mul r1.xyz, r1.xyzx, cb2[0].xxxx
   43: mul r1.xyz, r1.xyzx, cb4[13].wwww
   44: mad r1.xyz, r1.xyzx, cb4[2].xyzx, cb4[3].xyzx
