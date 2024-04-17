@@ -35,11 +35,11 @@ ps_5_0
       dcl_input_ps_siv linear noperspective v5.xyz, position
       dcl_input_ps_sgv nointerpolation v6.x, isfrontface
 
-      dcl_output o0.xyzw
-      dcl_output o1.xyzw
-      dcl_output o2.xyzw
-      dcl_output o3.xyzw
-      dcl_output o4.xyzw
+      dcl_output o0.xyzw                                                -> Emission 
+      dcl_output o1.xyzw                                                -> World_Normal 
+      dcl_output o2.xyzw                                                -> Comp_M_D_R_F 
+      dcl_output o3.xyzw                                                -> Albedo 
+      dcl_output o4.xyzw                                                -> Custom 
       dcl_temps 7
 
 //Normal
@@ -98,7 +98,7 @@ ps_5_0
   43: mul r1.xyz, r1.xyzx, cb4[13].wwww                                 EmitCol *= cb4[13].w=1(???)
   44: mad r1.xyz, r1.xyzx, cb4[2].xyzx, cb4[3].xyzx   EmitCol = EmitCol * cb4[2].xyz=[0,1,2](EmissiveTint) + cb4[3].xyz=[0](EmissiveAdd)
   45: add r2.xyz, -r1.xyzx, cb4[4].xyzx   
-  46: mad r1.xyz, cb4[14].yyyy, r2.xyzx, r1.xyzx                  lerp(EmitCol, cb4[4].xyz=[0](EmissiveColor), cb4[14].y=0(Desaturate))
+  46: mad r1.xyz, cb4[14].yyyy, r2.xyzx, r1.xyzx      EmitCol = lerp(EmitCol, cb4[4].xyz=[0](EmissiveColor), cb4[14].y=0(Desaturate))
 
   47: sample_b(texture2d)(float,float,float,float) r2.xyz, v2.xyxx, t3.xyzw, s3, cb0[142].y           Sample kena_cloth_BASECOLOR
                                                                         RawAlbedo.xyz
@@ -115,19 +115,20 @@ ps_5_0
   57: ge r2.w, cb4[15].x, l(0.5000)                         dirtSwitch.z = DirtColor.z >= 0.5 ? true : false
   58: movc r5.z, r2.w, r4.z, r3.z                           noise.z = dirtSwitch.z ? IceNoise1.z : IceNoise2.z
   59: mul r3.xyz, r1.wwww, r5.xyzx                          dirtCol = noise.xyz * (1 - DirtChan)
-  60: mad r2.xyz, cb3[0].wwww, r3.xyzx, r2.xyzx             RawAlbedo = cb3[0].w=0(DirtAmount) * dirtCol + RawAlbedo
+  60: mad r2.xyz, cb3[0].wwww, r3.xyzx, r2.xyzx             Albedo = cb3[0].w=0(DirtAmount) * dirtCol + RawAlbedo
   61: add r3.xyz, r0.wwww, r5.xyzx                          
   62: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0)  revertDirtCol = 1 - noise * DirtChan
   63: mad r3.xyz, cb3[0].wwww, r3.xyzx, l(1,1,1,0)          revertDirtCol = DirtAmount * revertDirtCol + 1
-  64: mul r2.xyz, r2.xyzx, r3.xyzx                          RawAlbedo *= revertDirtCol  (将DirtCol部分提亮)
+  64: mul r2.xyz, r2.xyzx, r3.xyzx                          Albedo = Albedo * revertDirtCol  (将DirtCol部分提亮)
 
 
   65: max r0.w, cb3[0].z, l(0)                              wetA = max(cb3[0].z=0(rawWetA), 0)
   66: min r0.w, r0.w, cb4[15].y                             wetA = min(wet, cb4[15].y=0.75(MaxWet))
-  67: add r1.w, r0.w, l(-1.0000)                            wetA - 1
-  68: max r3.xy, cb3[1].xyxx, l(0.00001, 0.00001, 0, 0)     wetB.xy = max(cb3[1].xy=0(rawWetB), 0.00001)
-  69: min r2.w, r3.x, cb4[15].y                             wetB.x = min(wetB.x, MaxWet)
-  70: add r2.w, r2.w, l(-1.0000)                            wetB.x - 1
+  67: add r1.w, r0.w, l(-1.0000)                            wetC = wetA - 1
+  68: max r3.xy, cb3[1].xyxx, l(0.00001, 0.00001, 0, 0)     wetB        = max(cb3[1].xy=0(rawWetB), 0.001) -> r3.x
+                                                            WetDistance = max(cb3[1].xy=0(rawWetB), 0.001) -> r3.y
+  69: min r2.w, r3.x, cb4[15].y                             wetB = min(wetB.x, MaxWet)
+  70: add r2.w, r2.w, l(-1.0000)                            wetB -= 1
 
   71: mul r3.xzw, v3.yyyy, cb1[1].xxyz
   72: mad r3.xzw, v3.xxxx, cb1[0].xxyz, r3.xxzw
@@ -138,50 +139,66 @@ ps_5_0
   76: dp3 r3.x, r3.xzwx, r3.xzwx
   77: sqrt r3.x, r3.x                                       ViewDistance = length(-V)
 
-  78: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), r3.y     //todo...
-  79: mad r3.x, -r3.x, r3.y, l(1.0000)
-  80: mul_sat r3.x, r3.x, l(10.0000)
-  81: add r2.w, abs(r2.w), -r3.x
-  82: add r2.w, r2.w, l(1.0000)
-  83: min r2.w, r2.w, l(1.0000)
-  84: mul r1.w, abs(r1.w), r2.w
-  85: max r3.x, r1.w, l(0.3000)
-  86: min r3.x, r3.x, l(1.0000)
-  87: mul r2.xyz, r2.xyzx, r3.xxxx
-  88: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t6.xyzw, s6, cb0[142].y
-  89: add r3.w, r3.x, cb4[15].z
-  90: max r3.w, r3.w, cb4[15].w
-  91: min r3.w, r3.w, l(1.0000)
-  92: mul_sat r2.xyz, r2.xyzx, r3.wwww
-  93: mul r3.y, r3.y, cb4[16].y
-  94: add r0.w, r0.w, -r2.w
-  95: add r0.w, r0.w, l(1.0000)
-  96: mad_sat r0.w, r3.z, cb4[16].x, -r0.w
-  97: mul_sat r1.w, r1.w, r3.y
-  98: mov_sat r3.x, r3.x
-  99: mad o2.z, r1.w, cb0[138].y, cb0[138].x
- 100: mov_sat r3.yzw, cb4[12].xxyz
- 101: sqrt o4.xyz, r3.yzwy
- 102: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t7.yzwx, s7, cb0[142].y
- 103: add r2.w, cb4[16].w, -cb4[17].x
- 104: mad_sat o4.w, r1.w, r2.w, cb4[17].x
- 105: add r3.yzw, r2.xxyz, l(0.0000, -0.0400, -0.0400, -0.0400)
- 106: mad r3.yzw, r0.wwww, r3.yyzw, l(0.0000, 0.0400, 0.0400, 0.0400)
- 107: mad r4.xyz, -r2.xyzx, r0.wwww, r2.xyzx
- 108: mad r4.xyz, r4.xyzx, cb0[135].wwww, cb0[135].xyzx
- 109: mad r3.yzw, r3.yyzw, cb0[136].wwww, cb0[136].xxyz
- 110: ne r1.w, l(0, 0, 0, 0), cb0[177].w
+  78: div r3.y, l(1.0000, 1.0000, 1.0000, 1.0000), r3.y 
+  79: mad r3.x, -r3.x, r3.y, l(1.0000)                      //1 - ViewDistance / WetDistance
+  80: mul_sat r3.x, r3.x, l(10.0000)                        DistFactor = saturate((1 - ViewDistance / WetDistance) * 10)
+  81: add r2.w, abs(r2.w), -r3.x                            
+  82: add r2.w, r2.w, l(1.0000)                             RoughnessIntense = abs(wetB) - DistFactor + 1
+  83: min r2.w, r2.w, l(1.0000)                             RoughnessIntense = min(RoughnessIntense, 1)
+  84: mul r1.w, abs(r1.w), r2.w                             wetC = abs(wetC) * RoughnessIntense
+  85: max r3.x, r1.w, l(0.3000)                             
+  86: min r3.x, r3.x, l(1.0000)                             wetD = clamp(wetC, 0.3, 1)
+  87: mul r2.xyz, r2.xyzx, r3.xxxx                          Albedo *= wetD
+
+//Apply AO to Albedo
+  88: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t6.xyzw, s6, cb0[142].y           Sample kena_cloth_AO_R_M -> AO_R_M
+  89: add r3.w, r3.x, cb4[15].z                             DirectAO = AO * cb4[15].z=0(AO_Ammount)
+  90: max r3.w, r3.w, cb4[15].w                             DirectAO = max(DirectAO, cb4[15].w=0(AO_Min))
+  91: min r3.w, r3.w, l(1.0000)                             DirectAO = min(DirectAO, 1)
+  92: mul_sat r2.xyz, r2.xyzx, r3.wwww                      Albedo = saturate(Albedo * DirectAO)
+//R
+  93: mul r3.y, r3.y, cb4[16].y                             R = R * cb4[16].y=1(RoughnessScale)
+//Metallic
+  94: add r0.w, r0.w, -r2.w                                 
+  95: add r0.w, r0.w, l(1.0000)                             wetA = wetA - RoughnessIntense + 1
+  96: mad_sat r0.w, r3.z, cb4[16].x, -r0.w                  Metallic = saturate(M * cb4[16].x=1(MetallicScale) - wetA)
+  97: mul_sat r1.w, r1.w, r3.y                              R = saturate(wetC * R)
+//AO
+  98: mov_sat r3.x, r3.x                                    baseAO = saturate(AO)
+//R
+  99: mad o2.z, r1.w, cb0[138].y, cb0[138].x                Roughness = R * _GlobalRoughnessScaler + _GlobalRoughnessBias
+
+//CustomData.xyz
+ 100: mov_sat r3.yzw, cb4[12].xxyz                          fuzzCol = saturate(cb4[12].xyz=[0.085,0.045822,0.0357](FuzzColor))
+ 101: sqrt o4.xyz, r3.yzwy                                  CustomData.xyz = fuzzCol
+
+ //CustomData.w
+ 102: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t7.yzwx, s7, cb0[142].y             Sample kena_cloth_MASK
+ 103: add r2.w, cb4[16].w, -cb4[17].x                       cb4[16].w=0(ClothMax) - cb4[17].x=0(ClothMin)
+ 104: mad_sat o4.w, r1.w, r2.w, cb4[17].x                   CustomData.w = saturate(lerp(ClothMin, ClothMax, clothMsk))
+
+//Final AO
+ 105: add r3.yzw, r2.xxyz, l(0.0000, -0.0400, -0.0400, -0.0400) 
+ 106: mad r3.yzw, r0.wwww, r3.yyzw, l(0.0000, 0.0400, 0.0400, 0.0400)         SpecCol = lerp(0.04, Albedo, Metallic)
+ 107: mad r4.xyz, -r2.xyzx, r0.wwww, r2.xyzx                BaseCol = Albedo * (1 - Metallic)
+ 108: mad r4.xyz, r4.xyzx, cb0[135].wwww, cb0[135].xyzx     BaseCol * _GlobalBaseColScaler + _GlobalBaseColBias
+ 109: mad r3.yzw, r3.yyzw, cb0[136].wwww, cb0[136].xxyz     SpecCol * _GlobalSpecColScaler + _GlobalSpecColBias
+
+ 110: ne r1.w, l(0, 0, 0, 0), cb0[177].w                    0 != 0 ? -> false -> not View.RenderingReflectionCaptureMask
  111: mad r5.xyz, r3.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r4.xyzx
  112: movc r4.xyz, r1.wwww, r5.xyzx, r4.xyzx
- 113: movc r3.yzw, r1.wwww, l(0, 0, 0, 0), r3.yyzw
+ 113: movc r3.yzw, r1.wwww, l(0, 0, 0, 0), r3.yyzw          EnvBRDFApproxFullyRough(BaseCol, SpecCol)
+
  114: dp3 r1.w, r3.yzwy, l(0.3000, 0.5900, 0.1100, 0.0000)
  115: mad r5.xyz, r1.wwww, l(2.0404, -4.7951, 2.7552, 0.0000), l(-0.3324, 0.6417, 0.6903, 0.0000)
  116: mad r1.w, r3.x, r5.x, r5.y
  117: mad r1.w, r1.w, r3.x, r5.z
  118: mul r1.w, r3.x, r1.w
- 119: max o3.w, r1.w, r3.x
- 120: mad r3.xyz, r3.yzwy, l(0.4500, 0.4500, 0.4500, 0.0000), r4.xyzx
- 121: max r1.xyz, r1.xyzx, l(0, 0, 0, 0)
+ 119: max o3.w, r1.w, r3.x                                  FinalAO = AOMultiBounce(Luminance(SpecCol), baseAo)
+
+ 120: mad r3.xyz, r3.yzwy, l(0.4500, 0.4500, 0.4500, 0), r4.xyzx        EnvBRDFApproxFullyRough(BaseCol, SpecCol) -> ReflectionCol
+ 121: max r1.xyz, r1.xyzx, l(0, 0, 0, 0)                    FinalEmit = max(EmitCol, 0)
+
  122: lt r1.w, l(0), cb0[139].x
  123: if_nz r1.w
  124:   mul r4.xyzw, v5.yyyy, cb0[45].xyzw
@@ -202,12 +219,13 @@ ps_5_0
  139:   movc r4.xyz, r2.wwww, l(0.0000, 1.0000, 1.0000, 0.0000), l(1.0000, 1.0000, 0.0000, 0.0000)
  140:   movc r1.xyz, r1.wwww, r4.xyzx, r1.xyzx
  141: endif
- 142: mad r1.xyz, cb0[144].yyyy, r3.xyzx, r1.xyzx
+
+ 142: mad r1.xyz, cb0[144].yyyy, r3.xyzx, r1.xyzx     _GlobalRelectionAmount * ReflectionCol + FinalEmit = BaseRTCol
  143: mad o1.xyz, r0.xyzx, l(0.5000, 0.5000, 0.5000, 0.0000), l(0.5000, 0.5000, 0.5000, 0.0000)
- 144: mul o0.xyz, r1.xyzx, cb0[134].yyyy
+ 144: mul o0.xyz, r1.xyzx, cb0[134].yyyy              BaseRTCol * _GlobalBouncingColorIntensity
  145: mov o0.w, l(0)
- 146: mov o1.w, cb1[20].y
- 147: mov o2.yw, l(0.0000, 0.5000, 0.0000, 0.6588)
- 148: mov o2.x, r0.w
- 149: mov o3.xyz, r2.xyzx
+ 146: mov o1.w, cb1[20].y                             cb1[20].y=0.6667
+ 147: mov o2.yw, l(0.0000, 0.5000, 0.0000, 0.6588)    Comp_M_D_R_F.yw = (D=0.5, F=0.6588) -> Flag = 168.0f / 255.0f
+ 148: mov o2.x, r0.w                                  Comp_M_D_R_F.x = Metallic
+ 149: mov o3.xyz, r2.xyzx                             Albedo
  150: ret
