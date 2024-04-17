@@ -107,23 +107,25 @@ ps_5_0
   50: add r1.w, -r0.w, l(1.0000)                                        1 - DirtChan
 
   51: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s5, cb0[142].y           Sample T_Ice_Noise
-  52: add r4.xyz, -r3.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)           1 - iceNoise.xyz
-  53: mad r4.xyz, -cb4[9].xyzx, r4.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  54: mul r3.xyz, r3.xyzx, cb4[10].xyzx
-  55: ge r5.xy, cb4[14].zwzz, l(0.5000, 0.5000, 0.0000, 0.0000)
-  56: movc r5.xy, r5.xyxx, r4.xyxx, r3.xyxx
-  57: ge r2.w, cb4[15].x, l(0.5000)
-  58: movc r5.z, r2.w, r4.z, r3.z
-  59: mul r3.xyz, r1.wwww, r5.xyzx
-  60: mad r2.xyz, cb3[0].wwww, r3.xyzx, r2.xyzx
-  61: add r3.xyz, r0.wwww, r5.xyzx
-  62: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0.0000)
-  63: mad r3.xyz, cb3[0].wwww, r3.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)
-  64: mul r2.xyz, r2.xyzx, r3.xyzx
-  65: max r0.w, cb3[0].z, l(0)
+  52: add r4.xyz, -r3.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)           1 - IceNoise
+  53: mad r4.xyz, -cb4[9].xyzx, r4.xyzx, l(1,1,1,0)         IceNoise1 = 1 - (1 - IceNoise) * cb4[9].xyz=[1.489584, 1.6530941, 1.749222](???)
+  54: mul r3.xyz, r3.xyzx, cb4[10].xyzx                     IceNoise2 = IceNoise * cb4[10].xyz=[0.510416, 0.346906, 0.250778](DirtColor*2)
+  55: ge r5.xy, cb4[14].zwzz, l(0.5000, 0.5000, 0.0000, 0.0000)         dirtSwitch.xy = DirtColor.xy >= 0.5 ? true : false
+  56: movc r5.xy, r5.xyxx, r4.xyxx, r3.xyxx                 noise.xy = dirtSwitch.xy ? IceNoise1.xy : IceNoise2.xy
+  57: ge r2.w, cb4[15].x, l(0.5000)                         dirtSwitch.z = DirtColor.z >= 0.5 ? true : false
+  58: movc r5.z, r2.w, r4.z, r3.z                           noise.z = dirtSwitch.z ? IceNoise1.z : IceNoise2.z
+  59: mul r3.xyz, r1.wwww, r5.xyzx                          dirtCol = noise.xyz * (1 - DirtChan)
+  60: mad r2.xyz, cb3[0].wwww, r3.xyzx, r2.xyzx             RawAlbedo = cb3[0].w=0(DirtAmount) * dirtCol + RawAlbedo
+  61: add r3.xyz, r0.wwww, r5.xyzx                          
+  62: add r3.xyz, r3.xyzx, l(-1.0000, -1.0000, -1.0000, 0)  revertDirtCol = 1 - noise * DirtChan
+  63: mad r3.xyz, cb3[0].wwww, r3.xyzx, l(1,1,1,0)          revertDirtCol = DirtAmount * revertDirtCol + 1
+  64: mul r2.xyz, r2.xyzx, r3.xyzx                          RawAlbedo *= revertDirtCol  (将DirtCol部分提亮) 
+
+
+  65: max r0.w, cb3[0].z, l(0) 
   66: min r0.w, r0.w, cb4[15].y
   67: add r1.w, r0.w, l(-1.0000)
-  68: max r3.xy, cb3[1].xyxx, l(0.0000, 0.0000, 0.0000, 0.0000)
+  68: max r3.xy, cb3[1].xyxx, l(0.00001, 0.00001, 0, 0)     
   69: min r2.w, r3.x, cb4[15].y
   70: add r2.w, r2.w, l(-1.0000)
   71: mul r3.xzw, v3.yyyy, cb1[1].xxyz
