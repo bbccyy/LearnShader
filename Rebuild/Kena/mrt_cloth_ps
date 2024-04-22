@@ -18,14 +18,14 @@ ps_5_0
       dcl_sampler s6, mode_default
       dcl_sampler s7, mode_default
 
-      dcl_resource_texture2d (float,float,float,float) t0                     kena_cloth_NORMAL
-      dcl_resource_texture2d (float,float,float,float) t1                     T_FabricDetailNormal
-      dcl_resource_texture2d (float,float,float,float) t2                     kena_cloth_sprint_EMISSIVE
-      dcl_resource_texture2d (float,float,float,float) t3                     kena_cloth_BASECOLOR
+      dcl_resource_texture2d (float,float,float,float) t0                     kena_cloth_NORMAL             1
+      dcl_resource_texture2d (float,float,float,float) t1                     T_FabricDetailNormal          1
+      dcl_resource_texture2d (float,float,float,float) t2                     kena_cloth_sprint_EMISSIVE    1
+      dcl_resource_texture2d (float,float,float,float) t3                     kena_cloth_BASECOLOR          1
       dcl_resource_texture2d (float,float,float,float) t4                     Kena_Dirt_MASKS
-      dcl_resource_texture2d (float,float,float,float) t5                     T_Ice_Noise
-      dcl_resource_texture2d (float,float,float,float) t6                     kena_cloth_AO_R_M
-      dcl_resource_texture2d (float,float,float,float) t7                     kena_cloth_MASK
+      dcl_resource_texture2d (float,float,float,float) t5                     T_Ice_Noise                   1
+      dcl_resource_texture2d (float,float,float,float) t6                     kena_cloth_AO_R_M             1
+      dcl_resource_texture2d (float,float,float,float) t7                     kena_cloth_MASK               1
 
       dcl_input_ps linear centroid v0.xyz                               -> normal -> tangent
       dcl_input_ps linear centroid v1.xyzw                              -> tangent -> normal + sign
@@ -100,6 +100,7 @@ ps_5_0
   45: add r2.xyz, -r1.xyzx, cb4[4].xyzx   
   46: mad r1.xyz, cb4[14].yyyy, r2.xyzx, r1.xyzx      EmitCol = lerp(EmitCol, cb4[4].xyz=[0](EmissiveColor), cb4[14].y=0(Desaturate))
 
+//Apply Dirt to Albedo
   47: sample_b(texture2d)(float,float,float,float) r2.xyz, v2.xyxx, t3.xyzw, s3, cb0[142].y           Sample kena_cloth_BASECOLOR
                                                                         RawAlbedo.xyz
   48: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t4.xyzw, s4, cb0[142].y           Sample Kena_Dirt_MASKS
@@ -108,7 +109,7 @@ ps_5_0
 
   51: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t5.xyzw, s5, cb0[142].y           Sample T_Ice_Noise
   52: add r4.xyz, -r3.xyzx, l(1.0000, 1.0000, 1.0000, 0.0000)           1 - IceNoise
-  53: mad r4.xyz, -cb4[9].xyzx, r4.xyzx, l(1,1,1,0)         IceNoise1 = 1 - (1 - IceNoise) * cb4[9].xyz=[1.489584, 1.6530941, 1.749222](???)
+  53: mad r4.xyz, -cb4[9].xyzx, r4.xyzx, l(1,1,1,0)         IceNoise1 = 1 - (1 - IceNoise) * cb4[9].xyz=[1.489584, 1.6530941, 1.749222](IceNoiseMixer)
   54: mul r3.xyz, r3.xyzx, cb4[10].xyzx                     IceNoise2 = IceNoise * cb4[10].xyz=[0.510416, 0.346906, 0.250778](DirtColor*2)
   55: ge r5.xy, cb4[14].zwzz, l(0.5000, 0.5000, 0.0000, 0.0000)         dirtSwitch.xy = DirtColor.xy >= 0.5 ? true : false
   56: movc r5.xy, r5.xyxx, r4.xyxx, r3.xyxx                 noise.xy = dirtSwitch.xy ? IceNoise1.xy : IceNoise2.xy
@@ -123,7 +124,7 @@ ps_5_0
 
 
   65: max r0.w, cb3[0].z, l(0)                              wetA = max(cb3[0].z=0(rawWetA), 0)
-  66: min r0.w, r0.w, cb4[15].y                             wetA = min(wet, cb4[15].y=0.75(MaxWet))
+  66: min r0.w, r0.w, cb4[15].y                             wetA = min(wetA, cb4[15].y=0.75(MaxWet))
   67: add r1.w, r0.w, l(-1.0000)                            wetC = wetA - 1
   68: max r3.xy, cb3[1].xyxx, l(0.00001, 0.00001, 0, 0)     wetB        = max(cb3[1].xy=0(rawWetB), 0.001) -> r3.x
                                                             WetDistance = max(cb3[1].xy=0(rawWetB), 0.001) -> r3.y
@@ -143,16 +144,16 @@ ps_5_0
   79: mad r3.x, -r3.x, r3.y, l(1.0000)                      //1 - ViewDistance / WetDistance
   80: mul_sat r3.x, r3.x, l(10.0000)                        DistFactor = saturate((1 - ViewDistance / WetDistance) * 10)
   81: add r2.w, abs(r2.w), -r3.x                            
-  82: add r2.w, r2.w, l(1.0000)                             RoughnessIntense = abs(wetB) - DistFactor + 1
-  83: min r2.w, r2.w, l(1.0000)                             RoughnessIntense = min(RoughnessIntense, 1)
-  84: mul r1.w, abs(r1.w), r2.w                             wetC = abs(wetC) * RoughnessIntense
+  82: add r2.w, r2.w, l(1.0000)                             WetIntense = abs(wetB) - DistFactor + 1
+  83: min r2.w, r2.w, l(1.0000)                             WetIntense = min(WetIntense, 1)
+  84: mul r1.w, abs(r1.w), r2.w                             wetC = abs(wetC) * WetIntense
   85: max r3.x, r1.w, l(0.3000)                             
   86: min r3.x, r3.x, l(1.0000)                             wetD = clamp(wetC, 0.3, 1)
   87: mul r2.xyz, r2.xyzx, r3.xxxx                          Albedo *= wetD
 
 //Apply AO to Albedo
   88: sample_b(texture2d)(float,float,float,float) r3.xyz, v2.xyxx, t6.xyzw, s6, cb0[142].y           Sample kena_cloth_AO_R_M -> AO_R_M
-  89: add r3.w, r3.x, cb4[15].z                             DirectAO = AO * cb4[15].z=0(AO_Ammount)
+  89: add r3.w, r3.x, cb4[15].z                             DirectAO = AO + cb4[15].z=0(AO_Ammount)
   90: max r3.w, r3.w, cb4[15].w                             DirectAO = max(DirectAO, cb4[15].w=0(AO_Min))
   91: min r3.w, r3.w, l(1.0000)                             DirectAO = min(DirectAO, 1)
   92: mul_sat r2.xyz, r2.xyzx, r3.wwww                      Albedo = saturate(Albedo * DirectAO)
@@ -160,8 +161,9 @@ ps_5_0
   93: mul r3.y, r3.y, cb4[16].y                             R = R * cb4[16].y=1(RoughnessScale)
 //Metallic
   94: add r0.w, r0.w, -r2.w                                 
-  95: add r0.w, r0.w, l(1.0000)                             wetA = wetA - RoughnessIntense + 1
+  95: add r0.w, r0.w, l(1.0000)                             wetA = wetA - WetIntense + 1
   96: mad_sat r0.w, r3.z, cb4[16].x, -r0.w                  Metallic = saturate(M * cb4[16].x=1(MetallicScale) - wetA)
+//R
   97: mul_sat r1.w, r1.w, r3.y                              R = saturate(wetC * R)
 //AO
   98: mov_sat r3.x, r3.x                                    baseAO = saturate(AO)
@@ -170,7 +172,7 @@ ps_5_0
 
 //CustomData.xyz
  100: mov_sat r3.yzw, cb4[12].xxyz                          fuzzCol = saturate(cb4[12].xyz=[0.085,0.045822,0.0357](FuzzColor))
- 101: sqrt o4.xyz, r3.yzwy                                  CustomData.xyz = fuzzCol
+ 101: sqrt o4.xyz, r3.yzwy                                  CustomData.xyz = sqrt(fuzzCol)
 
  //CustomData.w
  102: sample_b(texture2d)(float,float,float,float) r1.w, v2.xyxx, t7.yzwx, s7, cb0[142].y             Sample kena_cloth_MASK
