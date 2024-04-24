@@ -16,11 +16,11 @@ cs_5_0
       dcl_thread_group 8, 8, 1
    0: ult r0.xy, vThreadID.xyxx, cb0[129].xyxx        ScreenGridConeVisibilitySize -> cb0[129].xy
    1: and r0.x, r0.y, r0.x
-   2: if_nz r0.x
+   2: if_nz r0.x                                      if (all(DstCoordinate < ScreenGridConeVisibilitySize))
 
    3:   ishl r0.xy, vThreadID.xyxx, l(2, 2, 0, 0)
    4:   utof r0.xy, r0.xyxx
-   5:   add r0.xy, r0.xyxx, cb0[131].xyxx
+   5:   add r0.xy, r0.xyxx, cb0[131].xyxx                               JitterOffset == cb0[131].xy
    6:   add r0.zw, r0.xxxy, l(0.0000, 0.0000, 0.5000, 0.5000)
    7:   mul r0.zw, r0.zzzw, cb0[132].zzzw                               float2 BaseLevelScreenUV = GetBaseLevelScreenUVFromScreenGrid(DstCoordinate)
 
@@ -46,7 +46,8 @@ cs_5_0
 
 
   24:   lt r0.w, l(0), r1.w
-  25:   if_nz r0.w
+  25:   if_nz r0.w                              if (DeviceZDepth > 0)
+
   26:     lt r0.w, abs(r1.z), l(0.9990)
   27:     movc r4.xyz, r0.wwww, l(1.0000, 0.0000, 0.0000, 0.0000), l(0.0000, 1.0000, 0.0000, 0.0000)
   28:     mul r5.xyz, r1.yzxy, r4.xyzx
@@ -58,15 +59,21 @@ cs_5_0
   34:     mad r5.xyz, r1.yzxy, r4.zxyz, -r5.xyzx
   35:     dp3 r0.w, r5.xyzx, r5.xyzx
   36:     rsq r0.w, r0.w
-  37:     mul r5.xyz, r0.wwww, r5.xyzx
+  37:     mul r5.xyz, r0.wwww, r5.xyzx          FindTangentXY(NormalWS, TangentX, TangentY);
+                                                NormalWS -> r1.xyz
+                                                TangentX -> r4.xyz
+                                                TangentY -> r5.xyz
+
   38:     mad r0.xy, r0.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(0.5000, 0.5000, 0.0000, 0.0000)
-  39:     mul r0.xy, r0.xyxx, cb0[127].zwzz
+  39:     mul r0.xy, r0.xyxx, cb0[127].zwzz     float2 ScreenUV = GetFullResUVFromBufferGrid(DstCoordinate);
+
   40:     mad r0.xy, r0.xyxx, l(2.0000, 2.0000, 0.0000, 0.0000), l(-1.0000, -1.0000, 0.0000, 0.0000)
   41:     mul r6.xyzw, -r0.yyyy, cb0[81].xyzw
   42:     mad r6.xyzw, cb0[80].xyzw, r0.xxxx, r6.xyzw
   43:     mad r6.xyzw, cb0[82].xyzw, r1.wwww, r6.xyzw
   44:     add r6.xyzw, r6.xyzw, cb0[83].xyzw
-  45:     div r0.xyw, r6.xyxz, r6.wwww
+  45:     div r0.xyw, r6.xyxz, r6.wwww          float3 WorldShadingPosition
+
   46:     add r6.xyz, -cb0[133].wwww, cb0[133].xyzx
   47:     add r6.xyz, r0.xywx, -r6.xyzx
   48:     add r7.xyz, cb0[133].wwww, cb0[133].xyzx
@@ -74,24 +81,35 @@ cs_5_0
   50:     min r6.xyz, r6.xyzx, r7.xyzx
   51:     min r1.w, r6.z, r6.y
   52:     min r1.w, r1.w, r6.x
-  53:     max r1.w, r1.w, l(0)
+  53:     max r1.w, r1.w, l(0)                  DistanceFromClipmap
+
   54:     lt r1.w, cb0[137].x, r1.w
-  55:     if_nz r1.w
-  56:       mul r1.w, cb0[133].w, l(0.0067)
+  55:     if_nz r1.w                            if (DistanceFromClipmap > AOGlobalMaxOcclusionDistanceAndInv[0])
+
+  56:       mul r1.w, cb0[133].w, l(0.0067)                             GlobalVolumeCenterAndExtent[0]=[-10, 21, 18, 25]
+                                                float MinStepSize
+
   57:       mul r6.xyz, r5.xyzx, cb0[146].yyyy
   58:       mad r6.xyz, cb0[146].xxxx, r4.xyzx, r6.xyzx
-  59:       mad r6.xyz, cb0[146].zzzz, r1.xyzx, r6.xyzx
-  60:       mov r4.w, l(1.0000)
-  61:       mov r5.w, l(0.7583)
+  59:       mad r6.xyz, cb0[146].zzzz, r1.xyzx, r6.xyzx           ConeDirectionWS
+
+  60:       mov r4.w, l(1.0000)     ConeTraceLeakFill
+  61:       mov r5.w, l(0.7583)     InitialOffset
   62:       mov r6.w, l(0)
   63:       loop
   64:         ult r7.x, r6.w, l(10)
   65:         lt r7.y, r5.w, cb0[137].x
-  66:         and r7.x, r7.y, r7.x
+  66:         and r7.x, r7.y, r7.x        StepIndex < NUM_CONE_STEPS && WorldStepOffset < AOGlobalMaxOcclusionDistanceAndInv[0]=10
   67:         breakc_z r7.x
-  68:         mad r7.xyz, r6.xyzx, r5.wwww, r0.xywx
-  69:         mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx
-  70:         add r7.xyz, r7.xyzx, cb0[139].xyzx
+
+  68:         mad r7.xyz, r6.xyzx, r5.wwww, r0.xywx 
+                                          float3 WorldSamplePosition = WorldShadingPosition + ConeDirectionWS * WorldStepOffset;
+
+
+  69:         mad r7.xyz, r7.xyzx, cb0[135].wwww, cb0[135].xyzx         WorldSamplePosition * WorldToUVAddAndScale.www + WorldToUVAddAndScale.xyz
+  70:         add r7.xyz, r7.xyzx, cb0[139].xyzx                        (~) + _uvw_delta.xyz
+
+
   71:         sample_l(texture3d)(float,float,float,float) r7.x, r7.xyzx, t1.xyzw, s1, l(0)
   72:         dp2 r7.x, r7.xxxx, cb0[133].wwww
   73:         mul r7.y, r5.w, cb0[145].x
@@ -358,36 +376,53 @@ cs_5_0
  334:       endloop
  335:       atomic_umin u0, r2.w, r4.w
  336:     else
- 337:       mul r1.w, cb0[134].w, l(0.0067)
+
+                                                if (DistanceFromClipmap <= AOGlobalMaxOcclusionDistanceAndInv[0])
+ 337:       mul r1.w, cb0[134].w, l(0.0067)     GlobalVolumeCenterAndExtent[1]=[-10, 21, -32, 75]
+                                                float MinStepSize
+
  338:       mul r6.xyz, r5.xyzx, cb0[146].yyyy
  339:       mad r6.xyz, cb0[146].xxxx, r4.xyzx, r6.xyzx
- 340:       mad r6.xyz, cb0[146].zzzz, r1.xyzx, r6.xyzx
- 341:       mov r4.w, l(1.0000)
- 342:       mov r5.w, l(0.7583)
+ 340:       mad r6.xyz, cb0[146].zzzz, r1.xyzx, r6.xyzx                 ConeDirectionWS
+
+ 341:       mov r4.w, l(1.0000)                 ConeTraceLeakFill
+ 342:       mov r5.w, l(0.7583)                 InitialOffset
  343:       mov r6.w, l(0)
+
  344:       loop
  345:         ult r7.x, r6.w, l(10)
  346:         lt r7.y, r5.w, cb0[137].x
- 347:         and r7.x, r7.y, r7.x
+ 347:         and r7.x, r7.y, r7.x        StepIndex < NUM_CONE_STEPS && WorldStepOffset < AOGlobalMaxOcclusionDistanceAndInv[0]=10
  348:         breakc_z r7.x
- 349:         mad r7.xyz, r6.xyzx, r5.wwww, r0.xywx
- 350:         mad r7.xyz, r7.xyzx, cb0[136].wwww, cb0[136].xyzx
- 351:         add r7.xyz, r7.xyzx, cb0[139].xyzx
+
+ 349:         mad r7.xyz, r6.xyzx, r5.wwww, r0.xywx   float3 WorldSamplePosition = WorldShadingPosition + ConeDirectionWS * WorldStepOffset;
+
+ 350:         mad r7.xyz, r7.xyzx, cb0[136].wwww, cb0[136].xyzx   WorldSamplePosition * WorldToUVAddAndScale.www + WorldToUVAddAndScale.xyz
+ 351:         add r7.xyz, r7.xyzx, cb0[139].xyzx                  (~) + _uvw_delta.xyz
+
  352:         sample_l(texture3d)(float,float,float,float) r7.x, r7.xyzx, t2.xyzw, s1, l(0)
- 353:         dp2 r7.x, r7.xxxx, cb0[134].wwww
- 354:         mul r7.y, r5.w, cb0[145].x
- 355:         iadd r7.y, -r7.y, l(161547303404896380000000000000000000000.0000)
- 356:         mul_sat r7.y, r7.y, r7.x
- 357:         add r7.z, r5.w, r7.x
- 358:         mul r7.z, r7.z, cb0[138].x
+ 353:         dp2 r7.x, r7.xxxx, cb0[134].wwww        float DistanceToOccluder = SampleGlobalDistanceField(ClipmapIndex, StepVolumeUV).x; 
+
+ 354:         mul r7.y, r5.w, cb0[145].x              float SphereRadius = WorldStepOffset * TanConeHalfAngle;
+
+ 355:         iadd r7.y, -r7.y, l(161547303404896380000000000000000000000.0000)     float InvSphereRadius = rcpFast(SphereRadius); 
+
+ 356:         mul_sat r7.y, r7.y, r7.x                float Visibility = saturate(DistanceToOccluder * InvSphereRadius);
+
+ 357:         add r7.z, r5.w, r7.x                    WorldStepOffset + DistanceToOccluder
+ 358:         mul r7.z, r7.z, cb0[138].x              float OccluderDistanceFraction = (~) * AOGlobalMaxOcclusionDistanceAndInv[1];
+
  359:         mul r7.z, r7.z, r7.z
  360:         mul r7.z, r7.z, l(0.6000)
- 361:         min r7.z, r7.z, l(1.0000)
- 362:         max r7.y, r7.z, r7.y
- 363:         min r4.w, r4.w, r7.y
- 364:         max r7.x, r1.w, r7.x
- 365:         add r5.w, r5.w, r7.x
- 366:         iadd r6.w, r6.w, l(1)
+ 361:         min r7.z, r7.z, l(1.0000)               saturate(OccluderDistanceFraction * OccluderDistanceFraction * 0.6f)
+
+ 362:         max r7.y, r7.z, r7.y                    Visibility = max(Visibility, (~)) 
+
+ 363:         min r4.w, r4.w, r7.y                    MinVisibility = min(MinVisibility, Visibility);
+
+ 364:         max r7.x, r1.w, r7.x                    max(DistanceToOccluder, MinStepSize)
+ 365:         add r5.w, r5.w, r7.x                    WorldStepOffset += max(DistanceToOccluder, MinStepSize);
+ 366:         iadd r6.w, r6.w, l(1)                   Loop ++
  367:       endloop
  368:       atomic_umin u0, r0.z, r4.w
  369:       mul r6.xyz, r5.xyzx, cb0[147].yyyy
