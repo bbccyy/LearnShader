@@ -24,7 +24,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceShadows"
             float deviceDepth = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, sampler_CameraDepthTexture, input.texcoord.xy).r;
 #else
             float deviceDepth = SAMPLE_TEXTURE2D_X(_CameraDepthTexture, sampler_CameraDepthTexture, input.texcoord.xy).r;
-            deviceDepth = deviceDepth * 2.0 - 1.0;
+            deviceDepth = deviceDepth * 2.0 - 1.0; 
 #endif
 
             //Fetch shadow coordinates for cascade.
