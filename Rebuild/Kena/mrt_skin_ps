@@ -30,7 +30,7 @@ ps_5_0
       dcl_resource_texture2d (float,float,float,float) t9               -> kena_cloth_SSS_MASK
 
       dcl_input_ps linear centroid v0.xyz                               -> normal -> tangent
-      dcl_input_ps linear centroid v1.xyzw                              -> tangent -> normal + sign
+      dcl_input_ps linear centroid v1.xyzw                              -> tangent -> normal + sign  
       dcl_input_ps linear v2.xy                                         -> uv 
       dcl_input_ps_siv linear noperspective v3.xyz, position            -> SV Position 
 
